@@ -1,0 +1,48 @@
+{
+  "project_info": {
+    "project_number": "764078089873",
+    "project_id": "ryvo-7b28a",
+    "storage_bucket": "ryvo-7b28a.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:764078089873:android:1f191d76c98fd52e70c130",
+        "android_client_info": {
+          "package_name": "com.ryvo.customer"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCxb6LNMgmVEcfSV-H3sx53-rUUMMMORGA"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:764078089873:android:418f4826685b0a0f70c130",
+        "android_client_info": {
+          "package_name": "com.ryvo.driver"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCxb6LNMgmVEcfSV-H3sx53-rUUMMMORGA"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

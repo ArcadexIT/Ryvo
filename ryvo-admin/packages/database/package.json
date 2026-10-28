@@ -1,0 +1,29 @@
+{
+  "name": "@ryvo/database",
+  "version": "0.0.1",
+  "private": true,
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "generate": "prisma generate",
+    "migrate": "prisma migrate dev",
+    "push": "prisma db push",
+    "seed": "dotenv -e .env -- tsx prisma/seed.ts",
+    "seed:countries": "dotenv -e .env -- tsx prisma/seed-countries.ts",
+    "build": "tsc"
+  },
+  "dependencies": {
+    "@ryvo/shared": "*",
+    "@prisma/client": "^6.1.0"
+  },
+  "devDependencies": {
+    "@ryvo/tsconfig": "*",
+    "@types/bcrypt": "^5.0.2",
+    "bcrypt": "^5.1.1",
+    "dotenv": "^16.4.7",
+    "dotenv-cli": "^7.4.4",
+    "prisma": "^6.1.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
+  }
+}

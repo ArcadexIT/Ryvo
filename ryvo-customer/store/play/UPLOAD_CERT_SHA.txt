@@ -1,0 +1,8 @@
+# Upload certificate fingerprints
+# Register these in Google Cloud Console (Maps) and Firebase Android app
+
+Alias name: ryvo_customer_upload
+Owner: CN=Ryvo Customer, OU=Mobile, O=Ryvo Ltd, L=London, ST=England, C=GB
+Valid from: Tue Aug 04 00:26:23 BDT 2026 until: Sat Dec 20 00:26:23 BDT 2053
+	 SHA1: B4:9B:37:D6:89:FF:0B:01:66:28:C6:9E:80:35:CF:59:C9:23:10:46
+	 SHA256: 19:7F:24:9C:9A:01:66:CA:E6:AF:02:7B:1D:B4:6E:3D:61:91:26:A8:22:29:08:9E:7F:AF:42:98:23:26:16:C1

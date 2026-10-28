@@ -1,0 +1,13 @@
+{
+	auto_https off
+}
+
+:80 {
+	@backend path /api/* /socket.io/*
+	handle @backend {
+		reverse_proxy api:4000
+	}
+	handle {
+		reverse_proxy admin:3000
+	}
+}

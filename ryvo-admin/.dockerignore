@@ -1,0 +1,21 @@
+node_modules
+**/node_modules
+.git
+.turbo
+**/.turbo
+dist
+**/dist
+.next
+**/.next
+# Test coverage reports only — keep Next.js routes named coverage in the image
+/coverage
+*.log
+.DS_Store
+.env
+.env.local
+**/.env
+**/.env.local
+**/.env.production
+**/firebase-service-account.json
+docs
+README.md

@@ -1,0 +1,21 @@
+Ryvo gets you emergency car jump-start help when your battery dies. Request a nearby verified provider, track their arrival live, and pay securely in the app.
+
+INSTANT JUMP START
+Open the app, confirm your location, and request help in a few taps. Nearby providers are matched so help can reach you quickly.
+
+VERIFIED & TRUSTED
+Providers complete identity and document checks so you know a real roadside professional is on the way.
+
+LIVE TRACKING
+Follow your provider on the map with real-time updates from assigned through arrival and job completion. Chat in-app if you need to share details.
+
+SECURE PAYMENT
+Pay for your jump-start with Stripe in the app. Keep booking history and manage vehicles for faster next-time requests.
+
+WHO IT’S FOR
+Drivers and vehicle owners who need on-demand roadside jump-start assistance — not for service providers (use Ryvo Driver for that).
+
+SUPPORT & PRIVACY
+Privacy Policy: https://ryvo.arcadexit.com/privacy-policy/
+Contact: enquiries@ryvo.arcadexit.com
+Ryvo Ltd — 128 City Road, London, United Kingdom, EC1V 2NX

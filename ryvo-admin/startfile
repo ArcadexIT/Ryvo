@@ -1,0 +1,31 @@
+npm run dev --workspace=@ryvo/api
+
+npm run dev --workspace=@ryvo/admin
+
++10000000001
+
+Admin@123456
+
+
+cd /Users/rztutul/Documents/flutterproject/ryvo-customer
+
+flutter run \
+  --dart-define=API_BASE_URL=http://192.168.0.119:4000/api/v1 \
+  --dart-define=WS_BASE_URL=http://192.168.0.119:4000
+
+  cd /Users/rztutul/Documents/flutterproject/ryvo_driver
+
+flutter run \
+  --dart-define=API_BASE_URL=http://192.168.0.119:4000/api/v1 \
+  --dart-define=WS_BASE_URL=http://192.168.0.119:4000
+
+  Role	Phone	Password
+Super admin
++10000000001
+Admin@123456
+Customer (UK)
++447700900001
+Customer@123
+Driver (UK)
++447700900002
+Provider@123

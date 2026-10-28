@@ -1,0 +1,20 @@
+# macOS
+.DS_Store
+
+# Local whitelabel config. Copy scripts/whitelabel.env.example.
+scripts/whitelabel.env
+
+# Secrets. Example files stay tracked.
+**/.env
+**/.env.local
+**/.env.development
+**/.env.production
+**/.env*.local
+**/firebase-service-account.json
+**/key.properties
+**/KEYSTORE_CREDENTIALS.txt
+**/*.jks
+**/*.keystore
+**/*.aab
+**/*.apk
+**/*.pem

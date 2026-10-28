@@ -1,0 +1,77 @@
+services:
+  postgres:
+    image: postgis/postgis:16-3.4
+    container_name: ryvo-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ryvo
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ryvo
+    volumes:
+      - ryvo_pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ryvo -d ryvo"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: ryvo-redis
+    restart: unless-stopped
+    volumes:
+      - ryvo_redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  api:
+    build:
+      context: ..
+      dockerfile: apps/api/Dockerfile
+    container_name: ryvo-api
+    restart: unless-stopped
+    env_file:
+      - ../apps/api/.env.production
+    volumes:
+      - ../apps/api/firebase-service-account.json:/app/apps/api/firebase-service-account.json:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  admin:
+    build:
+      context: ..
+      dockerfile: apps/admin/Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: ${PUBLIC_API_URL:-https://ryvo.arcadexit.com/api/v1}
+        NEXT_PUBLIC_WS_URL: ${PUBLIC_WS_URL:-https://ryvo.arcadexit.com}
+        NEXT_PUBLIC_MAP_API_KEY: ${NEXT_PUBLIC_MAP_API_KEY}
+    container_name: ryvo-admin
+    restart: unless-stopped
+    depends_on:
+      - api
+
+  caddy:
+    image: caddy:2-alpine
+    container_name: ryvo-caddy
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:4180:80"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - admin
+      - api
+
+volumes:
+  ryvo_pg_data:
+  ryvo_redis_data:
+  caddy_data:
+  caddy_config:

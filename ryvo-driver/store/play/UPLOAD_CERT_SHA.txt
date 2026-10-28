@@ -1,0 +1,8 @@
+# Upload certificate fingerprints
+# Register these in Google Cloud Console (Maps) and Firebase Android app
+
+Alias name: ryvo_driver_upload
+Owner: CN=Ryvo Driver, OU=Mobile, O=Ryvo Ltd, L=London, ST=England, C=GB
+Valid from: Mon Aug 03 23:12:51 BDT 2026 until: Fri Dec 19 23:12:51 BDT 2053
+	 SHA1: E7:BA:89:F6:3F:B5:63:3E:EC:5E:98:75:22:4A:30:A1:FD:D1:3C:85
+	 SHA256: C7:92:67:9F:FD:DA:A1:70:B9:B6:9E:E1:07:85:4C:DD:BF:0B:0B:5E:40:D5:E3:2B:DD:54:02:53:A9:91:68:70

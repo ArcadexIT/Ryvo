@@ -1,0 +1,14 @@
+node_modules
+dist
+.next
+.turbo
+.env
+.env.local
+.env.production
+docker/.env
+apps/api/firebase-service-account.json
+**/firebase-service-account.json
+*.log
+# Test coverage reports (do not ignore app routes named /ops/coverage)
+/coverage
+.DS_Store

@@ -1,0 +1,337 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+  Design tokens.
+  Neutrals are a warm, low-saturation gray (not pure slate/gray) so surfaces feel
+  less clinical. Elevated surfaces are intentionally lighter than the page base
+  (light mode) / lighter-and-warmer than the page base (dark mode) so cards read
+  as "floating" even before shadows are applied.
+*/
+
+html[data-theme='light'] {
+  --bg-canvas: #f4f7fb;
+  --bg-base: #f4f7fb;
+  --bg-surface: #f8fafc;
+  --bg-elevated: #ffffff;
+  --bg-overlay: #ffffff;
+  --border: #e7edf4;
+  --border-strong: #d7e0ea;
+  --text-primary: #0f172a;
+  --text-secondary: #64748b;
+  --text-muted: #94a3b8;
+
+  --accent: #1fa855;
+  --accent-hover: #178a46;
+  --accent-soft: #e8f8ef;
+  --accent-foreground: #ffffff;
+
+  --sidebar-bg: #0c1222;
+  --sidebar-border: rgba(255, 255, 255, 0.06);
+  --sidebar-text: #9aa6bd;
+  --sidebar-text-strong: #f8fafc;
+  --sidebar-muted: #66758c;
+  --sidebar-hover: rgba(255, 255, 255, 0.05);
+  --sidebar-active: #16382c;
+
+  --success: #16a34a;
+  --success-soft: #ecfdf3;
+  --danger: #ef4444;
+  --danger-soft: #fef2f2;
+  --warning: #d97706;
+  --warning-soft: #fffbeb;
+  --info: #3b82f6;
+  --info-soft: #eff6ff;
+
+  --shadow-xs: 0 1px 2px rgba(15, 23, 42, 0.04);
+  --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.04), 0 1px 3px rgba(15, 23, 42, 0.05);
+  --shadow-md: 0 8px 24px -16px rgba(15, 23, 42, 0.18);
+  --shadow-lg: 0 16px 40px -24px rgba(15, 23, 42, 0.2);
+  --shadow-xl: 0 24px 48px -24px rgba(15, 23, 42, 0.24);
+  --shadow-focus: 0 0 0 3px rgba(31, 168, 85, 0.35);
+
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 20px;
+  color-scheme: light;
+}
+
+html[data-theme='dark'] {
+  --bg-canvas: #050505;
+  --bg-base: #121214;
+  --bg-surface: #1a1a1d;
+  --bg-elevated: #202024;
+  --bg-overlay: #212123;
+  --border: #2c2c2f;
+  --border-strong: #3d3d40;
+  --text-primary: #f3f2ef;
+  --text-secondary: #a3a19a;
+  --text-muted: #706e68;
+
+  --accent: #1fa855;
+  --accent-hover: #178a46;
+  --accent-soft: rgba(31, 168, 85, 0.16);
+  --accent-foreground: #ffffff;
+
+  --sidebar-bg: #0c1222;
+  --sidebar-border: rgba(255, 255, 255, 0.06);
+  --sidebar-text: #9aa6bd;
+  --sidebar-text-strong: #f8fafc;
+  --sidebar-muted: #66758c;
+  --sidebar-hover: rgba(255, 255, 255, 0.05);
+  --sidebar-active: #16382c;
+
+  --success: #34d399;
+  --success-soft: rgba(52, 211, 153, 0.1);
+  --danger: #f2555a;
+  --danger-soft: rgba(242, 85, 90, 0.1);
+  --warning: #f0a020;
+  --warning-soft: rgba(240, 160, 32, 0.1);
+  --info: #60a5fa;
+  --info-soft: rgba(96, 165, 250, 0.1);
+
+  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.32);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.32), 0 2px 6px rgba(0, 0, 0, 0.28);
+  --shadow-md: 0 2px 4px rgba(0, 0, 0, 0.36), 0 14px 28px -8px rgba(0, 0, 0, 0.5);
+  --shadow-lg: 0 4px 10px rgba(0, 0, 0, 0.4), 0 24px 44px -12px rgba(0, 0, 0, 0.6);
+  --shadow-xl: 0 10px 20px rgba(0, 0, 0, 0.45), 0 36px 64px -16px rgba(0, 0, 0, 0.7);
+  --shadow-focus: 0 0 0 3px rgba(31, 168, 85, 0.35);
+
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 20px;
+  color-scheme: dark;
+}
+
+/* Fallback before JS sets data-theme (inline script runs first) */
+html:not([data-theme]) {
+  --bg-canvas: #f4f7fb;
+  --bg-base: #f4f7fb;
+  --bg-surface: #f8fafc;
+  --bg-elevated: #ffffff;
+  --bg-overlay: #ffffff;
+  --border: #e7edf4;
+  --border-strong: #d7e0ea;
+  --text-primary: #0f172a;
+  --text-secondary: #64748b;
+  --text-muted: #94a3b8;
+  --accent: #1fa855;
+  --accent-hover: #178a46;
+  --accent-soft: #e8f8ef;
+  --accent-foreground: #ffffff;
+  --sidebar-bg: #0c1222;
+  --sidebar-border: rgba(255, 255, 255, 0.06);
+  --sidebar-text: #9aa6bd;
+  --sidebar-text-strong: #f8fafc;
+  --sidebar-muted: #66758c;
+  --sidebar-hover: rgba(255, 255, 255, 0.05);
+  --sidebar-active: #16382c;
+  --success: #16a34a;
+  --success-soft: #ecfdf3;
+  --danger: #ef4444;
+  --danger-soft: #fef2f2;
+  --warning: #d97706;
+  --warning-soft: #fffbeb;
+  --info: #3b82f6;
+  --info-soft: #eff6ff;
+  --shadow-xs: 0 1px 2px rgba(15, 23, 42, 0.04);
+  --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.04), 0 1px 3px rgba(15, 23, 42, 0.05);
+  --shadow-md: 0 8px 24px -16px rgba(15, 23, 42, 0.18);
+  --shadow-lg: 0 16px 40px -24px rgba(15, 23, 42, 0.2);
+  --shadow-xl: 0 24px 48px -24px rgba(15, 23, 42, 0.24);
+  --shadow-focus: 0 0 0 3px rgba(31, 168, 85, 0.35);
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 20px;
+  color-scheme: light;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background-color: var(--bg-base);
+  color: var(--text-primary);
+  font-feature-settings: 'cv11', 'ss01', 'salt';
+  font-optical-sizing: auto;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  transition: background-color 200ms ease-in-out, color 200ms ease-in-out;
+}
+
+* {
+  border-color: var(--border);
+}
+
+/*
+  Consistent, clearly visible keyboard focus ring across all interactive elements.
+  box-shadow automatically follows each element's own border-radius, so this never
+  needs to (and must not) force a radius — that would distort rounded-full controls
+  like pagination pills and icon buttons.
+*/
+:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-focus);
+}
+
+/*
+  Page titles / KPI numbers: tuned weight + tracking for visual identity.
+  Deliberately does NOT set font-family so it can be combined with `font-mono`
+  (e.g. a monospace job number as a card title) without a cascade conflict.
+*/
+.font-display {
+  font-weight: 650;
+  letter-spacing: -0.02em;
+}
+
+.font-tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--bg-base);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-muted);
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+.skeleton-shimmer {
+  background: linear-gradient(
+    90deg,
+    var(--bg-surface) 25%,
+    var(--bg-elevated) 50%,
+    var(--bg-surface) 75%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.5s ease-in-out infinite;
+}
+
+@keyframes badge-pop {
+  0% {
+    transform: scale(0);
+  }
+  70% {
+    transform: scale(1.15);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+.badge-pop {
+  animation: badge-pop 300ms ease-out;
+}
+
+@keyframes theme-icon-swap {
+  0% {
+    transform: rotate(-90deg) scale(0.5);
+    opacity: 0;
+  }
+  100% {
+    transform: rotate(0deg) scale(1);
+    opacity: 1;
+  }
+}
+
+.theme-icon-animate {
+  animation: theme-icon-swap 150ms ease;
+}
+
+@keyframes fade-in-up {
+  0% {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Live map provider markers: soft breathing pulse ring behind the badge. */
+@keyframes marker-pulse {
+  0% {
+    transform: scale(0.9);
+    opacity: 0.45;
+  }
+  70% {
+    transform: scale(1.9);
+    opacity: 0;
+  }
+  100% {
+    transform: scale(1.9);
+    opacity: 0;
+  }
+}
+
+.marker-pulse {
+  animation: marker-pulse 2.4s cubic-bezier(0.2, 0.6, 0.4, 1) infinite;
+}
+
+@keyframes marker-bounce {
+  0%,
+  100% {
+    transform: scale(1) translateY(0);
+  }
+  30% {
+    transform: scale(1.3) translateY(-6px);
+  }
+  55% {
+    transform: scale(0.95) translateY(0);
+  }
+  75% {
+    transform: scale(1.08) translateY(-2px);
+  }
+}
+
+.marker-bounce {
+  animation: marker-bounce 0.7s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.marker-badge-active {
+  box-shadow:
+    0 0 0 3px var(--bg-elevated),
+    0 0 0 6px var(--accent),
+    0 4px 12px rgba(0, 0, 0, 0.35) !important;
+}
+
+.animate-fade-in-up {
+  animation: fade-in-up 250ms ease-out both;
+}
+
+/*
+  Tailwind preflight sets img { max-width: 100%; height: auto }.
+  Google Maps tiles are images, so that rule stretches each tile and paints
+  the "For development purposes only" watermark across the whole map.
+*/
+.gm-style img,
+.gm-style-iw img,
+.gm-style-iw-c img {
+  max-width: none !important;
+  max-height: none !important;
+}
