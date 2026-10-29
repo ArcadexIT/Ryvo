@@ -12,6 +12,7 @@ import '../../../../core/network/tracking_socket.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/utils/phone_call.dart';
 import '../../../../data/models/models.dart';
+import '../../../tracking/presentation/widgets/share_trip_button.dart';
 import '../../../../shared/providers/app_providers.dart';
 import '../../../../shared/widgets/widgets.dart';
 import 'package:ryvo_customer/l10n/app_localizations.dart';
@@ -279,7 +280,9 @@ class _LiveTrackingPageState extends ConsumerState<LiveTrackingPage> {
 
     final straightKm = _providerPos == null ? null : _distanceKm(_providerPos!, _userPos);
     final distanceKm = _routeKm ?? straightKm;
-    final etaMin = _routeMinutes ??
+    final chainMin = job?.pickupEtaMinutes;
+    final etaMin = chainMin ??
+        _routeMinutes ??
         (straightKm == null ? null : math.max(1, (straightKm / 30 * 60).round()));
     final routeLine = _routePoints.length >= 2
         ? _routePoints
@@ -455,6 +458,11 @@ class _LiveTrackingPageState extends ConsumerState<LiveTrackingPage> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(providerName, style: GoogleFonts.poppins(fontSize: 15, fontWeight: FontWeight.w600, color: AppColors.textPrimary)),
+                              if (chainMin != null)
+                                Text(
+                                  'Finishing a nearby trip, then heading to you',
+                                  style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.textSecondary),
+                                ),
                               Row(
                                 children: [
                                   const Icon(Icons.star, color: AppColors.primary, size: 14),
@@ -474,6 +482,10 @@ class _LiveTrackingPageState extends ConsumerState<LiveTrackingPage> {
                         _ActionBtn(icon: Icons.phone, color: AppColors.success, onTap: () => _callProvider(provider?.phone)),
                         const SizedBox(width: 8),
                         _ActionBtn(icon: Icons.chat_bubble_outline, color: AppColors.info, onTap: () => _openChat(job?.id)),
+                        if (job?.id != null) ...[
+                          const SizedBox(width: 8),
+                          ShareTripButton.action(jobId: job!.id),
+                        ],
                       ],
                     ),
                     const SizedBox(height: 20),

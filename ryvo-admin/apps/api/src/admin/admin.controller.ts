@@ -3,6 +3,7 @@ import {
   Get,
   Post,
   Patch,
+  Delete,
   Param,
   Body,
   Query,
@@ -52,6 +53,10 @@ class ServiceCategoryDto {
   @IsOptional() @IsIn(['taxi', 'parcel']) businessType?: 'taxi' | 'parcel';
   @IsOptional() @IsNumber() sortOrder?: number;
   @IsOptional() @IsBoolean() isActive?: boolean;
+  @IsOptional() @IsNumber() @Min(0) baseFare?: number;
+  @IsOptional() @IsNumber() @Min(0) perKmRate?: number;
+  @IsOptional() @IsNumber() @Min(0) perMinuteRate?: number;
+  @IsOptional() @IsNumber() @Min(0) minFare?: number;
 }
 
 class SubscriptionPlanDto {
@@ -320,6 +325,12 @@ export class AdminController {
   @AdminRoles('super_admin', 'finance')
   async updateCategory(@Param('id') id: string, @Body() dto: ServiceCategoryDto) {
     return successResponse(await this.admin.updateServiceCategory(id, dto));
+  }
+
+  @Delete('pricing/categories/:id')
+  @AdminRoles('super_admin', 'finance')
+  async deleteCategory(@Param('id') id: string) {
+    return successResponse(await this.admin.deleteServiceCategory(id));
   }
 
   @Get('subscriptions/plans')

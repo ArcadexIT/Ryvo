@@ -6,9 +6,10 @@ import { MatchingModule } from '../matching/matching.module';
 import { PrismaModule } from '../prisma/prisma.module';
 import { SettingsModule } from '../settings/settings.module';
 import { BiddingModule } from '../bidding/bidding.module';
+import { TrackingModule } from '../tracking/tracking.module';
 
 @Module({
-  imports: [JobsModule, MatchingModule, PrismaModule, SettingsModule, BiddingModule],
+  imports: [JobsModule, MatchingModule, PrismaModule, SettingsModule, BiddingModule, TrackingModule],
   controllers: [CustomerApiController, AppConfigController],
 })
 export class CustomerApiModule {}

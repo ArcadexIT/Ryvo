@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import '../../../../core/job/active_job_session.dart';
+import '../../../payment/presentation/widgets/payment_sheet.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../data/models/app_config.dart';
 import '../../../../data/models/models.dart';
@@ -83,7 +84,9 @@ class _PriceEstimatePageState extends ConsumerState<PriceEstimatePage> {
 
       ref.read(jobDraftProvider.notifier).state =
           ref.read(jobDraftProvider).copyWith(paymentMethod: _selectedPayment!);
-      context.push('/payment');
+      final route = await showRyvoCheckoutSheet(context);
+      if (!mounted) return;
+      if (route != null) context.go(route);
     } catch (e) {
       if (mounted) showApiError(context, e);
     } finally {

@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
-import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../../../../core/job/active_job_session.dart';
+import '../../../../core/job/resume_customer_job.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../data/models/models.dart';
+import '../../../tracking/presentation/widgets/share_trip_button.dart';
 import '../../../../shared/providers/app_providers.dart';
 import 'package:ryvo_customer/l10n/app_localizations.dart';
 
@@ -17,7 +18,6 @@ class ActiveJobBanner extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final serviceName = job.serviceCategory?.name ?? AppLocalizations.of(context).roadsideService;
-    final route = routeForActiveCustomerJobModel(job);
     final statusColor = jobStatusColor(effectiveCustomerJobStatus(job));
 
     return Material(
@@ -25,7 +25,7 @@ class ActiveJobBanner extends StatelessWidget {
       borderRadius: BorderRadius.circular(16),
       color: AppColors.surface,
       child: InkWell(
-        onTap: () => context.push(route),
+        onTap: () => resumeCustomerJob(context, job),
         borderRadius: BorderRadius.circular(16),
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
@@ -73,7 +73,7 @@ class ActiveJobBanner extends StatelessWidget {
                 ),
               ),
               TextButton(
-                onPressed: () => context.push(route),
+                onPressed: () => resumeCustomerJob(context, job),
                 child: Text(
                   AppLocalizations.of(context).resume,
                   style: GoogleFonts.poppins(
@@ -83,6 +83,8 @@ class ActiveJobBanner extends StatelessWidget {
                   ),
                 ),
               ),
+              if (shareableTripStatuses.contains(effectiveCustomerJobStatus(job)))
+                ShareTripButton.icon(jobId: job.id),
             ],
           ),
         ),

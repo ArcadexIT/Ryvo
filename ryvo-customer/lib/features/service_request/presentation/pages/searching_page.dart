@@ -9,6 +9,7 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:ryvo_customer/l10n/app_localizations.dart';
 
 import '../../../../core/job/active_job_session.dart';
+import '../../../payment/presentation/widgets/payment_sheet.dart';
 import '../../../../core/location/driving_route.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/utils/map_style_utils.dart';
@@ -442,7 +443,14 @@ class _SearchingPageState extends ConsumerState<SearchingPage> with TickerProvid
         _paymentPendingHits += 1;
         if (_paymentPendingHits >= 2) {
           _pollTimer?.cancel();
-          if (mounted) context.pushReplacement('/payment');
+          if (!mounted) return;
+          final route = await showRyvoCheckoutSheet(context);
+          if (!mounted) return;
+          if (route != null) {
+            context.go(route);
+          } else if (ref.read(jobDraftProvider).activeJob == null) {
+            context.go('/home');
+          }
         }
       } else if (updated.status == 'no_provider_found') {
         _pollTimer?.cancel();

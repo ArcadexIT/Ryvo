@@ -13,6 +13,7 @@ import { PaymentsService } from '../payments/payments.service';
 import { JobsService } from '../jobs/jobs.service';
 import { BillingOpsService } from '../ops/billing-ops.service';
 import { SubscriptionsService } from '../subscriptions/subscriptions.service';
+import { MatchingService } from '../matching/matching.service';
 import { CancelledBy } from '@ryvo/shared';
 import { parsePagination, paginateMeta } from '../common/utils';
 import { PaginationDto } from '../common/dto/pagination.dto';
@@ -62,15 +63,35 @@ export class ProviderJobsService {
     private jobs: JobsService,
     private billing: BillingOpsService,
     private subscriptions: SubscriptionsService,
+    private matching: MatchingService,
   ) {}
 
   async getActive(providerId: string) {
-    const job = await this.prisma.job.findFirst({
+    const jobs = await this.prisma.job.findMany({
       where: { providerId, status: { in: ACTIVE_STATUSES } },
-      orderBy: { matchedAt: 'desc' },
       include: jobInclude,
     });
-    return job;
+    if (!jobs.length) return null;
+
+    const rank: Partial<Record<JobStatus, number>> = {
+      in_progress: 0,
+      arrived: 1,
+      provider_en_route: 2,
+      payment_pending: 3,
+      matched: 4,
+    };
+    jobs.sort((a, b) => {
+      const byStatus = (rank[a.status] ?? 9) - (rank[b.status] ?? 9);
+      if (byStatus !== 0) return byStatus;
+      return (a.matchedAt?.getTime() ?? 0) - (b.matchedAt?.getTime() ?? 0);
+    });
+
+    const current = jobs[0];
+    const next = jobs.find(
+      (job) => job.id !== current.id && (job.status === 'matched' || job.status === 'payment_pending'),
+    );
+    if (!next) return current;
+    return { ...current, nextPickupAddress: next.pickupAddress, nextJobId: next.id };
   }
 
   async getHistory(providerId: string, dto: PaginationDto) {
@@ -224,6 +245,9 @@ export class ProviderJobsService {
 
     if (toStatus === 'completed') {
       void this.sendCompletionEmails(jobId);
+      await this.matching
+        .reconcileProviderAfterJobClosed(providerId, jobId, 'complete')
+        .catch(() => undefined);
     }
 
     return updated;
@@ -304,7 +328,7 @@ export class ProviderJobsService {
 
     await tx.provider.update({
       where: { id: providerId },
-      data: { onlineStatus: 'online', totalJobs: { increment: 1 } },
+      data: { totalJobs: { increment: 1 } },
     });
   }
 }

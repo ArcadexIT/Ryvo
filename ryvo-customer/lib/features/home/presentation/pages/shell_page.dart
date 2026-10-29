@@ -23,41 +23,127 @@ class ShellPage extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final config = ref.watch(appConfigProvider).valueOrNull ?? AppConfig.fallback;
+    final config =
+        ref.watch(appConfigProvider).valueOrNull ?? AppConfig.fallback;
     final walletEnabled = config.customerWalletEnabled;
-    final currentNavIndex = _navIndexForBranch(navigationShell.currentIndex, walletEnabled);
+    final currentNavIndex =
+        _navIndexForBranch(navigationShell.currentIndex, walletEnabled);
 
-    final items = <BottomNavigationBarItem>[
-      BottomNavigationBarItem(icon: Icon(Icons.home_outlined), activeIcon: Icon(Icons.home), label: AppLocalizations.of(context).home),
-      BottomNavigationBarItem(icon: Icon(Icons.receipt_long_outlined), activeIcon: Icon(Icons.receipt_long), label: AppLocalizations.of(context).bookings),
+    final l10n = AppLocalizations.of(context);
+    final items = <_ShellNavSpec>[
+      _ShellNavSpec(
+          icon: Icons.home_outlined,
+          activeIcon: Icons.home_rounded,
+          label: l10n.home),
+      _ShellNavSpec(
+          icon: Icons.calendar_today_outlined,
+          activeIcon: Icons.calendar_today_rounded,
+          label: l10n.bookings),
       if (walletEnabled)
-        BottomNavigationBarItem(icon: Icon(Icons.account_balance_wallet_outlined), activeIcon: Icon(Icons.account_balance_wallet), label: AppLocalizations.of(context).wallet),
-      BottomNavigationBarItem(icon: Icon(Icons.person_outline), activeIcon: Icon(Icons.person), label: AppLocalizations.of(context).profile),
+        _ShellNavSpec(
+          icon: Icons.account_balance_wallet_outlined,
+          activeIcon: Icons.account_balance_wallet_rounded,
+          label: l10n.wallet,
+        ),
+      _ShellNavSpec(
+          icon: Icons.person_outline_rounded,
+          activeIcon: Icons.person_rounded,
+          label: l10n.profile),
     ];
 
     return Scaffold(
+      resizeToAvoidBottomInset: false,
       body: navigationShell,
       bottomNavigationBar: Container(
         decoration: BoxDecoration(
-          color: AppColors.surface,
+          color: AppColors.card,
           border: Border(top: BorderSide(color: AppColors.divider, width: 0.5)),
         ),
         child: SafeArea(
-          child: BottomNavigationBar(
-            currentIndex: currentNavIndex,
-            onTap: (i) => navigationShell.goBranch(
-              _branchIndexForNav(i, walletEnabled),
-              initialLocation: _branchIndexForNav(i, walletEnabled) == navigationShell.currentIndex,
+          top: false,
+          child: SizedBox(
+            height: 62,
+            child: Row(
+              children: [
+                for (var i = 0; i < items.length; i++)
+                  _ShellNavItem(
+                    icon: items[i].icon,
+                    activeIcon: items[i].activeIcon,
+                    label: items[i].label,
+                    selected: i == currentNavIndex,
+                    onTap: () => navigationShell.goBranch(
+                      _branchIndexForNav(i, walletEnabled),
+                      initialLocation: _branchIndexForNav(i, walletEnabled) ==
+                          navigationShell.currentIndex,
+                    ),
+                  ),
+              ],
             ),
-            backgroundColor: AppColors.surface,
-            selectedItemColor: AppColors.primary,
-            unselectedItemColor: AppColors.grey500,
-            selectedLabelStyle: GoogleFonts.poppins(fontSize: 11, fontWeight: FontWeight.w600),
-            unselectedLabelStyle: GoogleFonts.poppins(fontSize: 11),
-            type: BottomNavigationBarType.fixed,
-            elevation: 0,
-            items: items,
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ShellNavSpec {
+  final IconData icon;
+  final IconData activeIcon;
+  final String label;
+
+  const _ShellNavSpec({
+    required this.icon,
+    required this.activeIcon,
+    required this.label,
+  });
+}
+
+class _ShellNavItem extends StatelessWidget {
+  final IconData icon;
+  final IconData activeIcon;
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  const _ShellNavItem({
+    required this.icon,
+    required this.activeIcon,
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final color = selected ? AppColors.primary : AppColors.grey500;
+    return Expanded(
+      child: InkWell(
+        onTap: onTap,
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(selected ? activeIcon : icon, color: color, size: 24),
+            const SizedBox(height: 2),
+            Text(
+              label,
+              style: GoogleFonts.poppins(
+                fontSize: 11,
+                fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
+                color: color,
+                height: 1.1,
+              ),
+            ),
+            const SizedBox(height: 4),
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 180),
+              height: 3,
+              width: selected ? 22 : 0,
+              decoration: BoxDecoration(
+                color: AppColors.primary,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+          ],
         ),
       ),
     );

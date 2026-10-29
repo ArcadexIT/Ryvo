@@ -573,6 +573,13 @@ IconData serviceIcon(String? slug, String? icon) {
     'ryvo-go' || 'directions_car' => Icons.directions_car_outlined,
     'comfort' || 'airline_seat_recline_extra' => Icons.airline_seat_recline_extra,
     'xl' || 'airport_shuttle' => Icons.airport_shuttle,
+    'premium' || 'diamond' => Icons.diamond_outlined,
+    'pet' || 'pets' => Icons.pets_outlined,
+    'van' || 'local_shipping' => Icons.airport_shuttle_outlined,
+    'assist' || 'accessible' => Icons.accessible_rounded,
+    'green' || 'electric_car' => Icons.electric_car_outlined,
+    'parcel-bike' || 'two_wheeler' => Icons.two_wheeler_outlined,
+    'parcel-car' => Icons.local_shipping_outlined,
     'jump-start' || 'bolt' => Icons.bolt,
     _ => Icons.directions_car_outlined,
   };

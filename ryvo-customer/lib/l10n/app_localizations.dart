@@ -2091,6 +2091,48 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Tap Book Later to set a time'**
   String get tapBookLaterToSetATime;
+
+  /// No description provided for @shareTrip.
+  ///
+  /// In en, this message translates to:
+  /// **'Share trip'**
+  String get shareTrip;
+
+  /// No description provided for @followMyRyvoTrip.
+  ///
+  /// In en, this message translates to:
+  /// **'Follow my Ryvo trip'**
+  String get followMyRyvoTrip;
+
+  /// No description provided for @shareAgain.
+  ///
+  /// In en, this message translates to:
+  /// **'Share again'**
+  String get shareAgain;
+
+  /// No description provided for @stopSharing.
+  ///
+  /// In en, this message translates to:
+  /// **'Stop sharing'**
+  String get stopSharing;
+
+  /// No description provided for @sharingStopped.
+  ///
+  /// In en, this message translates to:
+  /// **'Family can no longer follow this trip'**
+  String get sharingStopped;
+
+  /// No description provided for @couldNotShareTrip.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not create a trip link'**
+  String get couldNotShareTrip;
+
+  /// No description provided for @tripShareHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Anyone with this link can follow the car until the trip ends.'**
+  String get tripShareHint;
 }
 
 class _AppLocalizationsDelegate

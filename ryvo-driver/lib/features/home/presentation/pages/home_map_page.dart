@@ -11,7 +11,6 @@ import '../../../../core/constants/mock_data.dart';
 import '../../../../core/services/job_alert_sound.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/utils/money.dart';
-import '../../../../core/utils/travel_estimate.dart';
 import '../../../../core/utils/responsive.dart';
 import '../../../../features/job/domain/entities/job_entity.dart';
 import '../../../../shared/providers/app_providers.dart';
@@ -19,7 +18,6 @@ import '../../../../shared/providers/di_providers.dart';
 import '../../../../shared/providers/verification_sync.dart';
 import '../../../../shared/providers/notifiers/job_notifier.dart';
 import '../../../../shared/providers/notifiers/location_notifier.dart';
-import '../../../../shared/widgets/widgets.dart';
 import '../widgets/active_job_banner.dart';
 import '../widgets/incoming_job_sheet.dart';
 import '../widgets/map_control_panel.dart';
@@ -41,8 +39,10 @@ class _HomeMapPageState extends ConsumerState<HomeMapPage> with WidgetsBindingOb
 
   MapMarkerAsset? _providerMarker;
   MapMarkerAsset? _customerMarker;
+  MapMarkerAsset? _dropoffMarker;
   Offset? _providerAnchor;
   Offset? _customerAnchor;
+  Offset? _dropoffAnchor;
 
   Timer? _jobTimer;
   double _markerScale = 1.0;
@@ -82,63 +82,72 @@ class _HomeMapPageState extends ConsumerState<HomeMapPage> with WidgetsBindingOb
     }
   }
 
-  String? _loadedDistanceLabel;
   double? _loadedMarkerScale;
-
-  String _incomingDistanceLabel() {
-    final incoming = ref.read(jobNotifierProvider).value?.incomingJob;
-    if (incoming == null) return AppLocalizations.of(context).nearby;
-    final live = ref.read(locationStreamProvider).valueOrNull;
-    final travel = travelEstimateFor(
-      pickupLat: incoming.customerLat,
-      pickupLng: incoming.customerLng,
-      providerLat: live?.latitude,
-      providerLng: live?.longitude,
-      serverDistanceKm: incoming.providerDistanceKm,
-      serverEtaMinutes: incoming.etaMinutes,
-    );
-    if (travel.distance == '—') return AppLocalizations.of(context).nearby;
-    return '${travel.distance} away';
-  }
+  bool _loadedAsJob = false;
+  bool _loadedDropoff = false;
 
   Future<void> _loadMarkers() async {
     final scale = _markerScale;
-    final label = _incomingDistanceLabel();
-    if (_providerMarker != null && _loadedDistanceLabel == label && _loadedMarkerScale == scale) {
+    final incoming = ref.read(jobNotifierProvider).value?.incomingJob;
+    final asJob = incoming != null;
+    final hasDrop = asJob &&
+        incoming.dropoffLat != null &&
+        incoming.dropoffLng != null &&
+        incoming.dropoffLat != 0 &&
+        incoming.dropoffLng != 0;
+    if (_providerMarker != null &&
+        _loadedMarkerScale == scale &&
+        _loadedAsJob == asJob &&
+        _loadedDropoff == hasDrop) {
       return;
     }
-    final provider = await MapMarkers.buildProviderLocationMarker(markerScale: scale);
-    final customer = await MapMarkers.buildCustomerJobMarker(
-      label,
-      markerScale: scale,
-    );
+    final provider = asJob
+        ? await MapMarkers.buildProviderCarMarker(markerScale: scale)
+        : await MapMarkers.buildProviderLocationMarker(markerScale: scale);
+    final customer = asJob
+        ? await MapMarkers.buildCustomerJobMarker(
+            'Pickup',
+            markerScale: scale,
+            pinColor: const Color(0xFF22C55E),
+          )
+        : null;
+    final dropoff = hasDrop
+        ? await MapMarkers.buildCustomerJobMarker('Drop off', markerScale: scale)
+        : null;
     if (!mounted) return;
     setState(() {
       _providerMarker = provider;
       _customerMarker = customer;
+      _dropoffMarker = dropoff;
       _providerAnchor = provider.anchor;
-      _customerAnchor = customer.anchor;
-      _loadedDistanceLabel = label;
+      _customerAnchor = customer?.anchor;
+      _dropoffAnchor = dropoff?.anchor;
       _loadedMarkerScale = scale;
+      _loadedAsJob = asJob;
+      _loadedDropoff = hasDrop;
     });
   }
 
   void _fitJobBounds(BuildContext context) {
-    final pad = R.w(context, 32).clamp(24.0, 48.0);
+    final pad = R.w(context, 72).clamp(56.0, 96.0);
     final liveLoc = ref.read(locationStreamProvider).valueOrNull;
     final providerPos = liveLoc != null ? LatLng(liveLoc.latitude, liveLoc.longitude) : _providerPos;
-    final customerPos = _customerPosFor(providerPos);
+    final points = _routePoints(providerPos);
+    var south = points.first.latitude;
+    var north = points.first.latitude;
+    var west = points.first.longitude;
+    var east = points.first.longitude;
+    for (final point in points.skip(1)) {
+      if (point.latitude < south) south = point.latitude;
+      if (point.latitude > north) north = point.latitude;
+      if (point.longitude < west) west = point.longitude;
+      if (point.longitude > east) east = point.longitude;
+    }
     _mapController?.animateCamera(
       CameraUpdate.newLatLngBounds(
         LatLngBounds(
-          southwest: LatLng(
-            providerPos.latitude < customerPos.latitude ? providerPos.latitude : customerPos.latitude,
-            providerPos.longitude < customerPos.longitude ? providerPos.longitude : customerPos.longitude,
-          ),
-          northeast: LatLng(
-            providerPos.latitude > customerPos.latitude ? providerPos.latitude : customerPos.latitude,
-            providerPos.longitude > customerPos.longitude ? providerPos.longitude : customerPos.longitude,
-          ),
+          southwest: LatLng(south, west),
+          northeast: LatLng(north, east),
         ),
         pad,
       ),
@@ -307,7 +316,7 @@ class _HomeMapPageState extends ConsumerState<HomeMapPage> with WidgetsBindingOb
         position: providerPos,
         icon: _providerMarker?.icon ?? BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueAzure),
         anchor: _providerAnchor ?? const Offset(0.5, 0.5),
-        zIndex: 2,
+        zIndexInt: 2,
       ),
     };
     if (showJob) {
@@ -315,13 +324,40 @@ class _HomeMapPageState extends ConsumerState<HomeMapPage> with WidgetsBindingOb
         Marker(
           markerId: const MarkerId('customer'),
           position: _customerPosFor(providerPos),
-          icon: _customerMarker?.icon ?? BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed),
+          icon: _customerMarker?.icon ?? BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueGreen),
           anchor: _customerAnchor ?? const Offset(0.5, 0.94),
-          zIndex: 1,
+          zIndexInt: 1,
         ),
       );
+      final dropoff = _dropoffPos();
+      if (dropoff != null) {
+        markers.add(
+          Marker(
+            markerId: const MarkerId('dropoff'),
+            position: dropoff,
+            icon: _dropoffMarker?.icon ?? BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed),
+            anchor: _dropoffAnchor ?? const Offset(0.5, 0.94),
+            zIndexInt: 1,
+          ),
+        );
+      }
     }
     return markers;
+  }
+
+  LatLng? _dropoffPos() {
+    final incoming = ref.read(jobNotifierProvider).value?.incomingJob;
+    final lat = incoming?.dropoffLat;
+    final lng = incoming?.dropoffLng;
+    if (lat == null || lng == null || lat == 0 || lng == 0) return null;
+    return LatLng(lat, lng);
+  }
+
+  List<LatLng> _routePoints(LatLng providerPos) {
+    final pickup = _customerPosFor(providerPos);
+    final dropoff = _dropoffPos();
+    if (dropoff == null) return [providerPos, pickup];
+    return [providerPos, pickup, dropoff];
   }
 
   LatLng _customerPosFor(LatLng fallback) {
@@ -386,14 +422,29 @@ class _HomeMapPageState extends ConsumerState<HomeMapPage> with WidgetsBindingOb
   @override
   Widget build(BuildContext context) {
     final isOnline = ref.watch(isOnlineProvider);
-    final showJob = isOnline && ref.watch(showIncomingJobProvider);
+    final tripScreenOpen = ref.watch(tripScreenCoveringHomeProvider);
+    final showJob = isOnline && ref.watch(showIncomingJobProvider) && !tripScreenOpen;
     final activeJob = ref.watch(activeJobProvider);
     final locationAsync = ref.watch(locationStreamProvider);
     final liveLoc = locationAsync.valueOrNull;
     final providerPos = liveLoc != null ? LatLng(liveLoc.latitude, liveLoc.longitude) : _providerPos;
-    final sheetHeight = showJob ? R.jobSheetHeight(context) : 0.0;
-    final mapBottomPad = sheetHeight + (showJob ? 8 : 0) + R.h(context, 88);
-    final mapTopPad = showJob ? 8.0 : R.h(context, 72);
+    final incoming = ref.watch(jobNotifierProvider).value?.incomingJob;
+    final offer = showJob
+        ? (incoming != null
+            ? mockJobFromEntity(
+                incoming,
+                providerLat: liveLoc?.latitude,
+                providerLng: liveLoc?.longitude,
+              )
+            : mockIncomingJob)
+        : null;
+    final showDock = activeJob != null &&
+        !showJob &&
+        (routeForActiveJob(activeJob.status) != null || activeJob.status == JobStatusEntity.paymentPending);
+    final topInset = MediaQuery.paddingOf(context).top;
+    final mapTopPad = showJob ? topInset + 240 : topInset + 76;
+    final mapBottomPad = showJob ? 108.0 : (showDock ? 140.0 : 28.0);
+    final controlsBottom = showJob ? 96.0 : (showDock ? 128.0 : 16.0);
 
     ref.listen(coverageNoticeProvider, (prev, next) {
       if (next == null) return;
@@ -437,7 +488,8 @@ class _HomeMapPageState extends ConsumerState<HomeMapPage> with WidgetsBindingOb
       final dismissed = ref.read(dismissedIncomingOfferIdProvider);
       final show = ref.read(isOnlineProvider) && incomingOfferIsOpen(incoming, dismissed);
       final active = next.value?.activeJob;
-      if (active != null) {
+      final onTrip = active?.status == JobStatusEntity.inProgress;
+      if (active != null && !onTrip) {
         ref.read(showIncomingJobProvider.notifier).state = false;
       } else if (ref.read(showIncomingJobProvider) != show) {
         ref.read(showIncomingJobProvider.notifier).state = show;
@@ -458,25 +510,28 @@ class _HomeMapPageState extends ConsumerState<HomeMapPage> with WidgetsBindingOb
     });
 
     return Scaffold(
+      backgroundColor: const Color(0xFF0E1626),
       body: Stack(
         children: [
           GoogleMap(
             initialCameraPosition: CameraPosition(target: providerPos, zoom: 15),
-            myLocationEnabled: true,
+            myLocationEnabled: false,
             myLocationButtonEnabled: false,
             zoomControlsEnabled: false,
             mapToolbarEnabled: false,
-            compassEnabled: true,
+            compassEnabled: false,
             padding: EdgeInsets.only(top: mapTopPad, bottom: mapBottomPad),
             markers: _buildMarkers(showJob, providerPos),
             polylines: showJob
                 ? {
                     Polyline(
                       polylineId: const PolylineId('route_preview'),
-                      points: [providerPos, _customerPosFor(providerPos)],
-                      color: AppColors.primary,
-                      width: 3,
-                      patterns: [PatternItem.dash(16), PatternItem.gap(8)],
+                      points: _routePoints(providerPos),
+                      color: const Color(0xFF5B9DFF),
+                      width: 5,
+                      jointType: JointType.round,
+                      startCap: Cap.roundCap,
+                      endCap: Cap.roundCap,
                     ),
                   }
                 : {},
@@ -485,14 +540,26 @@ class _HomeMapPageState extends ConsumerState<HomeMapPage> with WidgetsBindingOb
                 setState(() => _followLocation = false);
               }
             },
+            style: MockData.darkMapStyle,
             onMapCreated: (c) {
               _mapController = c;
-              _mapController?.setMapStyle(MockData.mapStyle);
               if (liveLoc != null && !_hasInitialCentered) {
                 _hasInitialCentered = true;
                 _centerOnProvider(LatLng(liveLoc.latitude, liveLoc.longitude));
               }
             },
+          ),
+          const IgnorePointer(
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [Color(0x990E1626), Color(0x000E1626)],
+                  stops: [0, 0.22],
+                ),
+              ),
+            ),
           ),
           AnimatedOpacity(
             opacity: isOnline ? 0.0 : 1.0,
@@ -502,70 +569,56 @@ class _HomeMapPageState extends ConsumerState<HomeMapPage> with WidgetsBindingOb
               child: OfflineOverlay(onGoOnline: () => _onOnlineChanged(true)),
             ),
           ),
-          if (!showJob)
-            SafeArea(
-              child: Padding(
-                padding: R.pagePadding(context).copyWith(top: 8, bottom: 8),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        const Expanded(child: _EarningsPill()),
-                        SizedBox(width: R.w(context, 8)),
-                        Expanded(
-                          child: OnlineToggle(
-                            isOnline: isOnline,
-                            enabled: ref.watch(isKycApprovedProvider),
-                            onChanged: _onOnlineChanged,
-                          ),
-                        ),
-                        SizedBox(width: R.w(context, 8)),
-                        GestureDetector(
-                          onTap: () => context.push('/notifications'),
-                          child: Container(
-                            width: R.w(context, 44).clamp(40, 48),
-                            height: OnlineToggle.pillHeight,
-                            decoration: BoxDecoration(
-                              color: AppColors.surface,
-                              borderRadius: BorderRadius.circular(20),
-                              border: Border.all(color: AppColors.divider),
-                            ),
-                            child: Stack(
-                              alignment: Alignment.center,
-                              children: [
-                                Icon(Icons.notifications_outlined, color: AppColors.textPrimary, size: R.sp(context, 22)),
-                                Positioned(
-                                  top: 10,
-                                  right: 10,
-                                  child: Container(
-                                    width: 7,
-                                    height: 7,
-                                    decoration: const BoxDecoration(color: AppColors.error, shape: BoxShape.circle),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ],
+          SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(12, 8, 12, 10),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _HomeTopBar(
+                    isOnline: isOnline,
+                    onMenu: _openMenu,
+                    onToggleOnline: () => _onOnlineChanged(!isOnline),
+                    onNotifications: () => context.push('/notifications'),
+                  ),
+                  if (showJob) ...[
+                    const SizedBox(height: 10),
+                    const IncomingJobSheet(),
+                  ] else if (isOnline) ...[
+                    const SizedBox(height: 10),
+                    MapLocationStatusChip(
+                      hasFix: liveLoc != null,
+                      isLoading: locationAsync.isLoading || _locating,
+                      hasError: locationAsync.hasError,
+                      areaLabel: _areaLabel,
                     ),
-                    if (isOnline) ...[
-                      SizedBox(height: R.h(context, 8)),
-                      MapLocationStatusChip(
-                        hasFix: liveLoc != null,
-                        isLoading: locationAsync.isLoading || _locating,
-                        hasError: locationAsync.hasError,
-                        areaLabel: _areaLabel,
-                      ),
-                    ],
                   ],
-                ),
+                  const Expanded(child: IgnorePointer(child: SizedBox.expand())),
+                  if (offer != null)
+                    Padding(
+                      padding: const EdgeInsets.only(right: 58),
+                      child: _NavigationChip(
+                        eta: offer.eta,
+                        distance: offer.distance,
+                        onTap: () => _fitJobBounds(context),
+                      ),
+                    )
+                  else if (!showDock && isOnline)
+                    const Padding(
+                      padding: EdgeInsets.only(right: 58),
+                      child: _WaitingChip(),
+                    ),
+                  if (showDock) ...[
+                    const SizedBox(height: 10),
+                    ActiveJobBanner(job: activeJob),
+                  ],
+                ],
               ),
             ),
+          ),
           Positioned(
-            right: R.w(context, 16),
-            bottom: mapBottomPad - R.h(context, 72),
+            right: 14,
+            bottom: controlsBottom,
             child: MapControlPanel(
               onMyLocation: _goToMyLocation,
               onZoomIn: _onZoomIn,
@@ -577,29 +630,170 @@ class _HomeMapPageState extends ConsumerState<HomeMapPage> with WidgetsBindingOb
               onFitRoute: showJob ? () => _fitJobBounds(context) : null,
             ),
           ),
-          if (showJob)
-            Positioned(
-              left: 0,
-              right: 0,
-              bottom: 0,
-              child: AnimatedSlide(
-                offset: Offset.zero,
-                duration: const Duration(milliseconds: 350),
-                curve: Curves.easeOutCubic,
-                child: const IncomingJobSheet(),
-              ),
-            ),
-          if (activeJob != null &&
-              !showJob &&
-              (routeForActiveJob(activeJob.status) != null ||
-                  activeJob.status == JobStatusEntity.paymentPending))
-            Positioned(
-              left: R.w(context, 16),
-              right: R.w(context, 16),
-              bottom: mapBottomPad,
-              child: ActiveJobBanner(job: activeJob),
-            ),
         ],
+      ),
+    );
+  }
+
+  void _openMenu() {
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: const Color(0xFF141C2B),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) {
+        final l10n = AppLocalizations.of(ctx);
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(8, 8, 8, 12),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 36,
+                  height: 4,
+                  margin: const EdgeInsets.only(bottom: 8),
+                  decoration: BoxDecoration(
+                    color: Colors.white24,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+                _MenuTile(icon: Icons.person_outline, label: l10n.profile, onTap: () { Navigator.pop(ctx); context.go('/profile'); }),
+                _MenuTile(icon: Icons.account_balance_wallet_outlined, label: l10n.wallet, onTap: () { Navigator.pop(ctx); context.push('/wallet'); }),
+                _MenuTile(icon: Icons.bar_chart_rounded, label: l10n.earnings, onTap: () { Navigator.pop(ctx); context.go('/earnings'); }),
+                _MenuTile(icon: Icons.history, label: l10n.history, onTap: () { Navigator.pop(ctx); context.go('/history'); }),
+                _MenuTile(icon: Icons.notifications_outlined, label: l10n.notifications, onTap: () { Navigator.pop(ctx); context.push('/notifications'); }),
+                _MenuTile(icon: Icons.help_outline, label: l10n.helpSupport, onTap: () { Navigator.pop(ctx); context.push('/help'); }),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+const _glass = Color(0xE6141C2B);
+const _glassText = Color(0xFFF8FAFC);
+const _glassMuted = Color(0xFF94A3B8);
+
+class _HomeTopBar extends StatelessWidget {
+  const _HomeTopBar({
+    required this.isOnline,
+    required this.onMenu,
+    required this.onToggleOnline,
+    required this.onNotifications,
+  });
+
+  final bool isOnline;
+  final VoidCallback onMenu;
+  final VoidCallback onToggleOnline;
+  final VoidCallback onNotifications;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        _GlassIconButton(icon: Icons.menu_rounded, onTap: onMenu),
+        const SizedBox(width: 8),
+        _OnlinePill(isOnline: isOnline, onTap: onToggleOnline),
+        const SizedBox(width: 8),
+        const Expanded(child: _EarningsPill()),
+        const SizedBox(width: 8),
+        _GlassIconButton(
+          icon: Icons.notifications_none_rounded,
+          onTap: onNotifications,
+          showDot: true,
+        ),
+      ],
+    );
+  }
+}
+
+class _GlassIconButton extends StatelessWidget {
+  const _GlassIconButton({required this.icon, required this.onTap, this.showDot = false});
+
+  final IconData icon;
+  final VoidCallback onTap;
+  final bool showDot;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: _glass,
+      shape: const CircleBorder(),
+      child: InkWell(
+        onTap: onTap,
+        customBorder: const CircleBorder(),
+        child: SizedBox(
+          width: 44,
+          height: 44,
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              Icon(icon, color: _glassText, size: 22),
+              if (showDot)
+                const Positioned(
+                  top: 10,
+                  right: 11,
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(color: AppColors.error, shape: BoxShape.circle),
+                    child: SizedBox(width: 8, height: 8),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _OnlinePill extends StatelessWidget {
+  const _OnlinePill({required this.isOnline, required this.onTap});
+
+  final bool isOnline;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    return Material(
+      color: _glass,
+      borderRadius: BorderRadius.circular(24),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(24),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 8,
+                height: 8,
+                decoration: BoxDecoration(
+                  color: isOnline ? const Color(0xFF22C55E) : _glassMuted,
+                  shape: BoxShape.circle,
+                  boxShadow: isOnline
+                      ? const [BoxShadow(color: Color(0x8822C55E), blurRadius: 6)]
+                      : null,
+                ),
+              ),
+              const SizedBox(width: 6),
+              Text(
+                isOnline ? l10n.online : l10n.offline,
+                style: GoogleFonts.poppins(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: isOnline ? const Color(0xFF22C55E) : _glassMuted,
+                ),
+              ),
+              Icon(Icons.chevron_right_rounded, size: 18, color: isOnline ? const Color(0xFF22C55E) : _glassMuted),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -611,33 +805,149 @@ class _EarningsPill extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final earnings = ref.watch(earningsNotifierProvider).value?.earnings;
-    final total = earnings?.weeklyTotal ?? 0;
-    return Container(
-      height: OnlineToggle.pillHeight,
-      padding: EdgeInsets.symmetric(horizontal: R.w(context, 12)),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: AppColors.divider),
-      ),
-      child: Row(
-        children: [
-          Icon(Icons.trending_up, color: AppColors.primary, size: R.sp(context, 18)),
-          SizedBox(width: R.w(context, 8)),
-          Expanded(
-            child: Text(
-              '${formatMoney(total)} this week',
-              style: GoogleFonts.poppins(
-                fontSize: R.sp(context, 13),
-                fontWeight: FontWeight.w600,
-                color: AppColors.textPrimary,
+    final days = earnings?.dailyBreakdown ?? const <double>[];
+    final today = days.length >= 7 ? days[6] : (days.isNotEmpty ? days.last : 0);
+    return Material(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(16),
+      child: InkWell(
+        onTap: () => context.go('/earnings'),
+        borderRadius: BorderRadius.circular(16),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          child: Row(
+            children: [
+              Container(
+                width: 28,
+                height: 28,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF3F4F6),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(Icons.account_balance_wallet_outlined, size: 16, color: Color(0xFF111827)),
               ),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
+              const SizedBox(width: 8),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      "Today's earnings",
+                      style: GoogleFonts.poppins(fontSize: 10, fontWeight: FontWeight.w500, color: const Color(0xFF6B7280)),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    Text(
+                      formatMoney(today.toDouble()),
+                      style: GoogleFonts.poppins(fontSize: 13, fontWeight: FontWeight.w700, color: const Color(0xFF111827), height: 1.1),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ),
+              ),
+              const Icon(Icons.chevron_right_rounded, size: 18, color: Color(0xFF9CA3AF)),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _NavigationChip extends StatelessWidget {
+  const _NavigationChip({required this.eta, required this.distance, required this.onTap});
+
+  final String eta;
+  final String distance;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final detail = distance == '—' ? eta : '$eta  ·  $distance';
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: Material(
+        color: _glass,
+        borderRadius: BorderRadius.circular(18),
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(18),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(8, 8, 12, 8),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 36,
+                  height: 36,
+                  decoration: const BoxDecoration(color: AppColors.primary, shape: BoxShape.circle),
+                  child: const Icon(Icons.navigation_rounded, color: AppColors.navy, size: 18),
+                ),
+                const SizedBox(width: 10),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      'Navigation',
+                      style: GoogleFonts.poppins(fontSize: 13, fontWeight: FontWeight.w700, color: _glassText),
+                    ),
+                    Text(
+                      detail,
+                      style: GoogleFonts.poppins(fontSize: 11, fontWeight: FontWeight.w500, color: _glassMuted),
+                    ),
+                  ],
+                ),
+                const SizedBox(width: 6),
+                const Icon(Icons.chevron_right_rounded, color: _glassMuted, size: 18),
+              ],
             ),
           ),
-        ],
+        ),
       ),
+    );
+  }
+}
+
+class _WaitingChip extends StatelessWidget {
+  const _WaitingChip();
+
+  @override
+  Widget build(BuildContext context) {
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        decoration: BoxDecoration(
+          color: _glass,
+          borderRadius: BorderRadius.circular(18),
+        ),
+        child: Text(
+          'Waiting for ride requests',
+          style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.w600, color: _glassText),
+        ),
+      ),
+    );
+  }
+}
+
+class _MenuTile extends StatelessWidget {
+  const _MenuTile({required this.icon, required this.label, required this.onTap});
+
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListTile(
+      leading: Icon(icon, color: _glassText),
+      title: Text(label, style: GoogleFonts.poppins(fontSize: 15, fontWeight: FontWeight.w600, color: _glassText)),
+      onTap: onTap,
+      dense: true,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
     );
   }
 }

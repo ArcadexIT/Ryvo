@@ -198,6 +198,7 @@ class JobModel {
     this.recipientOtp,
     this.pickupPhotoUrl,
     this.dropoffPhotoUrl,
+    this.pickupEtaMinutes,
   });
 
   factory JobModel.fromJson(Map<String, dynamic> json) => JobModel(
@@ -258,6 +259,9 @@ class JobModel {
         recipientOtp: json['recipientOtp'] as String?,
         pickupPhotoUrl: json['pickupPhotoUrl'] as String?,
         dropoffPhotoUrl: json['dropoffPhotoUrl'] as String?,
+        pickupEtaMinutes: json['pickupEtaMinutes'] != null
+            ? (json['pickupEtaMinutes'] as num).toInt()
+            : null,
       );
 
   final String id;
@@ -292,6 +296,9 @@ class JobModel {
   final String? recipientOtp;
   final String? pickupPhotoUrl;
   final String? dropoffPhotoUrl;
+
+  /// Set when the driver is still finishing another trip. Includes that leftover time.
+  final int? pickupEtaMinutes;
 
   double get displayFare => finalFare ?? estimatedFare ?? offeredPrice ?? 0;
 }

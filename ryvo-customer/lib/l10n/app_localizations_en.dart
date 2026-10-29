@@ -1047,4 +1047,26 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get tapBookLaterToSetATime => 'Tap Book Later to set a time';
+
+  @override
+  String get shareTrip => 'Share trip';
+
+  @override
+  String get followMyRyvoTrip => 'Follow my Ryvo trip';
+
+  @override
+  String get shareAgain => 'Share again';
+
+  @override
+  String get stopSharing => 'Stop sharing';
+
+  @override
+  String get sharingStopped => 'Family can no longer follow this trip';
+
+  @override
+  String get couldNotShareTrip => 'Could not create a trip link';
+
+  @override
+  String get tripShareHint =>
+      'Anyone with this link can follow the car until the trip ends.';
 }

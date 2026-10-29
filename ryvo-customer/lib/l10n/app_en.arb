@@ -332,5 +332,12 @@
   "useCurrentLocation": "Use current location",
   "scheduleForLater": "Schedule for later",
   "providersWillComeToYourLocation": "A driver accepts, then you ride",
-  "tapBookLaterToSetATime": "Tap Book Later to set a time"
+  "tapBookLaterToSetATime": "Tap Book Later to set a time",
+  "shareTrip": "Share trip",
+  "followMyRyvoTrip": "Follow my Ryvo trip",
+  "shareAgain": "Share again",
+  "stopSharing": "Stop sharing",
+  "sharingStopped": "Family can no longer follow this trip",
+  "couldNotShareTrip": "Could not create a trip link",
+  "tripShareHint": "Anyone with this link can follow the car until the trip ends."
 }

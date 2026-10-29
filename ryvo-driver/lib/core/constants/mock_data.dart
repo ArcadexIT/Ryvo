@@ -3,6 +3,23 @@ import 'package:flutter/material.dart';
 class MockData {
   MockData._();
 
+  /// Night style for the driver home map.
+  static const darkMapStyle = '''[
+    {"elementType":"geometry","stylers":[{"color":"#172033"}]},
+    {"elementType":"labels.text.fill","stylers":[{"color":"#8b95a8"}]},
+    {"elementType":"labels.text.stroke","stylers":[{"color":"#172033"}]},
+    {"featureType":"administrative","elementType":"geometry","stylers":[{"visibility":"off"}]},
+    {"featureType":"poi","stylers":[{"visibility":"off"}]},
+    {"featureType":"road","elementType":"geometry","stylers":[{"color":"#2a3a55"}]},
+    {"featureType":"road","elementType":"geometry.stroke","stylers":[{"color":"#1c2940"}]},
+    {"featureType":"road","elementType":"labels.text.fill","stylers":[{"color":"#9aa6bb"}]},
+    {"featureType":"road.highway","elementType":"geometry","stylers":[{"color":"#3d5a80"}]},
+    {"featureType":"road.highway","elementType":"geometry.stroke","stylers":[{"color":"#2c4a6e"}]},
+    {"featureType":"transit","stylers":[{"visibility":"off"}]},
+    {"featureType":"water","elementType":"geometry","stylers":[{"color":"#0e1626"}]},
+    {"featureType":"landscape","elementType":"geometry","stylers":[{"color":"#1a2740"}]}
+  ]''';
+
   static const mapStyle = '''[
     {"featureType":"poi","stylers":[{"visibility":"off"}]},
     {"featureType":"transit","stylers":[{"visibility":"simplified"}]},

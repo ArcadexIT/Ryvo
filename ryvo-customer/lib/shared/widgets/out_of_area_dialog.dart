@@ -48,6 +48,20 @@ Future<bool> showServiceUnavailableDialog(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            Container(
+              width: 52,
+              height: 52,
+              decoration: const BoxDecoration(
+                color: AppColors.primaryLight,
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(
+                Icons.location_off_rounded,
+                color: AppColors.primary,
+                size: 26,
+              ),
+            ),
+            const SizedBox(height: 14),
             Text(
               'Rides unavailable',
               style: GoogleFonts.poppins(
@@ -56,7 +70,7 @@ Future<bool> showServiceUnavailableDialog(
                 color: const Color(0xFF111827),
               ),
             ),
-            const SizedBox(height: 10),
+            const SizedBox(height: 8),
             Text(
               'RYVO is unavailable in the current area',
               style: GoogleFonts.poppins(
@@ -85,13 +99,16 @@ Future<bool> showServiceUnavailableDialog(
                   style: FilledButton.styleFrom(
                     backgroundColor: AppColors.primary,
                     foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 18, vertical: 10),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(24)),
                   ),
                   onPressed: () => Navigator.pop(ctx, true),
                   child: Text(
                     'Notify me',
-                    style: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 15),
+                    style: GoogleFonts.poppins(
+                        fontWeight: FontWeight.w600, fontSize: 15),
                   ),
                 ),
               ],
@@ -110,7 +127,8 @@ Future<bool> showServiceUnavailableDialog(
     );
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('We will notify you when RYVO is available here.')),
+        const SnackBar(
+            content: Text('We will notify you when RYVO is available here.')),
       );
     }
   } catch (_) {}

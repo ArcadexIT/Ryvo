@@ -411,7 +411,7 @@ class _VehicleInfoPageState extends ConsumerState<VehicleInfoPage> {
                             },
                           ),
                         if (_rideClassOptions.isEmpty)
-                          Text('Ryvo Go, Comfort, and XL appear once the API is running.', style: GoogleFonts.poppins(fontSize: 13, color: AppColors.textSecondary)),
+                          Text('Ride classes appear once the API is running.', style: GoogleFonts.poppins(fontSize: 13, color: AppColors.textSecondary)),
                       ],
                     ),
                     const SizedBox(height: 24),

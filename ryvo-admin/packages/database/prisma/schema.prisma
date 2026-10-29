@@ -607,12 +607,27 @@ model Job {
   providerEarning ProviderEarning?
   supportTickets  SupportTicket[]
   bids            JobBid[]
+  tripShare       TripShare?
 
   @@index([status, createdAt])
   @@index([customerId])
   @@index([providerId])
   @@index([jobType, status])
   @@map("jobs")
+}
+
+/// One family share link per job. The token is the secret; the job id is never put in the URL.
+model TripShare {
+  id        String    @id @default(uuid())
+  jobId     String    @unique @map("job_id")
+  token     String    @unique
+  revokedAt DateTime? @map("revoked_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+
+  job Job @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@map("trip_shares")
 }
 
 model JobBid {

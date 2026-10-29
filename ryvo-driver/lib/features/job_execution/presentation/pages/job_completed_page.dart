@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/utils/money.dart';
+import '../../../../features/job/domain/entities/job_entity.dart';
 import '../../../../shared/providers/app_providers.dart';
 import '../../../../shared/providers/di_providers.dart';
 import '../../../../shared/widgets/widgets.dart';
@@ -101,10 +102,21 @@ class _JobCompletedPageState extends ConsumerState<JobCompletedPage> {
       }
     }
 
-    ref.read(activeJobProvider.notifier).state = null;
     ref.read(showIncomingJobProvider.notifier).state = false;
     ref.read(selectedRatingProvider.notifier).state = 0;
-    if (mounted) context.go('/home');
+    JobEntity? nextJob;
+    try {
+      nextJob = await ref.read(jobRepositoryProvider).fetchActiveJob();
+    } catch (_) {}
+    if (!mounted) return;
+    final route = nextJob == null ? null : routeForActiveJob(nextJob.status);
+    if (nextJob != null && route != null) {
+      applyActiveJobSession(ProviderScope.containerOf(context, listen: false), nextJob);
+      context.go(route);
+      return;
+    }
+    ref.read(activeJobProvider.notifier).state = null;
+    context.go('/home');
   }
 
   @override

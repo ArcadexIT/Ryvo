@@ -745,7 +745,16 @@ export class AdminService {
   // ─── Pricing ───────────────────────────────────────────────────────────────
 
   async listServiceCategories() {
-    return this.prisma.serviceCategory.findMany({ orderBy: { sortOrder: 'asc' } });
+    return this.prisma.serviceCategory.findMany({
+      orderBy: { sortOrder: 'asc' },
+      include: {
+        pricingRules: {
+          where: { isActive: true },
+          orderBy: { effectiveFrom: 'desc' },
+          take: 1,
+        },
+      },
+    });
   }
 
   async createServiceCategory(data: {
@@ -755,22 +764,133 @@ export class AdminService {
     description?: string;
     businessType?: 'taxi' | 'parcel';
     sortOrder?: number;
+    baseFare?: number;
+    perKmRate?: number;
+    perMinuteRate?: number;
+    minFare?: number;
   }) {
-    return this.prisma.serviceCategory.create({ data });
+    try {
+      const category = await this.prisma.serviceCategory.create({
+        data: {
+          name: data.name,
+          slug: data.slug.trim(),
+          icon: data.icon?.trim() || null,
+          description: data.description,
+          businessType: data.businessType,
+          sortOrder: data.sortOrder,
+        },
+      });
+      if (data.baseFare != null) {
+        await this.saveCategoryFare(category.id, data);
+      }
+      return category;
+    } catch (error) {
+      this.rethrowCategoryConflict(error);
+    }
   }
 
   async updateServiceCategory(
     id: string,
     data: {
       name?: string;
+      slug?: string;
       icon?: string;
       description?: string;
       businessType?: 'taxi' | 'parcel';
       isActive?: boolean;
       sortOrder?: number;
+      baseFare?: number;
+      perKmRate?: number;
+      perMinuteRate?: number;
+      minFare?: number;
     },
   ) {
-    return this.prisma.serviceCategory.update({ where: { id }, data });
+    try {
+      const category = await this.prisma.serviceCategory.update({
+        where: { id },
+        data: {
+          name: data.name,
+          slug: data.slug?.trim(),
+          icon: data.icon === undefined ? undefined : data.icon.trim() || null,
+          description: data.description,
+          businessType: data.businessType,
+          isActive: data.isActive,
+          sortOrder: data.sortOrder,
+        },
+      });
+      if (data.baseFare != null) {
+        await this.saveCategoryFare(id, data);
+      }
+      return category;
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2025') {
+        throw new NotFoundException('Ride type not found');
+      }
+      this.rethrowCategoryConflict(error);
+    }
+  }
+
+  async deleteServiceCategory(id: string) {
+    const category = await this.prisma.serviceCategory.findUnique({ where: { id } });
+    if (!category) throw new NotFoundException('Ride type not found');
+
+    const rides = await this.prisma.job.count({ where: { serviceCategoryId: id } });
+    if (rides > 0) {
+      throw new BadRequestException(
+        'This type is already used on rides. Deactivate it instead of deleting it.',
+      );
+    }
+
+    await this.prisma.trainingProgram.updateMany({
+      where: { serviceCategoryId: id },
+      data: { serviceCategoryId: null },
+    });
+    await this.prisma.providerDocument.updateMany({
+      where: { serviceCategoryId: id },
+      data: { serviceCategoryId: null },
+    });
+
+    try {
+      await this.prisma.serviceCategory.delete({ where: { id } });
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2003') {
+        throw new BadRequestException(
+          'This type is still linked to other records. Deactivate it instead.',
+        );
+      }
+      throw error;
+    }
+    return { id };
+  }
+
+  private async saveCategoryFare(
+    serviceCategoryId: string,
+    data: { baseFare?: number; perKmRate?: number; perMinuteRate?: number; minFare?: number },
+  ) {
+    const rule = await this.prisma.servicePricingRule.findFirst({
+      where: { serviceCategoryId, isActive: true },
+      orderBy: { effectiveFrom: 'desc' },
+    });
+    const fare = {
+      baseFare: data.baseFare ?? 0,
+      perKmRate: data.perKmRate ?? 0,
+      perMinuteRate: data.perMinuteRate ?? 0,
+      minFare: data.minFare ?? data.baseFare ?? 0,
+    };
+    if (rule) {
+      await this.prisma.servicePricingRule.update({ where: { id: rule.id }, data: fare });
+      return;
+    }
+    await this.prisma.servicePricingRule.create({
+      data: { serviceCategoryId, ...fare, city: 'default' },
+    });
+  }
+
+  private rethrowCategoryConflict(error: unknown): never {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+      throw new BadRequestException('Another ride type already uses that slug');
+    }
+    throw error;
   }
 
   async listPricingRules(serviceCategoryId?: string) {

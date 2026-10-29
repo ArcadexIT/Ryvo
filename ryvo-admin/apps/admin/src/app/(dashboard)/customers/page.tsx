@@ -7,7 +7,6 @@ import { toast } from 'sonner';
 import {
   Ban,
   Briefcase,
-  Car,
   ChevronRight,
   Mail,
   Search,
@@ -42,7 +41,7 @@ interface Customer {
     status: string;
     avatarUrl?: string | null;
   };
-  _count?: { jobs: number; vehicles: number };
+  _count?: { jobs: number };
 }
 
 async function fetchCustomerTotal(filters: Record<string, string | undefined> = {}) {
@@ -80,7 +79,6 @@ function CustomerRow({
   onDelete: () => void;
 }) {
   const jobs = customer._count?.jobs ?? 0;
-  const vehicles = customer._count?.vehicles ?? 0;
 
   return (
     <div
@@ -94,7 +92,7 @@ function CustomerRow({
           onClick();
         }
       }}
-      className="group grid w-full cursor-pointer grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 px-4 py-3.5 text-left transition-colors hover:bg-surface/80 sm:gap-4 sm:px-5 lg:grid-cols-[auto_minmax(0,1.4fr)_minmax(0,1fr)_88px_88px_auto]"
+      className="group grid w-full cursor-pointer grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 px-4 py-3.5 text-left transition-colors hover:bg-surface/80 sm:gap-4 sm:px-5 lg:grid-cols-[auto_minmax(0,1.4fr)_minmax(0,1fr)_88px_auto]"
     >
       <SecureAvatar
         name={customer.user.fullName}
@@ -122,10 +120,6 @@ function CustomerRow({
             <Briefcase className="h-3 w-3" />
             {jobs} jobs
           </span>
-          <span className="inline-flex items-center gap-1">
-            <Car className="h-3 w-3" />
-            {vehicles}
-          </span>
         </div>
       </div>
 
@@ -143,11 +137,6 @@ function CustomerRow({
       <div className="hidden items-center gap-1.5 text-sm text-secondary lg:flex">
         <Briefcase className="h-3.5 w-3.5" />
         <span className="font-tabular">{jobs}</span>
-      </div>
-
-      <div className="hidden items-center gap-1.5 text-sm text-secondary lg:flex">
-        <Car className="h-3.5 w-3.5" />
-        <span className="font-tabular">{vehicles}</span>
       </div>
 
       <div className="flex items-center gap-2">
@@ -376,7 +365,6 @@ export default function CustomersPage() {
               <div className="hidden items-center gap-8 text-[11px] font-medium uppercase tracking-wide text-muted lg:flex">
                 <span className="min-w-[140px]">Email</span>
                 <span className="w-[88px]">Jobs</span>
-                <span className="w-[88px]">Vehicles</span>
                 <span className="w-[108px] text-right">Joined</span>
               </div>
             </div>

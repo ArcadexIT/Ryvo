@@ -413,6 +413,18 @@ class JobRepository {
         parser: (json) => JobModel.fromJson(json as Map<String, dynamic>),
       );
 
+  Future<({String url, bool reused})> shareTrip(String id) async {
+    final data = await _api.post<Map<String, dynamic>>(
+      '/customer/jobs/$id/share',
+      parser: (json) => Map<String, dynamic>.from(json as Map),
+    );
+    return (url: data['url'] as String, reused: data['reused'] == true);
+  }
+
+  Future<void> stopSharingTrip(String id) async {
+    await _api.delete<dynamic>('/customer/jobs/$id/share');
+  }
+
   Future<List<NearbyProvider>> nearbyProviders({
     required double lat,
     required double lng,

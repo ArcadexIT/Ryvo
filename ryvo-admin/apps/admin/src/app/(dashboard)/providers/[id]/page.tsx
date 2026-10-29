@@ -25,7 +25,6 @@ import { toast } from 'sonner';
 import {
   ArrowLeft,
   Briefcase,
-  Car,
   CheckCircle2,
   Clock,
   Copy,
@@ -52,17 +51,6 @@ interface ProviderDocument {
   rejectionReason?: string;
   equipmentLabel?: string | null;
   serviceCategory?: { name?: string } | null;
-}
-
-interface ProviderVehicle {
-  id: string;
-  make: string;
-  model: string;
-  year: number;
-  plateNumber: string;
-  transmission?: string | null;
-  fuelType?: string | null;
-  photoUrl?: string;
 }
 
 interface ProviderJob {
@@ -109,7 +97,6 @@ interface ProviderDetail {
     currency: string;
   };
   documents?: ProviderDocument[];
-  vehicles?: ProviderVehicle[];
   jobs?: ProviderJob[];
   qualifications?: ProviderQualification[];
   subscriptions?: Array<{
@@ -120,7 +107,7 @@ interface ProviderDetail {
   }>;
 }
 
-type TabId = 'overview' | 'documents' | 'vehicles' | 'jobs' | 'qualifications';
+type TabId = 'overview' | 'documents' | 'jobs' | 'qualifications';
 
 function OnlineIndicator({ status }: { status: string }) {
   const isOnline = status === 'online' || status === 'busy';
@@ -503,11 +490,6 @@ export default function ProviderDetailPage() {
                   count: data.documents?.length ?? 0,
                 },
                 {
-                  value: 'vehicles',
-                  label: 'Vehicles',
-                  count: data.vehicles?.length ?? 0,
-                },
-                {
                   value: 'jobs',
                   label: 'Rides',
                   count: data.jobs?.length ?? 0,
@@ -803,66 +785,6 @@ export default function ProviderDetailPage() {
                 </CardContent>
               </Card>
               </div>
-            )}
-
-            {tab === 'vehicles' && (
-              <Card>
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-base">Registered Vehicles</CardTitle>
-                  <p className="mt-1 text-sm text-secondary">
-                    Fleet linked to this provider account
-                  </p>
-                </CardHeader>
-                <CardContent>
-                  {!data.vehicles?.length ? (
-                    <EmptyState
-                      title="No vehicles registered"
-                      description="This driver has not added any vehicles yet."
-                      className="py-12"
-                    />
-                  ) : (
-                    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-                      {data.vehicles.map((v) => (
-                        <div
-                          key={v.id}
-                          className="group relative overflow-hidden rounded-xl border border-border bg-surface p-4 transition-all hover:-translate-y-0.5 hover:border-border-strong hover:shadow-md"
-                        >
-                          <div className="flex items-center gap-3">
-                            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-info/10">
-                              <Car className="h-5 w-5 text-info" />
-                            </div>
-                            <div className="min-w-0">
-                              <p className="truncate font-medium text-primary">
-                                {v.make} {v.model}
-                              </p>
-                              <p className="mt-0.5 text-xs text-secondary">
-                                {v.year}
-                                {(v.transmission || v.fuelType) && (
-                                  <>
-                                    {' · '}
-                                    {[v.transmission, v.fuelType]
-                                      .filter(Boolean)
-                                      .map((s) => String(s).replace(/^\w/, (c) => c.toUpperCase()))
-                                      .join(' · ')}
-                                  </>
-                                )}
-                              </p>
-                            </div>
-                          </div>
-                          <div className="mt-4 flex items-center justify-between border-t border-border pt-3">
-                            <span className="text-[11px] font-medium uppercase tracking-wide text-muted">
-                              Plate
-                            </span>
-                            <span className="font-mono text-sm font-medium text-primary">
-                              {v.plateNumber}
-                            </span>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
             )}
 
             {tab === 'jobs' && (

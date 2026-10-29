@@ -95,26 +95,20 @@ class _MapControlButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: active ? AppColors.primary.withValues(alpha: 0.15) : AppColors.surface,
-      borderRadius: BorderRadius.circular(12),
-      elevation: 2,
-      shadowColor: Colors.black26,
+      color: active ? AppColors.primary : const Color(0xE6141C2B),
+      shape: const CircleBorder(),
+      elevation: 4,
+      shadowColor: Colors.black54,
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(12),
-        child: Container(
+        customBorder: const CircleBorder(),
+        child: SizedBox(
           width: size,
           height: size,
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-              color: active ? AppColors.primary.withValues(alpha: 0.5) : AppColors.divider,
-            ),
-          ),
           child: Icon(
             icon,
             size: R.sp(context, 20),
-            color: active ? AppColors.primary : AppColors.textPrimary,
+            color: active ? AppColors.navy : Colors.white,
           ),
         ),
       ),
@@ -148,12 +142,11 @@ class MapLocationStatusChip extends StatelessWidget {
                 : (Icons.location_disabled_outlined, 'Waiting for GPS', AppColors.textHint);
 
     return Container(
-      padding: EdgeInsets.symmetric(horizontal: R.w(context, 10), vertical: R.h(context, 6)),
+      padding: EdgeInsets.symmetric(horizontal: R.w(context, 12), vertical: R.h(context, 8)),
       decoration: BoxDecoration(
-        color: AppColors.surface.withValues(alpha: 0.95),
+        color: const Color(0xE6141C2B),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: color.withValues(alpha: 0.35)),
-        boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 8, offset: Offset(0, 2))],
+        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -164,9 +157,9 @@ class MapLocationStatusChip extends StatelessWidget {
             child: Text(
               label,
               style: GoogleFonts.poppins(
-                fontSize: R.sp(context, 11),
+                fontSize: R.sp(context, 12),
                 fontWeight: FontWeight.w600,
-                color: AppColors.textPrimary,
+                color: Colors.white,
               ),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,

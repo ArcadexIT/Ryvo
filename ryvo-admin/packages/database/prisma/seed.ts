@@ -127,18 +127,67 @@ async function main() {
       perMinuteRate: 0.4,
       minFare: 9,
     },
+    {
+      name: 'Premium',
+      slug: RIDE_CLASS_SLUGS.PREMIUM,
+      icon: 'diamond',
+      description: 'Top-rated drivers in higher-end cars',
+      sortOrder: 4,
+      baseFare: 7,
+      perKmRate: 2.8,
+      perMinuteRate: 0.5,
+      minFare: 12,
+    },
+    {
+      name: 'Pet',
+      slug: RIDE_CLASS_SLUGS.PET,
+      icon: 'pets',
+      description: 'Pet-friendly rides, with help for your animal',
+      sortOrder: 5,
+      baseFare: 3.5,
+      perKmRate: 1.5,
+      perMinuteRate: 0.3,
+      minFare: 6,
+    },
+    {
+      name: 'Van',
+      slug: RIDE_CLASS_SLUGS.VAN,
+      icon: 'local_shipping',
+      description: 'Vans for groups, luggage, and bulky items',
+      sortOrder: 6,
+      baseFare: 6.5,
+      perKmRate: 2.6,
+      perMinuteRate: 0.45,
+      minFare: 11,
+    },
+    {
+      name: 'Assist',
+      slug: RIDE_CLASS_SLUGS.ASSIST,
+      icon: 'accessible',
+      description: 'Wheelchair-accessible vehicles',
+      sortOrder: 7,
+      baseFare: 3,
+      perKmRate: 1.4,
+      perMinuteRate: 0.3,
+      minFare: 5.5,
+    },
+    {
+      name: 'Green',
+      slug: RIDE_CLASS_SLUGS.GREEN,
+      icon: 'electric_car',
+      description: 'Electric and hybrid cars',
+      sortOrder: 8,
+      baseFare: 3,
+      perKmRate: 1.4,
+      perMinuteRate: 0.28,
+      minFare: 5,
+    },
   ];
 
   for (const rideClass of rideClasses) {
     const category = await prisma.serviceCategory.upsert({
       where: { slug: rideClass.slug },
-      update: {
-        name: rideClass.name,
-        icon: rideClass.icon,
-        description: rideClass.description,
-        sortOrder: rideClass.sortOrder,
-        isActive: true,
-      },
+      update: {},
       create: {
         name: rideClass.name,
         slug: rideClass.slug,
@@ -149,25 +198,21 @@ async function main() {
       },
     });
 
-    await prisma.servicePricingRule.upsert({
-      where: { id: `${rideClass.slug}-default-pricing` },
-      update: {
-        baseFare: rideClass.baseFare,
-        perKmRate: rideClass.perKmRate,
-        perMinuteRate: rideClass.perMinuteRate,
-        minFare: rideClass.minFare,
-        isActive: true,
-      },
-      create: {
-        id: `${rideClass.slug}-default-pricing`,
-        serviceCategoryId: category.id,
-        baseFare: rideClass.baseFare,
-        perKmRate: rideClass.perKmRate,
-        perMinuteRate: rideClass.perMinuteRate,
-        minFare: rideClass.minFare,
-        city: 'default',
-      },
-    });
+    const ruleId = `${rideClass.slug}-default-pricing`;
+    const existingRule = await prisma.servicePricingRule.findUnique({ where: { id: ruleId } });
+    if (!existingRule) {
+      await prisma.servicePricingRule.create({
+        data: {
+          id: ruleId,
+          serviceCategoryId: category.id,
+          baseFare: rideClass.baseFare,
+          perKmRate: rideClass.perKmRate,
+          perMinuteRate: rideClass.perMinuteRate,
+          minFare: rideClass.minFare,
+          city: 'default',
+        },
+      });
+    }
   }
 
   const parcelClasses = [
@@ -198,14 +243,7 @@ async function main() {
   for (const parcelClass of parcelClasses) {
     const category = await prisma.serviceCategory.upsert({
       where: { slug: parcelClass.slug },
-      update: {
-        name: parcelClass.name,
-        icon: parcelClass.icon,
-        description: parcelClass.description,
-        sortOrder: parcelClass.sortOrder,
-        businessType: 'parcel',
-        isActive: true,
-      },
+      update: {},
       create: {
         name: parcelClass.name,
         slug: parcelClass.slug,
@@ -217,25 +255,21 @@ async function main() {
       },
     });
 
-    await prisma.servicePricingRule.upsert({
-      where: { id: `${parcelClass.slug}-default-pricing` },
-      update: {
-        baseFare: parcelClass.baseFare,
-        perKmRate: parcelClass.perKmRate,
-        perMinuteRate: parcelClass.perMinuteRate,
-        minFare: parcelClass.minFare,
-        isActive: true,
-      },
-      create: {
-        id: `${parcelClass.slug}-default-pricing`,
-        serviceCategoryId: category.id,
-        baseFare: parcelClass.baseFare,
-        perKmRate: parcelClass.perKmRate,
-        perMinuteRate: parcelClass.perMinuteRate,
-        minFare: parcelClass.minFare,
-        city: 'default',
-      },
-    });
+    const parcelRuleId = `${parcelClass.slug}-default-pricing`;
+    const existingParcelRule = await prisma.servicePricingRule.findUnique({ where: { id: parcelRuleId } });
+    if (!existingParcelRule) {
+      await prisma.servicePricingRule.create({
+        data: {
+          id: parcelRuleId,
+          serviceCategoryId: category.id,
+          baseFare: parcelClass.baseFare,
+          perKmRate: parcelClass.perKmRate,
+          perMinuteRate: parcelClass.perMinuteRate,
+          minFare: parcelClass.minFare,
+          city: 'default',
+        },
+      });
+    }
   }
 
   const subscriptionPlans = [

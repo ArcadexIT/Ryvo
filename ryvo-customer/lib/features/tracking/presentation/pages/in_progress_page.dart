@@ -13,6 +13,7 @@ import '../../../../core/theme/app_colors.dart';
 import '../../../../core/utils/job_elapsed.dart';
 import '../../../../core/utils/phone_call.dart';
 import '../../../../data/models/models.dart';
+import '../widgets/share_trip_button.dart';
 import '../../../../shared/providers/app_providers.dart';
 import '../../../../shared/widgets/widgets.dart';
 import 'package:ryvo_customer/l10n/app_localizations.dart';
@@ -459,6 +460,7 @@ class _InProgressPageState extends ConsumerState<InProgressPage> {
                             onPressed: () => context.push('/chat/${job!.id}'),
                             icon: const Icon(Icons.chat_bubble_outline, color: AppColors.info),
                           ),
+                        if (job?.id != null) ShareTripButton.icon(jobId: job!.id),
                       ],
                     ),
                     const SizedBox(height: 8),

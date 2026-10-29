@@ -10,7 +10,9 @@ import '../../../../core/utils/job_elapsed.dart';
 import '../../../../features/job/domain/entities/job_entity.dart';
 import '../../../../shared/providers/app_providers.dart';
 import '../../../../shared/providers/di_providers.dart';
+import '../../../../shared/providers/notifiers/job_notifier.dart';
 import '../../../../shared/widgets/widgets.dart';
+import '../../../home/presentation/widgets/incoming_job_sheet.dart';
 import '../widgets/customer_location_actions.dart';
 import '../widgets/ride_trip_map.dart';
 import 'package:ryvo_driver/l10n/app_localizations.dart';
@@ -29,6 +31,10 @@ class _ServiceInProgressPageState extends ConsumerState<ServiceInProgressPage> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      ref.read(tripScreenCoveringHomeProvider.notifier).state = true;
+    });
     _pollTimer = Timer.periodic(const Duration(seconds: 4), (_) => _refreshActiveJob());
     Future.microtask(_refreshActiveJob);
   }
@@ -85,7 +91,9 @@ class _ServiceInProgressPageState extends ConsumerState<ServiceInProgressPage> {
   @override
   void dispose() {
     _pollTimer?.cancel();
+    final covering = ref.read(tripScreenCoveringHomeProvider.notifier);
     super.dispose();
+    Future(() => covering.state = false);
   }
 
   LatLng? _point(double? lat, double? lng) {
@@ -168,6 +176,17 @@ class _ServiceInProgressPageState extends ConsumerState<ServiceInProgressPage> {
     final destination = dropoff ?? driver ?? pickup ?? const LatLng(52.48, -1.89);
     final dropoffLabel = (job.dropoffAddress ?? '').trim().isEmpty ? 'Dropoff' : job.dropoffAddress!.trim();
     final l10n = AppLocalizations.of(context);
+    final showNextOffer = ref.watch(showIncomingJobProvider);
+    final nextPickup = (job.nextPickupAddress ?? '').trim();
+
+    ref.listen<AsyncValue<JobUiState>>(jobNotifierProvider, (prev, next) {
+      final incoming = next.value?.incomingJob;
+      final dismissed = ref.read(dismissedIncomingOfferIdProvider);
+      final show = incomingOfferIsOpen(incoming, dismissed);
+      if (ref.read(showIncomingJobProvider) != show) {
+        ref.read(showIncomingJobProvider.notifier).state = show;
+      }
+    });
 
     return PopScope(
       canPop: false,
@@ -176,7 +195,9 @@ class _ServiceInProgressPageState extends ConsumerState<ServiceInProgressPage> {
       },
       child: Scaffold(
         backgroundColor: AppColors.background,
-        body: RideTripMap(
+        body: Stack(
+          children: [
+            RideTripMap(
           driver: driver,
           destination: destination,
           dropoff: dropoff,
@@ -236,6 +257,13 @@ class _ServiceInProgressPageState extends ConsumerState<ServiceInProgressPage> {
                       'Heading to dropoff',
                       style: GoogleFonts.poppins(fontSize: 17, fontWeight: FontWeight.w700, color: AppColors.textPrimary),
                     ),
+                    if (nextPickup.isNotEmpty) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        'Next trip after this dropoff · $nextPickup',
+                        style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.primary),
+                      ),
+                    ],
                     Text(
                       job.customerName,
                       style: GoogleFonts.poppins(fontSize: 13, color: AppColors.textSecondary),
@@ -262,6 +290,15 @@ class _ServiceInProgressPageState extends ConsumerState<ServiceInProgressPage> {
               ),
             ),
           ),
+            ),
+            if (showNextOffer)
+              const Positioned(
+                left: 0,
+                right: 0,
+                bottom: 0,
+                child: IncomingJobSheet(),
+              ),
+          ],
         ),
       ),
     );

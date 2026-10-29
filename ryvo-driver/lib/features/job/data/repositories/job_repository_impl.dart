@@ -161,6 +161,8 @@ JobEntity _jobFromJson(Map<String, dynamic> data, {String? overrideId, DateTime?
     parcelSize: data['parcelSize'] as String?,
     pickupPhotoUrl: data['pickupPhotoUrl'] as String?,
     dropoffPhotoUrl: data['dropoffPhotoUrl'] as String?,
+    chained: data['chained'] == true,
+    nextPickupAddress: _clean(data['nextPickupAddress']),
   );
 }
 

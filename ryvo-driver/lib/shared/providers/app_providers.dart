@@ -33,6 +33,9 @@ final isAgreementAcceptedProvider = StateProvider<bool>((ref) => true);
 final isOnlineProvider = StateProvider<bool>((ref) => false);
 final showIncomingJobProvider = StateProvider<bool>((ref) => false);
 
+/// True while the in-progress trip screen is covering home, so only that screen shows the offer.
+final tripScreenCoveringHomeProvider = StateProvider<bool>((ref) => false);
+
 /// Offer id whose countdown already finished. Polling must not open it again.
 final dismissedIncomingOfferIdProvider = StateProvider<String?>((ref) => null);
 
@@ -78,6 +81,8 @@ class MockJob {
   final DateTime? createdAt;
   final DateTime? completedAt;
   final String bookingMode;
+  final bool chained;
+  final String? nextPickupAddress;
 
   const MockJob({
     required this.id,
@@ -107,6 +112,8 @@ class MockJob {
     this.customerStartConfirmedAt,
     this.providerStartConfirmedAt,
     this.bookingMode = 'taxi',
+    this.chained = false,
+    this.nextPickupAddress,
   });
 
   final DateTime? customerStartConfirmedAt;
@@ -151,6 +158,42 @@ MockJob mockJobFromEntity(
   double? providerLng,
 }) {
   final hasAddress = e.pickupAddress != null && e.pickupAddress!.trim().isNotEmpty;
+  if (e.chained && e.etaMinutes != null) {
+    return MockJob(
+      id: e.id,
+      customerName: e.customerName,
+      jobType: e.jobType,
+      serviceDescription: e.jobType,
+      distance: e.providerDistanceKm != null ? formatDistanceKm(e.providerDistanceKm!) : '',
+      eta: formatEtaMinutes(e.etaMinutes!),
+      address: hasAddress
+          ? e.pickupAddress!.trim()
+          : e.customerLat != null
+              ? '${e.customerLat!.toStringAsFixed(4)}, ${e.customerLng!.toStringAsFixed(4)}'
+              : 'Pickup',
+      dropoffAddress: e.dropoffAddress,
+      dropoffLat: e.dropoffLat,
+      dropoffLng: e.dropoffLng,
+      tripDistance: e.tripDistanceKm != null ? formatDistanceKm(e.tripDistanceKm!) : '',
+      rating: 0,
+      payout: e.payout,
+      vehicleInfo: e.vehicleInfo,
+      vehicle: e.vehicle,
+      jobRef: e.jobRef,
+      customerLat: e.customerLat,
+      customerLng: e.customerLng,
+      customerPhone: e.customerPhone,
+      status: e.status,
+      startedAt: e.startedAt,
+      createdAt: e.createdAt,
+      completedAt: e.completedAt,
+      customerStartConfirmedAt: e.customerStartConfirmedAt,
+      providerStartConfirmedAt: e.providerStartConfirmedAt,
+      bookingMode: e.bookingMode,
+      chained: true,
+      nextPickupAddress: e.nextPickupAddress,
+    );
+  }
   final travel = travelEstimateFor(
     pickupLat: e.customerLat,
     pickupLng: e.customerLng,
@@ -190,6 +233,8 @@ MockJob mockJobFromEntity(
     customerStartConfirmedAt: e.customerStartConfirmedAt,
     providerStartConfirmedAt: e.providerStartConfirmedAt,
     bookingMode: e.bookingMode,
+    chained: e.chained,
+    nextPickupAddress: e.nextPickupAddress,
   );
 }
 

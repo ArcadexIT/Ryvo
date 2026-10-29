@@ -39,7 +39,6 @@ import {
   Min,
 } from 'class-validator';
 import { DocumentType, OnlineStatus, Prisma } from '@ryvo/database';
-import { providerTravelToPickup } from '../ops/geo';
 
 const PROVIDER_GEO_KEY = 'provider:online';
 
@@ -370,23 +369,27 @@ export class ProviderApiController {
       }),
     ]);
     return successResponse(
-      offers.map((offer) => {
-        const travel = providerTravelToPickup(
-          provider?.currentLat,
-          provider?.currentLng,
-          offer.job.pickupLat,
-          offer.job.pickupLng,
-        );
-        return {
-          ...offer,
-          job: {
-            ...offer.job,
-            providerDistanceKm: travel?.providerDistanceKm ?? null,
-            etaMinutes: travel?.etaMinutes ?? null,
-            distanceKm: travel?.providerDistanceKm ?? offer.job.distanceKm,
-          },
-        };
-      }),
+      await Promise.all(
+        offers.map(async (offer) => {
+          const travel = await this.matching.offerTravel(
+            providerId,
+            offer.job.pickupLat,
+            offer.job.pickupLng,
+            provider?.currentLat,
+            provider?.currentLng,
+          );
+          return {
+            ...offer,
+            job: {
+              ...offer.job,
+              providerDistanceKm: travel?.providerDistanceKm ?? null,
+              etaMinutes: travel?.etaMinutes ?? null,
+              chained: travel?.chained ?? false,
+              distanceKm: travel?.providerDistanceKm ?? offer.job.distanceKm,
+            },
+          };
+        }),
+      ),
     );
   }
 

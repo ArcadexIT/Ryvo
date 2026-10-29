@@ -26,8 +26,9 @@ class JobNotifier extends AsyncNotifier<JobUiState> {
         ref.read(activeJobProvider.notifier).state = null;
         ref.read(providerSocketProvider).setActiveJob(null);
       }
+      final keepOffer = job?.status == JobStatusEntity.inProgress;
       state = AsyncData(JobUiState(
-        incomingJob: job != null ? null : state.value?.incomingJob,
+        incomingJob: keepOffer ? state.value?.incomingJob : (job != null ? null : state.value?.incomingJob),
         activeJob: job,
       ));
     });

@@ -330,7 +330,7 @@ export default function ProvidersPage() {
     <>
       <Header
         title="Drivers"
-        description="Manage drivers, verification, vehicles, and availability"
+        description="Manage drivers, verification, and availability"
       />
 
       <PageContent>

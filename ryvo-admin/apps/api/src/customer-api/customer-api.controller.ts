@@ -15,6 +15,7 @@ import { JwtAuthGuard, RolesGuard } from '../auth/guards';
 import { Roles } from '../auth/roles.decorator';
 import { CancelledBy, UserRole } from '@ryvo/shared';
 import { BiddingService } from '../bidding/bidding.service';
+import { TripShareService } from '../tracking/trip-share.service';
 import { successResponse } from '../common/utils';
 import { PaginationDto } from '../common/dto/pagination.dto';
 import { PrismaService } from '../prisma/prisma.service';
@@ -95,6 +96,7 @@ export class CustomerApiController {
     private jobs: JobsService,
     private matching: MatchingService,
     private bidding: BiddingService,
+    private tripShares: TripShareService,
   ) {}
 
   @Get('profile')
@@ -227,6 +229,22 @@ export class CustomerApiController {
     return successResponse(
       await this.jobs.confirmJobStart(id, 'customer', req.user.customer!.id),
     );
+  }
+
+  @Post('jobs/:id/share')
+  async shareTrip(
+    @Req() req: { user: { customer?: { id: string } } },
+    @Param('id') id: string,
+  ) {
+    return successResponse(await this.tripShares.create(req.user.customer!.id, id));
+  }
+
+  @Delete('jobs/:id/share')
+  async stopSharingTrip(
+    @Req() req: { user: { customer?: { id: string } } },
+    @Param('id') id: string,
+  ) {
+    return successResponse(await this.tripShares.revoke(req.user.customer!.id, id));
   }
 
   @Patch('jobs/:id/cancel')

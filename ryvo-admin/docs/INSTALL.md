@@ -35,6 +35,8 @@ Run the printed `flutter build apk` / `flutter build ipa` commands. Change the A
 
 ## 3. WhatsApp booking
 
+Full step-by-step (sandbox, webhook, Admin toggle, test chat, going live): [WHATSAPP.md](WHATSAPP.md).
+
 1. In Twilio, enable WhatsApp (sandbox is enough to test).
 2. Set `TWILIO_WHATSAPP_FROM` in `apps/api/.env.production`.
 3. Webhook URL: `https://your-domain/api/v1/webhooks/whatsapp` (HTTP POST).

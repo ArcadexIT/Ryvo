@@ -65,7 +65,9 @@ bool isResumableCustomerJob(JobModel? job) {
 String routeForActiveCustomerJob(String status) {
   return switch (status) {
     'searching' => '/searching',
-    'payment_pending' => '/payment',
+    // Checkout is the payment dialog. Home is only a fallback if a caller
+    // still asks for a route while a charge is unfinished.
+    'payment_pending' => '/home',
     'matched' || 'provider_en_route' || 'arrived' => '/live-tracking',
     'in_progress' => '/in-progress',
     'no_provider_found' => '/no-providers',

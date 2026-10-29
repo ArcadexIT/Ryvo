@@ -76,6 +76,8 @@ class JobEntity {
   final String? parcelSize;
   final String? pickupPhotoUrl;
   final String? dropoffPhotoUrl;
+  final bool chained;
+  final String? nextPickupAddress;
 
   const JobEntity({
     required this.id,
@@ -111,5 +113,7 @@ class JobEntity {
     this.parcelSize,
     this.pickupPhotoUrl,
     this.dropoffPhotoUrl,
+    this.chained = false,
+    this.nextPickupAddress,
   });
 }

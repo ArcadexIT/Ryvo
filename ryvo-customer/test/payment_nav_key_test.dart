@@ -2,11 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 
-/// After payment the booking stack is home -> request -> estimate -> payment.
+/// After checkout the booking stack is home -> request -> estimate.
 /// Continuing with pushReplacement onto a shell tab duplicates that tab's
 /// page key. go() replaces the stack and does not.
 void main() {
-  testWidgets('leaving payment with go does not duplicate navigator page keys', (tester) async {
+  testWidgets('leaving checkout with go does not duplicate navigator page keys', (tester) async {
     final router = _router(
       onPay: (context) => context.go('/home'),
     );
@@ -16,8 +16,6 @@ void main() {
     router.push('/service-request');
     await tester.pumpAndSettle();
     router.push('/price-estimate');
-    await tester.pumpAndSettle();
-    router.push('/payment');
     await tester.pumpAndSettle();
 
     await tester.tap(find.text('pay'));
@@ -33,9 +31,8 @@ GoRouter _router({required void Function(BuildContext context) onPay}) {
     initialLocation: '/home',
     routes: [
       GoRoute(path: '/service-request', builder: (_, __) => const Text('request')),
-      GoRoute(path: '/price-estimate', builder: (_, __) => const Text('estimate')),
       GoRoute(
-        path: '/payment',
+        path: '/price-estimate',
         builder: (context, __) => TextButton(
           onPressed: () => onPay(context),
           child: const Text('pay'),

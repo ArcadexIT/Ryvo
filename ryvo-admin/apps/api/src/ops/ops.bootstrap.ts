@@ -126,19 +126,67 @@ export class OpsBootstrap implements OnModuleInit {
         perMinuteRate: 0.4,
         minFare: 9,
       },
+      {
+        name: 'Premium',
+        slug: 'premium',
+        icon: 'diamond',
+        description: 'Top-rated drivers in higher-end cars',
+        sortOrder: 4,
+        baseFare: 7,
+        perKmRate: 2.8,
+        perMinuteRate: 0.5,
+        minFare: 12,
+      },
+      {
+        name: 'Pet',
+        slug: 'pet',
+        icon: 'pets',
+        description: 'Pet-friendly rides, with help for your animal',
+        sortOrder: 5,
+        baseFare: 3.5,
+        perKmRate: 1.5,
+        perMinuteRate: 0.3,
+        minFare: 6,
+      },
+      {
+        name: 'Van',
+        slug: 'van',
+        icon: 'local_shipping',
+        description: 'Vans for groups, luggage, and bulky items',
+        sortOrder: 6,
+        baseFare: 6.5,
+        perKmRate: 2.6,
+        perMinuteRate: 0.45,
+        minFare: 11,
+      },
+      {
+        name: 'Assist',
+        slug: 'assist',
+        icon: 'accessible',
+        description: 'Wheelchair-accessible vehicles',
+        sortOrder: 7,
+        baseFare: 3,
+        perKmRate: 1.4,
+        perMinuteRate: 0.3,
+        minFare: 5.5,
+      },
+      {
+        name: 'Green',
+        slug: 'green',
+        icon: 'electric_car',
+        description: 'Electric and hybrid cars',
+        sortOrder: 8,
+        baseFare: 3,
+        perKmRate: 1.4,
+        perMinuteRate: 0.28,
+        minFare: 5,
+      },
     ];
 
     for (const rideClass of rideClasses) {
       const category = await this.prisma.serviceCategory.upsert({
         where: { slug: rideClass.slug },
-        update: {
-          name: rideClass.name,
-          icon: rideClass.icon,
-          description: rideClass.description,
-          sortOrder: rideClass.sortOrder,
-          businessType: 'taxi',
-          isActive: true,
-        },
+        update: {},
         create: {
           name: rideClass.name,
           slug: rideClass.slug,
@@ -150,25 +198,20 @@ export class OpsBootstrap implements OnModuleInit {
         },
       });
       const ruleId = `${rideClass.slug}-default-pricing`;
-      await this.prisma.servicePricingRule.upsert({
-        where: { id: ruleId },
-        update: {
-          baseFare: rideClass.baseFare,
-          perKmRate: rideClass.perKmRate,
-          perMinuteRate: rideClass.perMinuteRate,
-          minFare: rideClass.minFare,
-          isActive: true,
-        },
-        create: {
-          id: ruleId,
-          serviceCategoryId: category.id,
-          baseFare: rideClass.baseFare,
-          perKmRate: rideClass.perKmRate,
-          perMinuteRate: rideClass.perMinuteRate,
-          minFare: rideClass.minFare,
-          city: 'default',
-        },
-      });
+      const existingRule = await this.prisma.servicePricingRule.findUnique({ where: { id: ruleId } });
+      if (!existingRule) {
+        await this.prisma.servicePricingRule.create({
+          data: {
+            id: ruleId,
+            serviceCategoryId: category.id,
+            baseFare: rideClass.baseFare,
+            perKmRate: rideClass.perKmRate,
+            perMinuteRate: rideClass.perMinuteRate,
+            minFare: rideClass.minFare,
+            city: 'default',
+          },
+        });
+      }
     }
   }
 
@@ -200,14 +243,7 @@ export class OpsBootstrap implements OnModuleInit {
     for (const parcelClass of parcelClasses) {
       const category = await this.prisma.serviceCategory.upsert({
         where: { slug: parcelClass.slug },
-        update: {
-          name: parcelClass.name,
-          icon: parcelClass.icon,
-          description: parcelClass.description,
-          sortOrder: parcelClass.sortOrder,
-          businessType: 'parcel',
-          isActive: true,
-        },
+        update: {},
         create: {
           name: parcelClass.name,
           slug: parcelClass.slug,
@@ -219,25 +255,20 @@ export class OpsBootstrap implements OnModuleInit {
         },
       });
       const ruleId = `${parcelClass.slug}-default-pricing`;
-      await this.prisma.servicePricingRule.upsert({
-        where: { id: ruleId },
-        update: {
-          baseFare: parcelClass.baseFare,
-          perKmRate: parcelClass.perKmRate,
-          perMinuteRate: parcelClass.perMinuteRate,
-          minFare: parcelClass.minFare,
-          isActive: true,
-        },
-        create: {
-          id: ruleId,
-          serviceCategoryId: category.id,
-          baseFare: parcelClass.baseFare,
-          perKmRate: parcelClass.perKmRate,
-          perMinuteRate: parcelClass.perMinuteRate,
-          minFare: parcelClass.minFare,
-          city: 'default',
-        },
-      });
+      const existingRule = await this.prisma.servicePricingRule.findUnique({ where: { id: ruleId } });
+      if (!existingRule) {
+        await this.prisma.servicePricingRule.create({
+          data: {
+            id: ruleId,
+            serviceCategoryId: category.id,
+            baseFare: parcelClass.baseFare,
+            perKmRate: parcelClass.perKmRate,
+            perMinuteRate: parcelClass.perMinuteRate,
+            minFare: parcelClass.minFare,
+            city: 'default',
+          },
+        });
+      }
     }
   }
 

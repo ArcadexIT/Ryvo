@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/job/active_job_session.dart';
+import '../../core/job/resume_customer_job.dart';
 import '../../shared/providers/app_providers.dart';
 
 /// Navigate based on FCM data payload from the Ryvo API.
@@ -29,7 +30,12 @@ Future<void> navigateFromPushMessage(BuildContext context, RemoteMessage message
     case 'job_provider_en_route':
     case 'job_arrived':
     case 'job_in_progress':
-      context.push(routeForActiveCustomerJob(status ?? 'matched'));
+      final job = container.read(jobDraftProvider).activeJob;
+      if (job != null) {
+        await resumeCustomerJob(context, job);
+      } else if (context.mounted) {
+        context.push(routeForActiveCustomerJob(status ?? 'matched'));
+      }
     case 'job_completed':
       if (jobId != null && jobId.isNotEmpty) {
         try {

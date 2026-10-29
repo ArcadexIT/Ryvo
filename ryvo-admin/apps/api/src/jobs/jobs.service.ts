@@ -106,7 +106,7 @@ export class JobsService {
       },
     });
     if (!job) throw new NotFoundException('Job not found');
-    return job;
+    return this.withPickupEta(job);
   }
 
   async findByCustomer(customerId: string, dto: PaginationDto) {
@@ -148,7 +148,7 @@ export class JobsService {
       (job.payment?.status === 'held' || job.payment?.status === 'paid')
     ) {
       await this.payments.advanceJobAfterHold(job.id);
-      return this.prisma.job.findFirst({
+      const refreshed = await this.prisma.job.findFirst({
         where: {
           id: job.id,
           status: { in: activeStatuses },
@@ -166,9 +166,21 @@ export class JobsService {
           payment: true,
         },
       });
+      return refreshed ? this.withPickupEta(refreshed) : refreshed;
     }
 
-    return job;
+    return job ? this.withPickupEta(job) : job;
+  }
+
+  private async withPickupEta<T extends {
+    id: string;
+    providerId: string | null;
+    pickupLat: unknown;
+    pickupLng: unknown;
+  }>(job: T) {
+    const pickupEtaMinutes = await this.matching.pickupEtaMinutesForJob(job);
+    if (pickupEtaMinutes == null) return job;
+    return { ...job, pickupEtaMinutes };
   }
 
   async updateStatus(
@@ -360,11 +372,8 @@ export class JobsService {
     });
 
     if (job.providerId) {
-      await this.prisma.provider
-        .update({
-          where: { id: job.providerId },
-          data: { onlineStatus: 'online' },
-        })
+      await this.matching
+        .reconcileProviderAfterJobClosed(job.providerId, jobId, 'cancel')
         .catch(() => undefined);
     }
 
@@ -430,12 +439,12 @@ export class JobsService {
           note: reason ?? 'Driver cancelled. Looking for another driver.',
         },
       });
-      await tx.provider.update({
-        where: { id: providerId },
-        data: { onlineStatus: 'online' },
-      });
       return result;
     });
+
+    await this.matching
+      .reconcileProviderAfterJobClosed(providerId, job.id, 'cancel')
+      .catch(() => undefined);
 
     this.realtime.emitToJob(job.id, 'job:status', {
       jobId: job.id,

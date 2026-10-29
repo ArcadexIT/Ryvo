@@ -2,8 +2,11 @@ import 'dart:async';
 
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:google_maps_flutter_android/google_maps_flutter_android.dart';
+import 'package:google_maps_flutter_platform_interface/google_maps_flutter_platform_interface.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:ryvo_customer/l10n/app_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -28,6 +31,15 @@ Future<void> main() async {
     FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
   } catch (e) {
     debugPrint('Firebase init skipped: $e');
+  }
+
+  // Virtual-display maps crash when Android resizes a map whose surface is
+  // already gone (keyboard dismiss while leaving the location picker).
+  if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
+    final maps = GoogleMapsFlutterPlatform.instance;
+    if (maps is GoogleMapsFlutterAndroid) {
+      maps.useAndroidViewSurface = true;
+    }
   }
 
   SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);

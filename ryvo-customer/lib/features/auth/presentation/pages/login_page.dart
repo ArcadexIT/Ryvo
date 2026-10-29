@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../../core/job/active_job_session.dart';
+import '../../../../core/job/resume_customer_job.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../data/models/models.dart';
 import '../../../../core/utils/phone_utils.dart';
@@ -129,6 +130,11 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                             final resumeRoute =
                                 await restoreActiveJobSession(container);
                             if (!mounted) return;
+                            final job = container.read(jobDraftProvider).activeJob;
+                            if (job != null && effectiveCustomerJobStatus(job) == 'payment_pending') {
+                              await resumeCustomerJob(context, job, replace: true);
+                              return;
+                            }
                             context.go(resumeRoute ?? '/home');
                           } catch (e) {
                             if (!mounted) return;

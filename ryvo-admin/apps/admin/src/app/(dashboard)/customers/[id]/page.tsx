@@ -40,7 +40,6 @@ interface CustomerDetail {
     status: string;
     wallet?: { balance: number; currency: string };
   };
-  vehicles?: { id: string; make: string; model: string; plateNumber: string }[];
   jobs?: CustomerJob[];
 }
 
@@ -219,27 +218,6 @@ export default function CustomerDetailPage() {
                     </div>
                   </CardContent>
                 </Card>
-
-                {data.vehicles && data.vehicles.length > 0 && (
-                  <Card className="lg:col-span-2">
-                    <CardHeader>
-                      <CardTitle>Vehicles</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <ul className="space-y-2 text-sm">
-                        {data.vehicles.map((v) => (
-                          <li
-                            key={v.id}
-                            className="flex justify-between rounded-lg bg-surface px-3 py-2.5"
-                          >
-                            <span className="text-primary">{v.make} {v.model}</span>
-                            <span className="font-mono text-[13px] text-muted">{v.plateNumber}</span>
-                          </li>
-                        ))}
-                      </ul>
-                    </CardContent>
-                  </Card>
-                )}
               </div>
             )}
 

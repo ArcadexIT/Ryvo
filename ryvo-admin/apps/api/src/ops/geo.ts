@@ -15,6 +15,15 @@ export function etaMinutesFromKm(km: number): number {
   return Math.max(1, Math.round((km / 40) * 60));
 }
 
+/** Minutes until a driver who is still on a trip can be offered the next one. */
+export const CHAIN_MAX_REMAINING_MIN = 5;
+
+/** Next pickup must sit this close to the current dropoff. */
+export const CHAIN_PICKUP_RADIUS_KM = 2;
+
+/** Drop a queued trip once the current dropoff is this far from the next pickup, or this late. */
+export const CHAIN_STALE_REMAINING_MIN = 15;
+
 /** Provider-to-pickup distance for an incoming job offer. */
 export function providerTravelToPickup(
   providerLat: unknown,

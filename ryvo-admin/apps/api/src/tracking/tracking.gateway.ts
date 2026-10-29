@@ -13,6 +13,7 @@ import { ConfigService } from '@nestjs/config';
 import { Server, Socket } from 'socket.io';
 import { TrackingService } from './tracking.service';
 import { RealtimeService } from './realtime.service';
+import { TripShareService } from './trip-share.service';
 import { PrismaService } from '../prisma/prisma.service';
 
 interface SocketData {
@@ -34,6 +35,7 @@ export class TrackingGateway implements OnGatewayConnection, OnGatewayInit {
     private jwt: JwtService,
     private config: ConfigService,
     private prisma: PrismaService,
+    private shares: TripShareService,
   ) {}
 
   afterInit(server: Server) {
@@ -117,7 +119,7 @@ export class TrackingGateway implements OnGatewayConnection, OnGatewayInit {
     );
 
     if (payload.jobId) {
-      this.server.to(`job:${payload.jobId}`).emit('job:location', result);
+      this.realtime.emitToJob(payload.jobId, 'job:location', result);
     }
     this.server.to('admin:live-map').emit('provider:location', result);
 
@@ -145,6 +147,25 @@ export class TrackingGateway implements OnGatewayConnection, OnGatewayInit {
       });
     }
     return { success: true, room: `job:${payload.jobId}` };
+  }
+
+  @SubscribeMessage('share:subscribe')
+  async handleShareSubscribe(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() payload: { token?: string },
+  ) {
+    const token = typeof payload?.token === 'string' ? payload.token : '';
+    const result = token ? await this.shares.resolveSubscribe(token) : { ok: false as const };
+    if (!result.ok) {
+      client.emit('job:status', { status: 'ended', ended: true });
+      return { success: false };
+    }
+    void client.join(`share:${result.shareId}`);
+    client.emit('job:status', { status: result.status, ended: false });
+    if (result.lat != null && result.lng != null) {
+      client.emit('job:location', { lat: result.lat, lng: result.lng });
+    }
+    return { success: true };
   }
 
   @SubscribeMessage('job:unsubscribe')

@@ -16,7 +16,6 @@ import '../../features/home/presentation/pages/shell_page.dart';
 import '../../features/notifications/presentation/pages/notifications_page.dart';
 import '../../features/onboarding/presentation/pages/onboarding_page.dart';
 import '../../features/onboarding/presentation/pages/splash_page.dart';
-import '../../features/payment/presentation/pages/payment_selector_page.dart';
 import '../../features/payment/presentation/pages/payment_success_page.dart';
 import '../../features/profile/presentation/pages/profile_page.dart';
 import '../../features/service_request/presentation/pages/price_estimate_page.dart';
@@ -118,7 +117,6 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(path: '/live-tracking', builder: (_, __) => ThemeSync(builder: (_) => LiveTrackingPage())),
       GoRoute(path: '/no-providers', builder: (_, __) => ThemeSync(builder: (_) => const NoProvidersPage())),
       GoRoute(path: '/in-progress', builder: (_, __) => ThemeSync(builder: (_) => InProgressPage())),
-      GoRoute(path: '/payment', builder: (_, __) => ThemeSync(builder: (_) => PaymentSelectorPage())),
       GoRoute(
         path: '/payment-success',
         builder: (_, __) => ThemeSync(builder: (_) => PaymentSuccessPage()),

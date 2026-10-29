@@ -210,6 +210,11 @@ export const RIDE_CLASS_SLUGS = {
   RYVO_GO: 'ryvo-go',
   COMFORT: 'comfort',
   XL: 'xl',
+  PREMIUM: 'premium',
+  PET: 'pet',
+  VAN: 'van',
+  ASSIST: 'assist',
+  GREEN: 'green',
 } as const;
 
 export const PARCEL_CLASS_SLUGS = {

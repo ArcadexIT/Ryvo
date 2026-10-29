@@ -78,6 +78,7 @@ class MapMarkers {
   static Future<MapMarkerAsset> buildCustomerJobMarker(
     String distanceLabel, {
     double markerScale = 1.0,
+    Color pinColor = const Color(0xFFEF4444),
   }) async {
     final s = (markerScale * 0.7).clamp(0.55, 0.85);
     final fontSize = (9.5 * s).clamp(8.0, 11.0);
@@ -85,7 +86,7 @@ class MapMarkers {
     final labelTp = TextPainter(
       text: TextSpan(
         text: distanceLabel,
-        style: TextStyle(color: const Color(0xFFEF4444), fontSize: fontSize, fontWeight: FontWeight.w700),
+        style: TextStyle(color: pinColor, fontSize: fontSize, fontWeight: FontWeight.w700),
       ),
       textDirection: TextDirection.ltr,
     )..layout();
@@ -120,7 +121,7 @@ class MapMarkers {
 
     final pinTop = 1 * s + pillH + caretH;
     final pinCy = pinTop + 10 * s;
-    paint.color = const Color(0xFFEF4444);
+    paint.color = pinColor;
     canvas.drawCircle(Offset(cx, pinCy), 9 * s, paint);
     paint.color = Colors.white;
     canvas.drawCircle(Offset(cx, pinCy), 3.5 * s, paint);
@@ -130,7 +131,7 @@ class MapMarkers {
       ..lineTo(cx - 6 * s, pinCy + 3 * s)
       ..lineTo(cx + 6 * s, pinCy + 3 * s)
       ..close();
-    paint.color = const Color(0xFFEF4444);
+    paint.color = pinColor;
     canvas.drawPath(pinPath, paint);
 
     final pinTipY = pinCy + 11 * s;

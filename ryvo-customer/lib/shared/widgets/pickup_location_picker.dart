@@ -17,7 +17,7 @@ Future<bool> showPickupLocationPicker({
   bool autofocusSearch = false,
   bool forDropoff = false,
 }) async {
-  final result = await Navigator.of(context).push<bool>(
+  final result = await Navigator.of(context, rootNavigator: true).push<bool>(
     PageRouteBuilder<bool>(
       fullscreenDialog: true,
       transitionDuration: const Duration(milliseconds: 180),
@@ -75,6 +75,7 @@ class _PickupLocationPickerState extends ConsumerState<PickupLocationPicker> {
   int _resolveToken = 0;
   int _suggestToken = 0;
   LatLng? _mapCenter;
+  double _keyboardOverlap = 0;
   Timer? _suggestTimer;
   String _sessionToken = newPlacesSessionToken();
   List<UkAddressSuggestion> _suggestions = const [];
@@ -93,6 +94,10 @@ class _PickupLocationPickerState extends ConsumerState<PickupLocationPicker> {
       _addressText.value = widget.forDropoff ? '' : draft.pickupAddress;
       _regionText.value = widget.forDropoff ? null : draft.pickupRegion;
     }
+    if (_addressText.value.trim().isEmpty) {
+      _locatingPin.value = true;
+      Future.microtask(_resolveInitialPin);
+    }
     _mapLayer = _StableLocationMap(
       initialTarget: LatLng(_lat, _lng),
       mapStyle: _mapStyle,
@@ -104,6 +109,54 @@ class _PickupLocationPickerState extends ConsumerState<PickupLocationPicker> {
       },
       onIdle: _onCameraIdle,
     );
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _syncKeyboardOverlap();
+  }
+
+  /// This page can sit above the tab bar, so the raw keyboard inset lifts the
+  /// sheet too far and leaves a strip of map between the sheet and the keyboard.
+  void _syncKeyboardOverlap() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final media = MediaQuery.of(context);
+      final keyboard = media.viewInsets.bottom;
+      var overlap = keyboard;
+      final box = context.findRenderObject() as RenderBox?;
+      if (box != null && box.hasSize && box.attached) {
+        final pageBottom = box.localToGlobal(Offset(0, box.size.height)).dy;
+        final gapBelowPage = media.size.height - pageBottom;
+        overlap = keyboard - gapBelowPage;
+        if (overlap < 0) overlap = 0;
+      }
+      if ((overlap - _keyboardOverlap).abs() > 0.5) {
+        setState(() => _keyboardOverlap = overlap);
+      }
+    });
+  }
+
+  Future<void> _resolveInitialPin() async {
+    final token = ++_resolveToken;
+    _locatingPin.value = true;
+    _errorText.value = null;
+    try {
+      final resolved = await ref.read(locationServiceProvider).reverseGeocode(_lat, _lng);
+      if (!mounted || token != _resolveToken) return;
+      _addressText.value = resolved.address ??
+          resolved.shortAddress ??
+          '${_lat.toStringAsFixed(5)}, ${_lng.toStringAsFixed(5)}';
+      _regionText.value = resolved.region;
+    } catch (_) {
+      if (!mounted || token != _resolveToken) return;
+      if (_addressText.value.trim().isEmpty) {
+        _addressText.value = '${_lat.toStringAsFixed(5)}, ${_lng.toStringAsFixed(5)}';
+      }
+    } finally {
+      if (mounted && token == _resolveToken) _locatingPin.value = false;
+    }
   }
 
   @override
@@ -330,7 +383,6 @@ class _PickupLocationPickerState extends ConsumerState<PickupLocationPicker> {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
-    final bottomInset = MediaQuery.viewInsetsOf(context).bottom;
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -504,7 +556,7 @@ class _PickupLocationPickerState extends ConsumerState<PickupLocationPicker> {
           ),
           Positioned(
             right: 16,
-            bottom: 220 + bottomInset,
+            bottom: 220 + _keyboardOverlap,
             child: ValueListenableBuilder<bool>(
               valueListenable: _locatingPin,
               builder: (_, locating, __) {
@@ -523,7 +575,8 @@ class _PickupLocationPickerState extends ConsumerState<PickupLocationPicker> {
             bottom: 0,
             child: AnimatedPadding(
               duration: const Duration(milliseconds: 120),
-              padding: EdgeInsets.only(bottom: bottomInset),
+              curve: Curves.easeOut,
+              padding: EdgeInsets.only(bottom: _keyboardOverlap),
               child: _LocationConfirmCard(
                 address: _addressText,
                 region: _regionText,
@@ -617,7 +670,9 @@ class _LocationConfirmCard extends StatelessWidget {
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     Text(
-                                      isLocating ? l10n.resolvingAddress : addressText,
+                                      isLocating
+                                          ? l10n.resolvingAddress
+                                          : (addressText.trim().isEmpty ? l10n.searchUkAddress : addressText),
                                       maxLines: 2,
                                       overflow: TextOverflow.ellipsis,
                                       style: GoogleFonts.poppins(
