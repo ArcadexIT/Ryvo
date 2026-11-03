@@ -8,6 +8,7 @@ import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../data/models/app_config.dart';
 import '../../../../shared/providers/app_providers.dart';
+import '../../../payment/presentation/customer_checkout.dart';
 import '../widgets/ryvo_modal_scaffold.dart';
 
 class PaymentMethodsPage extends ConsumerWidget {
@@ -20,9 +21,11 @@ class PaymentMethodsPage extends ConsumerWidget {
         ref.watch(appConfigProvider).valueOrNull ?? AppConfig.fallback;
     final selected = ref.watch(jobDraftProvider).paymentMethod;
     final methods = <String>[
-      if (config.walletPaymentEnabled) 'wallet',
+      if (checkoutShowsApplePay(config)) 'apple_pay',
+      if (checkoutShowsGooglePay(config)) 'google_pay',
       if (config.paymentMethods.stripe) 'stripe',
       if (config.paymentMethods.cash) 'cash',
+      if (config.walletPaymentEnabled) 'wallet',
     ];
 
     return RyvoModalScaffold(
@@ -61,6 +64,8 @@ String _label(String method, AppLocalizations l10n) {
   return switch (method) {
     'wallet' => l10n.wallet,
     'cash' => l10n.cash,
+    'google_pay' => l10n.googlePay,
+    'apple_pay' => l10n.applePay,
     _ => l10n.card,
   };
 }
