@@ -1,6 +1,5 @@
 import 'dart:async';
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_stripe/flutter_stripe.dart';
@@ -106,7 +105,6 @@ final countriesProvider = FutureProvider<List<Country>>((ref) async {
 final isAuthenticatedProvider = StateProvider<bool>((ref) => false);
 
 final bottomNavIndexProvider = StateProvider<int>((ref) => 0);
-final selectedServiceProvider = StateProvider<String>((ref) => '');
 final bookNowProvider = StateProvider<bool>((ref) => true);
 final themeModeProvider = StateProvider<ThemeMode>((ref) => ThemeMode.light);
 
@@ -288,6 +286,10 @@ class JobRequestDraft {
 
 final jobDraftProvider =
     StateProvider<JobRequestDraft>((ref) => JobRequestDraft());
+
+/// Stripe payment method saved from Profile or the payment sheet this session.
+/// Checkout charges this card when the rider pays by card.
+final savedStripeCardIdProvider = StateProvider<String?>((ref) => null);
 
 /// True only while this session is inserting a job and taking payment.
 /// A home refresh must not cancel that job out from under the payment sheet.

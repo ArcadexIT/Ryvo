@@ -178,11 +178,6 @@ void applyActiveJobSession(ProviderContainer container, JobModel job) {
         : current.estimate,
   );
 
-  if (job.serviceCategory?.name != null) {
-    container.read(selectedServiceProvider.notifier).state =
-        job.serviceCategory!.name;
-  }
-
   container.read(trackingSocketProvider).connect().then((_) {
     container.read(trackingSocketProvider).subscribeJob(job.id);
   }).catchError((_) {});

@@ -98,13 +98,13 @@ class _PaymentSuccessPageState extends ConsumerState<PaymentSuccessPage> with Si
                               width: 120,
                               height: 120,
                               decoration: BoxDecoration(
-                                color: AppColors.success.withOpacity(0.15),
+                                color: AppColors.success.withValues(alpha: 0.15),
                                 shape: BoxShape.circle,
                               ),
                               child: Container(
                                 margin: const EdgeInsets.all(16),
                                 decoration: BoxDecoration(
-                                  color: AppColors.success.withOpacity(0.2),
+                                  color: AppColors.success.withValues(alpha: 0.2),
                                   shape: BoxShape.circle,
                                 ),
                                 child: const Icon(Icons.check_circle, color: AppColors.success, size: 56),

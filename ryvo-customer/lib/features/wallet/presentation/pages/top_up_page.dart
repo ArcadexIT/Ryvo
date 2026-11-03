@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../data/models/models.dart';
@@ -43,7 +42,7 @@ class _TopUpPageState extends ConsumerState<TopUpPage> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Added ${formatMoney(_amount.toDouble())} to wallet')),
       );
-      context.pop();
+      Navigator.of(context).pop();
     } catch (e) {
       if (mounted) showApiError(context, e);
     } finally {
@@ -61,7 +60,7 @@ class _TopUpPageState extends ConsumerState<TopUpPage> {
         backgroundColor: AppColors.background,
         title: Text(AppLocalizations.of(context).topUpWallet, style: GoogleFonts.poppins(fontSize: 18, fontWeight: FontWeight.w600)),
         leading: IconButton(
-          onPressed: () => context.pop(),
+          onPressed: () => Navigator.of(context).pop(),
           icon: const Icon(Icons.arrow_back_ios_new, size: 20),
         ),
       ),
@@ -102,7 +101,7 @@ class _TopUpPageState extends ConsumerState<TopUpPage> {
                       margin: EdgeInsets.only(right: amount != _presets.last ? 10 : 0),
                       padding: const EdgeInsets.symmetric(vertical: 16),
                       decoration: BoxDecoration(
-                        color: _selectedAmount == amount ? AppColors.primary.withOpacity(0.15) : AppColors.surface,
+                        color: _selectedAmount == amount ? AppColors.primary.withValues(alpha: 0.15) : AppColors.surface,
                         borderRadius: BorderRadius.circular(12),
                         border: Border.all(
                           color: _selectedAmount == amount ? AppColors.primary : AppColors.divider,

@@ -91,7 +91,7 @@ class _CreateSupportTicketPageState extends ConsumerState<CreateSupportTicketPag
               Text(AppLocalizations.of(context).category, style: GoogleFonts.poppins(fontSize: 13, fontWeight: FontWeight.w500, color: AppColors.textSecondary)),
               const SizedBox(height: 8),
               DropdownButtonFormField<String>(
-                value: _category,
+                initialValue: _category,
                 dropdownColor: AppColors.modal,
                 style: GoogleFonts.poppins(color: AppColors.textPrimary),
                 decoration: InputDecoration(

@@ -148,7 +148,7 @@ class _ShareTripButtonState extends ConsumerState<ShareTripButton> {
         width: 38,
         height: 38,
         decoration: BoxDecoration(
-          color: AppColors.primary.withOpacity(0.15),
+          color: AppColors.primary.withValues(alpha: 0.15),
           shape: BoxShape.circle,
         ),
         child: Icon(

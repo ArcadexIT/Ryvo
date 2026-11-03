@@ -3,9 +3,14 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 
-/// Scale factor: render bitmaps at 2× logical size — medium size on
-/// high-DPI (2×/3×) Android/iOS screens.
+import '../../../../core/theme/app_colors.dart';
+
+/// Scale factor for the provider marker: rendered at 2× and shown at the
+/// device pixel ratio, which keeps it a medium size on 2×/3× screens.
 const double _kScale = 2.0;
+
+/// Which route stop a [MapMarkers.buildStopLabel] marker represents.
+enum MapStopKind { pickup, dropoff }
 
 class MapMarkers {
   // ─── Provider marker ─────────────────────────────────────────────────────
@@ -26,7 +31,7 @@ class MapMarkers {
     canvas.scale(_kScale);
 
     final paint = Paint();
-    final cx = lw / 2;
+    const cx = lw / 2;
 
     // ── Pill drop shadow ────────────────────────────────────────────
     paint
@@ -34,7 +39,7 @@ class MapMarkers {
       ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 8);
     canvas.drawRRect(
       RRect.fromRectAndRadius(
-        Rect.fromLTWH(10, 4, lw - 20, pillH),
+        const Rect.fromLTWH(10, 4, lw - 20, pillH),
         const Radius.circular(pillH / 2),
       ),
       paint,
@@ -47,7 +52,7 @@ class MapMarkers {
       ..style = PaintingStyle.fill;
     canvas.drawRRect(
       RRect.fromRectAndRadius(
-        Rect.fromLTWH(8, 2, lw - 16, pillH),
+        const Rect.fromLTWH(8, 2, lw - 16, pillH),
         const Radius.circular(pillH / 2),
       ),
       paint,
@@ -111,21 +116,21 @@ class MapMarkers {
     distTp.paint(canvas, Offset(startX + etaTp.width + dotTp.width, textY + 1));
 
     // ── Amber glow behind car emoji ─────────────────────────────────
-    final glowTop = 2 + pillH + caretH;
-    final carCenterY = glowTop + carAreaH / 2;
+    const glowTop = 2 + pillH + caretH;
+    const carCenterY = glowTop + carAreaH / 2;
     paint
       ..color = const Color(0x44F59E0B)
       ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 14);
-    canvas.drawCircle(Offset(cx, carCenterY + 4), glowR, paint);
+    canvas.drawCircle(const Offset(cx, carCenterY + 4), glowR, paint);
     paint.maskFilter = null;
 
     // Subtle amber circle (solid, lighter)
     paint.color = const Color(0x1AF59E0B);
-    canvas.drawCircle(Offset(cx, carCenterY + 4), glowR - 6, paint);
+    canvas.drawCircle(const Offset(cx, carCenterY + 4), glowR - 6, paint);
 
     // ── Car emoji ───────────────────────────────────────────────────
     final carTp = TextPainter(
-      text: TextSpan(
+      text: const TextSpan(
         text: '🚗',
         style: TextStyle(fontSize: carLogical),
       ),
@@ -136,76 +141,154 @@ class MapMarkers {
       Offset(cx - carTp.width / 2, glowTop + (carAreaH - carTp.height) / 2),
     );
 
-    return _toDescriptor(recorder, lw, lh);
+    return _toDescriptor(recorder, lw, lh, _kScale, _devicePixelRatio);
   }
 
-  /// Pill label that sits on a route stop, with the pin at the bottom center.
-  static Future<BitmapDescriptor> buildStopLabel({
-    required String title,
-    required String subtitle,
-    required Color color,
+  // ─── Stop nodes (pure geometry, no street names) ──────────────────────────
+  //
+  // Pickup: round bullseye. Dropoff: square bullseye, optionally topped by a
+  // numeric ETA chip ("12 min"). The image is always symmetric around the
+  // node, so [stopAnchor] is the exact centre and the node sits dead-centre on
+  // the route's start or end vertex.
+  static const double _nodeSize = 32;
+  static const double _haloR = 14;
+  static const double _ringR = 9.5;
+  static const double _chipH = 20;
+  static const double _chipGap = 4;
+
+  /// Anchor for [buildStopNode]: the node centre is the image centre.
+  static const Offset stopAnchor = Offset(0.5, 0.5);
+
+  static final Map<String, BitmapDescriptor> _stopCache = {};
+
+  static double get _devicePixelRatio {
+    final views = ui.PlatformDispatcher.instance.views;
+    return views.isEmpty ? 3.0 : views.first.devicePixelRatio;
+  }
+
+  /// A geometric stop marker. [badge] is a short numeric label such as
+  /// "12 min" and only applies to the dropoff; it is never an address.
+  /// Results are cached per (kind, badge, ratio).
+  static Future<BitmapDescriptor> buildStopNode({
+    required MapStopKind kind,
+    String? badge,
+    double? devicePixelRatio,
   }) async {
-    const double lw = 148;
-    const double lh = 78;
+    final ratio = devicePixelRatio ?? _devicePixelRatio;
+    final isPickup = kind == MapStopKind.pickup;
+    final label = isPickup || (badge ?? '').isEmpty ? null : badge;
+    final key = '${kind.name}|${label ?? ''}|$ratio';
+    final cached = _stopCache[key];
+    if (cached != null) return cached;
+
+    TextPainter? badgePainter;
+    var chipW = 0.0;
+    if (label != null) {
+      badgePainter = TextPainter(
+        text: TextSpan(
+          text: label,
+          style: const TextStyle(
+            color: AppColors.white,
+            fontSize: 11,
+            height: 1.1,
+            fontWeight: FontWeight.w700,
+            letterSpacing: -0.1,
+            fontFeatures: [FontFeature.tabularFigures()],
+          ),
+        ),
+        maxLines: 1,
+        textDirection: TextDirection.ltr,
+      )..layout();
+      chipW = badgePainter.width + 16;
+    }
+
+    // Symmetric canvas: the chip's height is mirrored below the node so the
+    // node centre is the image centre.
+    final reserve = label == null ? 0.0 : _chipH + _chipGap;
+    final width = math.max(_nodeSize, chipW).ceilToDouble();
+    final height = _nodeSize + reserve * 2;
+    final center = Offset(width / 2, height / 2);
+
     final recorder = ui.PictureRecorder();
     final canvas = Canvas(recorder);
-    canvas.scale(_kScale);
+    canvas.scale(ratio);
+    final paint = Paint()..isAntiAlias = true;
 
-    final titlePainter = TextPainter(
-      text: TextSpan(
-        text: title,
-        style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w700),
-      ),
-      textDirection: TextDirection.ltr,
-    )..layout(maxWidth: lw - 24);
-    final subtitlePainter = TextPainter(
-      text: TextSpan(
-        text: subtitle,
-        style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600),
-      ),
-      textDirection: TextDirection.ltr,
-    )..layout(maxWidth: lw - 24);
+    if (badgePainter != null) {
+      final chipLeft = (width - chipW) / 2;
+      paint.color = AppColors.primaryDark;
+      canvas.drawRRect(
+        RRect.fromRectAndRadius(
+          Rect.fromLTWH(chipLeft, 0, chipW, _chipH),
+          const Radius.circular(_chipH / 2),
+        ),
+        paint,
+      );
+      badgePainter.paint(
+        canvas,
+        Offset(chipLeft + 8, (_chipH - badgePainter.height) / 2),
+      );
+    }
 
-    final textWidth = math.max(titlePainter.width, subtitlePainter.width);
-    final pillWidth = textWidth + 28;
-    final pillLeft = (lw - pillWidth) / 2;
-    const pillTop = 4.0;
-    const pillHeight = 46.0;
-    final paint = Paint()..color = color;
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(
-        Rect.fromLTWH(pillLeft, pillTop, pillWidth, pillHeight),
-        const Radius.circular(12),
-      ),
-      paint,
+    RRect square(double half, double radius) => RRect.fromRectAndRadius(
+          Rect.fromCenter(center: center, width: half * 2, height: half * 2),
+          Radius.circular(radius),
+        );
+
+    if (isPickup) {
+      paint.color = AppColors.primary.withValues(alpha: 0.22);
+      canvas.drawCircle(center, _haloR, paint);
+      paint.color = AppColors.white;
+      canvas.drawCircle(center, _ringR + 1.5, paint);
+      paint.color = AppColors.obsidian;
+      canvas.drawCircle(center, _ringR, paint);
+      paint.color = AppColors.white;
+      canvas.drawCircle(center, 3.6, paint);
+    } else {
+      paint.color = AppColors.obsidian.withValues(alpha: 0.14);
+      canvas.drawRRect(square(_haloR, 4), paint);
+      paint.color = AppColors.white;
+      canvas.drawRRect(square(_ringR + 1.5, 3), paint);
+      paint.color = AppColors.obsidian;
+      canvas.drawRRect(square(_ringR, 2), paint);
+      paint.color = AppColors.white;
+      canvas.drawRRect(square(3.4, 0.8), paint);
+    }
+
+    final descriptor = await _toDescriptor(
+      recorder,
+      width,
+      height,
+      ratio,
+      ratio,
     );
-    final caret = Path()
-      ..moveTo(lw / 2 - 7, pillTop + pillHeight)
-      ..lineTo(lw / 2 + 7, pillTop + pillHeight)
-      ..lineTo(lw / 2, pillTop + pillHeight + 8)
-      ..close();
-    canvas.drawPath(caret, paint);
-    titlePainter.paint(canvas, Offset((lw - titlePainter.width) / 2, 10));
-    subtitlePainter.paint(canvas, Offset((lw - subtitlePainter.width) / 2, 28));
-    canvas.drawCircle(const Offset(lw / 2, 70), 5, Paint()..color = color);
-    canvas.drawCircle(const Offset(lw / 2, 70), 2.5, Paint()..color = Colors.white);
-
-    return _toDescriptor(recorder, lw, lh);
+    if (_stopCache.length >= 24) _stopCache.remove(_stopCache.keys.first);
+    _stopCache[key] = descriptor;
+    return descriptor;
   }
 
   // ─── Shared helper ────────────────────────────────────────────────────────
-  // Canvas is pre-scaled by _kScale, so the image dimensions are lw×lh × _kScale.
-  // google_maps_flutter renders BitmapDescriptor.fromBytes at the image's raw
-  // pixel size divided by the device's screen density, giving the correct
-  // logical size on both 2× and 3× screens.
+  // The canvas is pre-scaled by [renderScale], so the image is
+  // lw×lh × renderScale pixels. [imagePixelRatio] tells the map how many of
+  // those pixels make up one logical pixel, which fixes the on-screen size on
+  // every density.
   static Future<BitmapDescriptor> _toDescriptor(
-      ui.PictureRecorder recorder, double lw, double lh) async {
+    ui.PictureRecorder recorder,
+    double lw,
+    double lh,
+    double renderScale,
+    double imagePixelRatio,
+  ) async {
     final picture = recorder.endRecording();
     final image = await picture.toImage(
-      (lw * _kScale).toInt(),
-      (lh * _kScale).toInt(),
+      (lw * renderScale).ceil(),
+      (lh * renderScale).ceil(),
     );
     final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
-    return BitmapDescriptor.fromBytes(bytes!.buffer.asUint8List());
+    image.dispose();
+    return BitmapDescriptor.bytes(
+      bytes!.buffer.asUint8List(),
+      imagePixelRatio: imagePixelRatio,
+    );
   }
 }

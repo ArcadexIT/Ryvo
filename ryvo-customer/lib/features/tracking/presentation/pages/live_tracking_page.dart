@@ -218,16 +218,18 @@ class _LiveTrackingPageState extends ConsumerState<LiveTrackingPage> {
           );
   }
 
+  /// Added only after the bitmaps are ready, so no stock pin ever shows.
   void _publishStaticMarkers() {
+    final icons = _markers;
     ref.read(tripMarkersProvider(TripMapScope.live).notifier).state = {
-      Marker(
-        markerId: const MarkerId('pickup'),
-        position: _userPos,
-        anchor: TripMarkers.pickupAnchor,
-        zIndexInt: 1,
-        icon: _markers?.pickup ??
-            BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueGreen),
-      ),
+      if (icons != null)
+        Marker(
+          markerId: const MarkerId('pickup'),
+          position: _userPos,
+          anchor: TripMarkers.pickupAnchor,
+          zIndexInt: 1,
+          icon: icons.pickup,
+        ),
     };
   }
 
@@ -344,11 +346,11 @@ class _LiveTrackingPageState extends ConsumerState<LiveTrackingPage> {
                       width: 44,
                       height: 44,
                       decoration: BoxDecoration(
-                        color: AppColors.surface.withOpacity(0.95),
+                        color: AppColors.surface.withValues(alpha: 0.95),
                         shape: BoxShape.circle,
                         boxShadow: [
                           BoxShadow(
-                              color: Colors.black.withOpacity(0.3),
+                              color: Colors.black.withValues(alpha: 0.3),
                               blurRadius: 12)
                         ],
                       ),
@@ -365,7 +367,7 @@ class _LiveTrackingPageState extends ConsumerState<LiveTrackingPage> {
                       borderRadius: BorderRadius.circular(50),
                       boxShadow: [
                         BoxShadow(
-                            color: AppColors.primary.withOpacity(0.4),
+                            color: AppColors.primary.withValues(alpha: 0.4),
                             blurRadius: 12)
                       ],
                     ),
@@ -407,11 +409,11 @@ class _LiveTrackingPageState extends ConsumerState<LiveTrackingPage> {
                 width: 44,
                 height: 44,
                 decoration: BoxDecoration(
-                  color: AppColors.surface.withOpacity(0.95),
+                  color: AppColors.surface.withValues(alpha: 0.95),
                   shape: BoxShape.circle,
                   boxShadow: [
                     BoxShadow(
-                        color: Colors.black.withOpacity(0.3), blurRadius: 12)
+                        color: Colors.black.withValues(alpha: 0.3), blurRadius: 12)
                   ],
                 ),
                 child: Icon(Icons.center_focus_strong,

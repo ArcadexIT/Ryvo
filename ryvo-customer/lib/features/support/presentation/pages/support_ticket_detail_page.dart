@@ -170,9 +170,9 @@ class _MessageBubble extends StatelessWidget {
         constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.78),
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: isAdmin ? AppColors.surface : AppColors.primary.withOpacity(0.12),
+          color: isAdmin ? AppColors.surface : AppColors.primary.withValues(alpha: 0.12),
           borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: isAdmin ? AppColors.divider : AppColors.primary.withOpacity(0.25)),
+          border: Border.all(color: isAdmin ? AppColors.divider : AppColors.primary.withValues(alpha: 0.25)),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,

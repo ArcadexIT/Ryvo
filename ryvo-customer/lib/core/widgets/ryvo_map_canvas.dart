@@ -1,11 +1,13 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 
-import '../utils/map_style_utils.dart';
+import '../location/route_flow.dart';
 import 'ryvo_live_location_pulse.dart';
+import 'ryvo_route_flow_layer.dart';
 
 /// A driver pin the map eases toward. Location ticks update this target;
 /// the canvas interpolates position and bearing so the page does not rebuild.
@@ -73,9 +75,11 @@ class RyvoMapCanvas extends ConsumerStatefulWidget {
     required this.camera,
     this.circles,
     this.driver,
+    this.routeFlow,
     this.onMapCreated,
     this.onTap,
     this.padding = EdgeInsets.zero,
+    this.paddingListenable,
     this.showLiveLocation = false,
     this.boundsPadding = 48,
   });
@@ -85,9 +89,20 @@ class RyvoMapCanvas extends ConsumerStatefulWidget {
   final ProviderListenable<RyvoMapCamera> camera;
   final ProviderListenable<Set<Circle>>? circles;
   final ProviderListenable<DriverPose?>? driver;
+
+  /// Route to reveal and pulse. It is painted by [RyvoRouteFlowLayer] above
+  /// the map, so animation frames never reach the platform channel. While a
+  /// route is being revealed the static [polylines] are held back and
+  /// handed to the map when the reveal ends.
+  final ProviderListenable<RouteFlow?>? routeFlow;
   final ValueChanged<GoogleMapController>? onMapCreated;
   final ArgumentCallback<LatLng>? onTap;
   final EdgeInsets padding;
+
+  /// Overrides [padding] and updates it without rebuilding the page. A bottom
+  /// sheet publishes its settled height here so the camera keeps the route
+  /// centered in the visible part of the map.
+  final ValueListenable<EdgeInsets>? paddingListenable;
 
   /// Draws [RyvoLiveLocationPulse] for the device location. The platform blue
   /// dot stays off so the painter is the only current-location mark.
@@ -171,6 +186,7 @@ class _RyvoMapCanvasState extends ConsumerState<RyvoMapCanvas>
   LatLng? _driverShown;
   double _bearingShown = 0;
   BitmapDescriptor? _driverIcon;
+  int _drawnGeneration = -1;
 
   @override
   void initState() {
@@ -197,7 +213,15 @@ class _RyvoMapCanvasState extends ConsumerState<RyvoMapCanvas>
   @override
   Widget build(BuildContext context) {
     final markers = ref.watch(widget.markers.select((value) => value));
-    final polylines = ref.watch(widget.polylines.select((value) => value));
+    final flow = widget.routeFlow == null
+        ? null
+        : ref.watch(widget.routeFlow!.select((value) => value));
+    final allPolylines =
+        ref.watch(widget.polylines.select((value) => value));
+    // The native line waits for the reveal so it does not pop in first.
+    final polylines = flow != null && flow.generation != _drawnGeneration
+        ? const <Polyline>{}
+        : allPolylines;
     final circles = widget.circles == null
         ? const <Circle>{}
         : ref.watch(widget.circles!.select((value) => value));
@@ -216,45 +240,65 @@ class _RyvoMapCanvasState extends ConsumerState<RyvoMapCanvas>
     final style = RyvoMapCanvas.styleFor(Theme.of(context).brightness);
     final shown = _driverShown;
 
+    final driverIcon = _driverIcon;
+    Widget buildMap(EdgeInsets padding) {
+      return GoogleMap(
+        initialCameraPosition: _initialCamera,
+        style: style,
+        onMapCreated: _onMapCreated,
+        onCameraMove: (position) => _viewCamera.value = position,
+        mapType: MapType.normal,
+        myLocationEnabled: false,
+        myLocationButtonEnabled: false,
+        zoomControlsEnabled: false,
+        compassEnabled: false,
+        mapToolbarEnabled: false,
+        buildingsEnabled: false,
+        tiltGesturesEnabled: false,
+        padding: padding,
+        markers: {
+          ...markers,
+          // Wait for the driver bitmap instead of flashing a stock pin.
+          if (shown != null && driverIcon != null)
+            Marker(
+              markerId: const MarkerId('driver'),
+              position: shown,
+              icon: driverIcon,
+              anchor: const Offset(0.5, 0.5),
+              flat: true,
+              rotation: _bearingShown,
+              zIndexInt: 4,
+            ),
+        },
+        polylines: polylines,
+        circles: circles,
+        onTap: widget.onTap,
+      );
+    }
+
+    final paddingListenable = widget.paddingListenable;
     return Stack(
       fit: StackFit.expand,
       children: [
         RepaintBoundary(
-          child: GoogleMap(
-            initialCameraPosition: _initialCamera,
-            style: style,
-            onMapCreated: _onMapCreated,
-            onCameraMove: (position) => _viewCamera.value = position,
-            mapType: MapType.normal,
-            myLocationEnabled: false,
-            myLocationButtonEnabled: false,
-            zoomControlsEnabled: false,
-            compassEnabled: false,
-            mapToolbarEnabled: false,
-            buildingsEnabled: false,
-            tiltGesturesEnabled: false,
-            padding: widget.padding,
-            markers: {
-              ...markers,
-              if (shown != null)
-                Marker(
-                  markerId: const MarkerId('driver'),
-                  position: shown,
-                  icon: _driverIcon ??
-                      BitmapDescriptor.defaultMarkerWithHue(
-                        BitmapDescriptor.hueOrange,
-                      ),
-                  anchor: const Offset(0.5, 0.5),
-                  flat: true,
-                  rotation: _bearingShown,
-                  zIndexInt: 4,
+          child: paddingListenable == null
+              ? buildMap(widget.padding)
+              : ValueListenableBuilder<EdgeInsets>(
+                  valueListenable: paddingListenable,
+                  builder: (context, padding, _) => buildMap(padding),
                 ),
-            },
-            polylines: polylines,
-            circles: circles,
-            onTap: widget.onTap,
-          ),
         ),
+        if (widget.routeFlow != null)
+          RyvoRouteFlowLayer(
+            flow: flow,
+            camera: _viewCamera,
+            padding: widget.padding,
+            paddingListenable: paddingListenable,
+            onDrawn: (generation) {
+              if (!mounted || _drawnGeneration == generation) return;
+              setState(() => _drawnGeneration = generation);
+            },
+          ),
         if (widget.showLiveLocation)
           RyvoLiveLocationPulse(
             camera: _viewCamera,
@@ -329,21 +373,8 @@ class _RyvoMapCanvasState extends ConsumerState<RyvoMapCanvas>
     _controller = controller;
     widget.onMapCreated?.call(controller);
     if (!mounted) return;
-    var active = true;
-    assert(() {
-      active = (context as Element).debugIsActive;
-      return true;
-    }());
-    if (!active) return;
-    final applied = Theme.of(context).brightness;
-    await applyMapStyle(controller, RyvoMapCanvas.styleFor(applied));
-    if (!mounted) return;
-    // Theme flipped while the style was being applied (iOS delays it 300ms).
-    final latest = Theme.of(context).brightness;
-    if (latest != applied) {
-      await applyMapStyle(controller, RyvoMapCanvas.styleFor(latest));
-      if (!mounted) return;
-    }
+    // The basemap style is applied through GoogleMap.style in build(), which
+    // also follows theme flips, so there is nothing to set on the controller.
     final pending = _pendingCamera;
     if (pending != null) _moveCamera(pending);
   }

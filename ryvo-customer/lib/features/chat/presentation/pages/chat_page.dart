@@ -189,14 +189,14 @@ class _Bubble extends StatelessWidget {
         constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.75),
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         decoration: BoxDecoration(
-          color: isSent ? AppColors.primary.withOpacity(0.2) : AppColors.surface,
+          color: isSent ? AppColors.primary.withValues(alpha: 0.2) : AppColors.surface,
           borderRadius: BorderRadius.only(
             topLeft: const Radius.circular(16),
             topRight: const Radius.circular(16),
             bottomLeft: Radius.circular(isSent ? 16 : 4),
             bottomRight: Radius.circular(isSent ? 4 : 16),
           ),
-          border: Border.all(color: isSent ? AppColors.primary.withOpacity(0.3) : AppColors.divider),
+          border: Border.all(color: isSent ? AppColors.primary.withValues(alpha: 0.3) : AppColors.divider),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,

@@ -31,7 +31,7 @@ class ActiveJobBanner extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: AppColors.primary.withOpacity(0.35)),
+            border: Border.all(color: AppColors.primary.withValues(alpha: 0.35)),
           ),
           child: Row(
             children: [
@@ -39,7 +39,7 @@ class ActiveJobBanner extends StatelessWidget {
                 width: 44,
                 height: 44,
                 decoration: BoxDecoration(
-                  color: statusColor.withOpacity(0.15),
+                  color: statusColor.withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Icon(

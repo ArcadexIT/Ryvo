@@ -10,7 +10,7 @@ import 'package:ryvo_customer/l10n/app_localizations.dart';
 
 import '../../../../core/job/active_job_session.dart';
 import '../../../../core/widgets/ryvo_map_canvas.dart';
-import '../../../payment/presentation/widgets/payment_sheet.dart';
+import '../../../payment/presentation/pages/payment_options_page.dart';
 import '../../../../core/location/driving_route.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../data/models/models.dart';
@@ -96,10 +96,8 @@ class _SearchingPageState extends ConsumerState<SearchingPage>
   }
 
   Future<void> _prepareMap() async {
-    final pickupIcon = await MapMarkers.buildStopLabel(
-      title: 'Pickup',
-      subtitle: 'Now',
-      color: AppColors.primary,
+    final pickupIcon = await MapMarkers.buildStopNode(
+      kind: MapStopKind.pickup,
     );
     if (!mounted) return;
     setState(() => _pickupIcon = pickupIcon);
@@ -123,15 +121,9 @@ class _SearchingPageState extends ConsumerState<SearchingPage>
     );
     if (!mounted) return;
     final minutes = route?.durationMin ?? 0;
-    final arrival =
-        DateTime.now().add(Duration(minutes: minutes == 0 ? 1 : minutes));
-    final hour = arrival.hour % 12 == 0 ? 12 : arrival.hour % 12;
-    final minute = arrival.minute.toString().padLeft(2, '0');
-    final suffix = arrival.hour >= 12 ? 'PM' : 'AM';
-    final dropoffIcon = await MapMarkers.buildStopLabel(
-      title: 'Dropoff',
-      subtitle: '$hour:$minute $suffix',
-      color: AppColors.obsidian,
+    final dropoffIcon = await MapMarkers.buildStopNode(
+      kind: MapStopKind.dropoff,
+      badge: minutes > 0 ? '$minutes min' : null,
     );
     if (!mounted) return;
     setState(() {
@@ -188,7 +180,9 @@ class _SearchingPageState extends ConsumerState<SearchingPage>
         !_mapReady ||
         !_sceneReady ||
         controller == null ||
-        !mounted) return;
+        !mounted) {
+      return;
+    }
     _cameraLocked = true;
 
     final draft = ref.read(jobDraftProvider);
@@ -267,8 +261,9 @@ class _SearchingPageState extends ConsumerState<SearchingPage>
     if (_touchingMap || controller == null || base == null || !mounted) return;
     final t = Curves.easeInOutCubic.transform(_zoomBreath.value);
     final zoom = base - 0.62 + t * 1.24;
-    if (_lastAppliedZoom != null && (zoom - _lastAppliedZoom!).abs() < 0.008)
+    if (_lastAppliedZoom != null && (zoom - _lastAppliedZoom!).abs() < 0.008) {
       return;
+    }
     _lastAppliedZoom = zoom;
     controller.moveCamera(CameraUpdate.zoomTo(zoom));
   }
@@ -309,8 +304,8 @@ class _SearchingPageState extends ConsumerState<SearchingPage>
           circleId: CircleId('radar-$i'),
           center: pickup,
           radius: 70 + progress * 780,
-          fillColor: AppColors.primary.withOpacity(0.11 * fade),
-          strokeColor: AppColors.primary.withOpacity(0.55 * fade),
+          fillColor: AppColors.primary.withValues(alpha: 0.11 * fade),
+          strokeColor: AppColors.primary.withValues(alpha: 0.55 * fade),
           strokeWidth: 2,
         ),
       );
@@ -318,23 +313,25 @@ class _SearchingPageState extends ConsumerState<SearchingPage>
     return circles;
   }
 
+  /// A stop is added only after its bitmap exists, so no stock pin shows.
   Set<Marker> _markers(LatLng pickup, LatLng? dropoff) {
+    final pickupIcon = _pickupIcon;
+    final dropoffIcon = _dropoffIcon;
     return {
-      Marker(
-        markerId: const MarkerId('pickup'),
-        position: pickup,
-        icon: _pickupIcon ??
-            BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueGreen),
-        anchor: const Offset(0.5, 1),
-        zIndexInt: 3,
-      ),
-      if (dropoff != null)
+      if (pickupIcon != null)
+        Marker(
+          markerId: const MarkerId('pickup'),
+          position: pickup,
+          icon: pickupIcon,
+          anchor: MapMarkers.stopAnchor,
+          zIndexInt: 3,
+        ),
+      if (dropoff != null && dropoffIcon != null)
         Marker(
           markerId: const MarkerId('dropoff'),
           position: dropoff,
-          icon: _dropoffIcon ??
-              BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed),
-          anchor: const Offset(0.5, 1),
+          icon: dropoffIcon,
+          anchor: MapMarkers.stopAnchor,
           zIndexInt: 2,
         ),
     };
@@ -504,7 +501,7 @@ class _SearchingPageState extends ConsumerState<SearchingPage>
         if (_paymentPendingHits >= 2) {
           _pollTimer?.cancel();
           if (!mounted) return;
-          final route = await showRyvoCheckoutSheet(context);
+          final route = await showRyvoCheckout(context);
           if (!mounted) return;
           if (route != null) {
             context.go(route);
@@ -551,7 +548,7 @@ class _SearchingPageState extends ConsumerState<SearchingPage>
               width: 44,
               height: 44,
               decoration: BoxDecoration(
-                color: AppColors.primary.withOpacity(0.12),
+                color: AppColors.primary.withValues(alpha: 0.12),
                 shape: BoxShape.circle,
               ),
               child: const Icon(Icons.person_off_outlined,
@@ -681,7 +678,7 @@ class _SearchingPageState extends ConsumerState<SearchingPage>
                         borderRadius: BorderRadius.circular(24),
                         boxShadow: [
                           BoxShadow(
-                              color: Colors.black.withOpacity(0.12),
+                              color: Colors.black.withValues(alpha: 0.12),
                               blurRadius: 12,
                               offset: const Offset(0, 4)),
                         ],
@@ -733,13 +730,13 @@ class _SearchingPageState extends ConsumerState<SearchingPage>
                     final updated = await ref
                         .read(jobRepositoryProvider)
                         .acceptBid(job.id, bid.id);
-                    if (!mounted) return;
+                    if (!mounted || !context.mounted) return;
                     ref.read(jobDraftProvider.notifier).state =
                         ref.read(jobDraftProvider).copyWith(activeJob: updated);
                     context.pushReplacement(
                         routeForActiveCustomerJob(updated.status));
                   } catch (e) {
-                    if (mounted) showApiError(context, e);
+                    if (mounted && context.mounted) showApiError(context, e);
                   }
                 },
               ),
@@ -799,7 +796,7 @@ class _SearchSheet extends StatelessWidget {
         borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
         boxShadow: [
           BoxShadow(
-              color: Colors.black.withOpacity(0.16),
+              color: Colors.black.withValues(alpha: 0.16),
               blurRadius: 24,
               offset: const Offset(0, -6)),
         ],
@@ -869,7 +866,7 @@ class _SearchSheet extends StatelessWidget {
                     width: 40,
                     height: 40,
                     decoration: BoxDecoration(
-                      color: AppColors.primary.withOpacity(0.12),
+                      color: AppColors.primary.withValues(alpha: 0.12),
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: const Icon(Icons.directions_car_filled,

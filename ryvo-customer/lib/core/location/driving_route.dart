@@ -47,7 +47,7 @@ class DrivingRouteService {
       );
       final data = response.data;
       if (data == null || data['status'] != 'OK') {
-        return _fetchOsrm(
+        return await _fetchOsrm(
           originLat: originLat,
           originLng: originLng,
           destinationLat: destinationLat,
@@ -103,8 +103,9 @@ class DrivingRouteService {
       final data = response.data;
       if (data == null || data['code'] != 'Ok') return null;
       final routes = data['routes'];
-      if (routes is! List || routes.isEmpty || routes.first is! Map)
+      if (routes is! List || routes.isEmpty || routes.first is! Map) {
         return null;
+      }
       final route = routes.first as Map;
       final encoded = route['geometry'];
       if (encoded is! String || encoded.isEmpty) return null;

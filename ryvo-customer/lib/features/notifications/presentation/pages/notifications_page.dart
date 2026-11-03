@@ -120,10 +120,10 @@ class _NotificationTile extends StatelessWidget {
       child: Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: item.isRead ? AppColors.surface : AppColors.primary.withOpacity(0.08),
+        color: item.isRead ? AppColors.surface : AppColors.primary.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(14),
         border: Border.all(
-          color: item.isRead ? AppColors.divider : AppColors.primary.withOpacity(0.3),
+          color: item.isRead ? AppColors.divider : AppColors.primary.withValues(alpha: 0.3),
         ),
       ),
       child: Row(
@@ -133,7 +133,7 @@ class _NotificationTile extends StatelessWidget {
             width: 40,
             height: 40,
             decoration: BoxDecoration(
-              color: AppColors.primary.withOpacity(0.15),
+              color: AppColors.primary.withValues(alpha: 0.15),
               borderRadius: BorderRadius.circular(10),
             ),
             child: const Icon(Icons.notifications, color: AppColors.primary, size: 20),

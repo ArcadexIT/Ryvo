@@ -194,7 +194,7 @@ class _EmptyInvoices extends StatelessWidget {
             width: 72,
             height: 72,
             decoration: BoxDecoration(
-              color: AppColors.primary.withOpacity(0.12),
+              color: AppColors.primary.withValues(alpha: 0.12),
               shape: BoxShape.circle,
             ),
             child: const Icon(Icons.receipt_long_outlined, color: AppColors.primary, size: 32),
@@ -245,7 +245,7 @@ class _InvoiceCard extends StatelessWidget {
                 width: 44,
                 height: 44,
                 decoration: BoxDecoration(
-                  color: AppColors.primary.withOpacity(0.12),
+                  color: AppColors.primary.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Icon(serviceIcon(invoice.serviceSlug, invoice.serviceIcon), color: AppColors.primary, size: 22),

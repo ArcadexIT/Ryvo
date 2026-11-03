@@ -179,15 +179,16 @@ class _InProgressPageState extends ConsumerState<InProgressPage> {
 
   void _publishStaticMarkers() {
     final dropoff = _dropoffOf(ref.read(jobDraftProvider).activeJob);
+    final icons = _markers;
+    // Added only after the bitmaps are ready, so no stock pin ever shows.
     ref.read(tripMarkersProvider(TripMapScope.progress).notifier).state = {
-      if (dropoff != null)
+      if (dropoff != null && icons != null)
         Marker(
           markerId: const MarkerId('dropoff'),
           position: dropoff,
           anchor: TripMarkers.dropoffAnchor,
           zIndexInt: 1,
-          icon: _markers?.dropoff ??
-              BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed),
+          icon: icons.dropoff,
         ),
     };
   }

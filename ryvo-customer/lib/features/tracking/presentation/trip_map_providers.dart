@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 
+import '../../../core/location/route_flow.dart';
 import '../../../core/widgets/ryvo_map_canvas.dart';
 
 /// One map channel per trip screen so a location tick on live tracking
@@ -13,6 +14,11 @@ final tripMarkersProvider =
 final tripPolylinesProvider = StateProvider.family<Set<Polyline>, TripMapScope>(
   (ref, scope) => const {},
 );
+
+/// Route the canvas reveals and pulses. The static polylines still travel
+/// through [tripPolylinesProvider]; this one only drives the overlay.
+final tripRouteFlowProvider =
+    StateProvider.family<RouteFlow?, TripMapScope>((ref, scope) => null);
 
 final tripCirclesProvider =
     StateProvider.family<Set<Circle>, TripMapScope>((ref, scope) => const {});

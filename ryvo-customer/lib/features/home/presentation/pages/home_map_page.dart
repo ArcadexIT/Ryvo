@@ -350,12 +350,14 @@ class _HomeMapPageState extends ConsumerState<HomeMapPage>
 
   void _publishMarkers() {
     ref.read(homeMapMarkersProvider.notifier).state = {
-      ..._providers.asMap().entries.map((e) => Marker(
+      // A provider is plotted only once its bitmap exists, so a stock pin
+      // never flashes in first.
+      ..._providers.asMap().entries.where((e) {
+        return _providerMarkers.containsKey('p${e.key}');
+      }).map((e) => Marker(
             markerId: MarkerId('p${e.key}'),
             position: LatLng(e.value.lat!, e.value.lng!),
-            icon: _providerMarkers['p${e.key}'] ??
-                BitmapDescriptor.defaultMarkerWithHue(
-                    BitmapDescriptor.hueOrange),
+            icon: _providerMarkers['p${e.key}']!,
             anchor: const Offset(0.5, 0.78),
           )),
     };
