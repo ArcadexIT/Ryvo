@@ -1,0 +1,25 @@
+---
+description: Enforces Ryvo's unified Design System, typography, color tokens, and bans hardcoded hexes across ryvo-customer.
+globs: ["ryvo-customer/lib/**/*.dart"]
+alwaysApply: true
+---
+
+# Ryvo Design System & Anti-AI Slop Rules
+
+## 1. Strict Color Token Discipline (Zero Hardcoded Hexes)
+- NEVER hardcode `Color(0xFF...)` in any page or widget (`features/**` or `shared/**`). Every color must come from `lib/core/theme/app_colors.dart`.
+- Eliminate all fragmented greens (`#1B9A56`, `#3CCB7A`, `#22C55E`, `#16A34A`).
+- Use the unified Ryvo Mobility Palette:
+  - **Primary Brand Emerald:** `#10B981` / `#05944F` for high-legibility badges, route status, and interactive accents, paired with **Obsidian (`#090A0D`)** for primary CTAs (Uber/Bolt style: solid black button in light mode, crisp white or electric lime `#B5F558` with `#090A0D` text for high-emphasis CTAs).
+  - **Light Surfaces:** Background `#F8FAFC`, Elevated Sheet `#FFFFFF`, Input Pill / Unselected Row `#F1F5F9`, Primary Text `#090A0D`, Secondary Text `#64748B`, Subtle Border `#E2E8F0`.
+  - **Dark Surfaces (Replace `#2F313F` & `#383B4A`):** Background `#090A0D` (True Carbon), Elevated Sheet `#12151B`, Card/Input Pill `#1A1E26`, Primary Text `#F8FAFC`, Secondary Text `#94A3B8`, Subtle Border `#262B36`.
+
+## 2. Typography Upgrade (Replace Poppins with Plus Jakarta Sans / Inter)
+- Replace `GoogleFonts.poppins` in `lib/core/theme/app_theme.dart` with `GoogleFonts.plusJakartaSans` (or `GoogleFonts.inter`).
+- Headings & Display numbers: `FontWeight.w700`, tight letter-spacing (`-0.4` to `-0.8`).
+- Fare prices, wallet balances, bid amounts, ETA timers, and distances MUST enable `FontFeature.tabularFigures()` so live socket/price updates never jitter horizontally.
+
+## 3. Mobility UI Craft (Uber / Bolt / Grab Standards)
+- **Ride / Bid / Parcel Switcher:** Design as a sleek segmented pill control with smooth sliding selection indicator (`AnimatedAlign` / `Curves.fastOutSlowIn`, 220ms) and `HapticFeedback.selectionClick()`.
+- **Vehicle & Bid Cards:** No heavy drop shadows. Unselected rows have `Colors.transparent` background; selected row gets a crisp `2.0px` border (`#090A0D` in light mode, `#32BB78` or `#FFFFFF` in dark mode) and a subtle surface tint (`#F1F5F9` / `#1A1E26`).
+- **Route Header Bar:** Show Origin -> Destination with a clean vertical timeline connector (filled circle for pickup, hollow square/pin for dropoff, vertical 1.5px line between them).

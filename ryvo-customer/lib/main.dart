@@ -15,6 +15,8 @@ import 'core/payments/stripe_config.dart';
 import 'core/router/app_router.dart';
 import 'core/theme/app_colors.dart';
 import 'core/theme/app_theme.dart';
+import 'core/theme/ryvo_theme_transition_portal.dart';
+import 'core/theme/theme_sync.dart';
 import 'core/widgets/push_notification_listener.dart';
 import 'data/models/app_config.dart';
 import 'data/models/currency.dart';
@@ -26,7 +28,8 @@ Future<void> main() async {
 
   try {
     if (Firebase.apps.isEmpty) {
-      await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+      await Firebase.initializeApp(
+          options: DefaultFirebaseOptions.currentPlatform);
     }
     FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
   } catch (e) {
@@ -78,7 +81,8 @@ class RyvoApp extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final router = ref.watch(routerProvider);
     final themeMode = ref.watch(themeModeProvider);
-    final config = ref.watch(appConfigProvider).valueOrNull ?? AppConfig.fallback;
+    final config =
+        ref.watch(appConfigProvider).valueOrNull ?? AppConfig.fallback;
     ActiveCurrency.apply(config.currency);
     return MaterialApp.router(
       onGenerateTitle: (context) => AppLocalizations.of(context).appTitle,
@@ -94,21 +98,33 @@ class RyvoApp extends ConsumerWidget {
       theme: AppTheme.light,
       darkTheme: AppTheme.dark,
       themeMode: themeMode,
+      // The portal is the transition. MaterialApp's own 200ms theme lerp would
+      // keep reporting the old brightness for its first half, and stale
+      // static-getter colors with it.
+      themeAnimationDuration: Duration.zero,
       builder: (context, child) {
-        final brightness = Theme.of(context).brightness;
-        AppColors.updateBrightness(brightness);
+        // Resolve brightness from the mode itself (never from the animating
+        // Theme) so AppColors is correct before any descendant builds.
+        final brightness = ThemeSync.apply(themeMode);
         SystemChrome.setSystemUIOverlayStyle(
           brightness == Brightness.dark
-              ? SystemUiOverlayStyle.light.copyWith(statusBarColor: Colors.transparent)
-              : SystemUiOverlayStyle.dark.copyWith(statusBarColor: Colors.transparent),
+              ? SystemUiOverlayStyle.light
+                  .copyWith(statusBarColor: Colors.transparent)
+              : SystemUiOverlayStyle.dark
+                  .copyWith(statusBarColor: Colors.transparent),
         );
-        return child ??
-            const ColoredBox(
-              color: Color(0xFFFFFFFF),
-              child: Center(
-                child: CircularProgressIndicator(color: AppColors.primary),
-              ),
-            );
+        // ThemeSyncScope keeps AppColors in lockstep with themeModeProvider and
+        // the OS brightness, and force-rebuilds cached tabs / const subtrees.
+        // The portal owns the radial shockwave switch between themes.
+        return ThemeSyncScope(
+          child: RyvoThemeTransitionPortal(
+            child: child ??
+                ColoredBox(
+                  color: AppColors.background,
+                  child: const SizedBox.expand(),
+                ),
+          ),
+        );
       },
       routerConfig: router,
     );

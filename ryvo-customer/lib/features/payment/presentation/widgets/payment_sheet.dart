@@ -20,23 +20,20 @@ Future<String?> showRyvoPaymentSheet(
   required String? selected,
   required List<String> methods,
 }) {
-  return showModalBottomSheet<String>(
+  return showRyvoModalSheet<String>(
     context: context,
-    isScrollControlled: true,
-    backgroundColor: Colors.transparent,
-    builder: (context) => _PaymentSheet(selected: selected, methods: methods),
+    child: _PaymentSheet(selected: selected, methods: methods),
   );
 }
 
 /// Checkout sheet. Returns the route to open after a successful charge.
 Future<String?> showRyvoCheckoutSheet(BuildContext context) {
-  return showModalBottomSheet<String>(
+  return showRyvoModalSheet<String>(
     context: context,
-    isScrollControlled: true,
     isDismissible: false,
     enableDrag: false,
-    backgroundColor: Colors.transparent,
-    builder: (context) => const _PaymentSheet(selected: null, methods: [], checkout: true),
+    minChildSize: 0.9,
+    child: const _PaymentSheet(selected: null, methods: [], checkout: true),
   );
 }
 
@@ -231,7 +228,6 @@ class _PaymentSheetState extends ConsumerState<_PaymentSheet> {
     final offer = widget.checkout ? bidOfferFor(draft, config) : null;
     final fare = checkoutFare(draft, config);
     final serviceName = draft.serviceCategory?.name ?? draft.activeJob?.serviceCategory?.name ?? l10n.service;
-    final height = MediaQuery.sizeOf(context).height * 0.92;
     final selected = _selected;
 
     return PopScope(
@@ -240,17 +236,7 @@ class _PaymentSheetState extends ConsumerState<_PaymentSheet> {
         if (didPop || !widget.checkout || _loading) return;
         _dismissCheckout();
       },
-      child: Align(
-      alignment: Alignment.bottomCenter,
-      child: Container(
-        height: height,
-        decoration: const BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
-        ),
-        child: SafeArea(
-          top: false,
-          child: Column(
+      child: Column(
             children: [
               Padding(
                 padding: const EdgeInsets.fromLTRB(8, 8, 8, 0),
@@ -406,10 +392,7 @@ class _PaymentSheetState extends ConsumerState<_PaymentSheet> {
                   ),
                 ),
             ],
-          ),
-        ),
       ),
-    ),
     );
   }
 

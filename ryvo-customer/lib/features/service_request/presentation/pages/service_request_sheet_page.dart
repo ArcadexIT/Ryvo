@@ -1,20 +1,19 @@
-import 'dart:math' as math;
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:intl/intl.dart';
 import 'package:ryvo_customer/l10n/app_localizations.dart';
 
 import '../../../../core/location/driving_route.dart';
 import '../../../../core/theme/app_colors.dart';
-import '../../../../core/utils/map_style_utils.dart';
+import '../../../../core/theme/app_theme.dart';
+import '../../../../core/widgets/ryvo_map_canvas.dart';
 import '../../../../data/models/app_config.dart';
 import '../../../../data/models/models.dart';
 import '../../../home/presentation/widgets/map_markers.dart';
 import '../../../payment/presentation/widgets/payment_sheet.dart';
+import '../../../tracking/presentation/trip_map_providers.dart';
 import '../../../../shared/providers/app_providers.dart';
 import '../../../../shared/widgets/widgets.dart';
 
@@ -28,7 +27,8 @@ class ServiceRequestSheetPage extends ConsumerStatefulWidget {
 
 class _ServiceRequestSheetPageState
     extends ConsumerState<ServiceRequestSheetPage> {
-  GoogleMapController? _mapController;
+  Widget? _map;
+  int _cameraGeneration = 0;
   final Map<String, FareEstimate> _quotes = {};
   final DrivingRouteService _routes = DrivingRouteService();
   String? _quoteKey;
@@ -45,15 +45,6 @@ class _ServiceRequestSheetPageState
   int _routeMinutes = 0;
   BitmapDescriptor? _pickupIcon;
   BitmapDescriptor? _dropoffIcon;
-
-  static const _mapStyle = '''[
-    {"featureType":"poi","stylers":[{"visibility":"off"}]},
-    {"featureType":"transit","stylers":[{"visibility":"simplified"}]},
-    {"featureType":"road","elementType":"geometry","stylers":[{"color":"#ffffff"}]},
-    {"featureType":"road","elementType":"labels.text.fill","stylers":[{"color":"#444444"}]},
-    {"featureType":"landscape","stylers":[{"color":"#f5f5f5"}]},
-    {"featureType":"water","stylers":[{"color":"#c9e8f5"}]}
-  ]''';
 
   @override
   void initState() {
@@ -75,7 +66,6 @@ class _ServiceRequestSheetPageState
 
   @override
   void dispose() {
-    _mapController?.dispose();
     _recipientName.dispose();
     _recipientPhone.dispose();
     super.dispose();
@@ -158,7 +148,7 @@ class _ServiceRequestSheetPageState
       _selected = selected;
     });
     await _loadRoute();
-    _fitRoute();
+    _publishMap();
   }
 
   Future<void> _loadRoute() async {
@@ -182,12 +172,12 @@ class _ServiceRequestSheetPageState
     final pickupIcon = await MapMarkers.buildStopLabel(
       title: 'Pickup',
       subtitle: 'Now',
-      color: const Color(0xFF32BB78),
+      color: AppColors.primary,
     );
     final dropoffIcon = await MapMarkers.buildStopLabel(
       title: 'Dropoff',
       subtitle: DateFormat('h:mm a').format(arrival),
-      color: const Color(0xFF1F2937),
+      color: AppColors.obsidian,
     );
     if (!mounted || _routeKey != key) return;
     setState(() {
@@ -196,7 +186,79 @@ class _ServiceRequestSheetPageState
       _pickupIcon = pickupIcon;
       _dropoffIcon = dropoffIcon;
     });
-    _fitRoute();
+    _publishMap();
+  }
+
+  void _publishMap() {
+    final draft = ref.read(jobDraftProvider);
+    final pickup = LatLng(draft.pickupLat, draft.pickupLng);
+    final dropoff = draft.dropoffLat == null || draft.dropoffLng == null
+        ? null
+        : LatLng(draft.dropoffLat!, draft.dropoffLng!);
+    final points = _routePoints.length > 1
+        ? _routePoints
+        : [
+            pickup,
+            if (dropoff != null) dropoff,
+          ];
+    ref.read(tripMarkersProvider(TripMapScope.request).notifier).state = {
+      Marker(
+        markerId: const MarkerId('pickup'),
+        position: pickup,
+        icon: _pickupIcon ??
+            BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueGreen),
+        anchor: const Offset(0.5, 1),
+      ),
+      if (dropoff != null)
+        Marker(
+          markerId: const MarkerId('dropoff'),
+          position: dropoff,
+          icon: _dropoffIcon ??
+              BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed),
+          anchor: const Offset(0.5, 1),
+        ),
+    };
+    ref.read(tripPolylinesProvider(TripMapScope.request).notifier).state = {
+      if (dropoff != null && points.length > 1) ...{
+        Polyline(
+          polylineId: const PolylineId('route-casing'),
+          points: points,
+          color: AppColors.white,
+          width: 10,
+          startCap: Cap.roundCap,
+          endCap: Cap.roundCap,
+          jointType: JointType.round,
+          zIndex: 1,
+        ),
+        Polyline(
+          polylineId: const PolylineId('route'),
+          points: points,
+          color: AppColors.primary,
+          width: 6,
+          startCap: Cap.roundCap,
+          endCap: Cap.roundCap,
+          jointType: JointType.round,
+          zIndex: 2,
+        ),
+      },
+    };
+    ref.read(tripCameraProvider(TripMapScope.request).notifier).state =
+        cameraForPoints(
+      points,
+      generation: ++_cameraGeneration,
+      zoom: 13,
+      fallback: pickup,
+    );
+  }
+
+  Widget _requestMap(BuildContext context) {
+    return _map ??= RyvoMapCanvas(
+      markers: tripMarkersProvider(TripMapScope.request),
+      polylines: tripPolylinesProvider(TripMapScope.request),
+      camera: tripCameraProvider(TripMapScope.request),
+      padding: EdgeInsets.only(bottom: MediaQuery.sizeOf(context).height * 0.5),
+      boundsPadding: 72,
+    );
   }
 
   Future<void> _editPickup() async {
@@ -207,7 +269,7 @@ class _ServiceRequestSheetPageState
     final services = ref.read(serviceCategoriesProvider).valueOrNull ??
         const <ServiceCategory>[];
     await _quote(services);
-    _fitRoute();
+    _publishMap();
   }
 
   Future<void> _editDropoff() async {
@@ -226,45 +288,7 @@ class _ServiceRequestSheetPageState
     final services = ref.read(serviceCategoriesProvider).valueOrNull ??
         const <ServiceCategory>[];
     await _quote(services);
-    _fitRoute();
-  }
-
-  void _fitRoute() {
-    final draft = ref.read(jobDraftProvider);
-    final controller = _mapController;
-    if (controller == null ||
-        draft.dropoffLat == null ||
-        draft.dropoffLng == null) return;
-    final points = _routePoints.isNotEmpty
-        ? _routePoints
-        : [
-            LatLng(draft.pickupLat, draft.pickupLng),
-            LatLng(draft.dropoffLat!, draft.dropoffLng!),
-          ];
-    var south = points.first.latitude;
-    var north = points.first.latitude;
-    var west = points.first.longitude;
-    var east = points.first.longitude;
-    for (final point in points) {
-      south = math.min(south, point.latitude);
-      north = math.max(north, point.latitude);
-      west = math.min(west, point.longitude);
-      east = math.max(east, point.longitude);
-    }
-    if ((north - south).abs() < 0.0001 && (east - west).abs() < 0.0001) {
-      controller.animateCamera(CameraUpdate.newLatLngZoom(
-          LatLng(draft.pickupLat, draft.pickupLng), 15));
-      return;
-    }
-    controller.animateCamera(
-      CameraUpdate.newLatLngBounds(
-        LatLngBounds(
-          southwest: LatLng(south, west),
-          northeast: LatLng(north, east),
-        ),
-        72,
-      ),
-    );
+    _publishMap();
   }
 
   Future<void> _confirm() async {
@@ -353,11 +377,6 @@ class _ServiceRequestSheetPageState
       next.whenData(_quote);
     });
 
-    final pickup = LatLng(draft.pickupLat, draft.pickupLng);
-    final dropoff = draft.dropoffLat == null || draft.dropoffLng == null
-        ? null
-        : LatLng(draft.dropoffLat!, draft.dropoffLng!);
-
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, _) {
@@ -367,70 +386,7 @@ class _ServiceRequestSheetPageState
         backgroundColor: AppColors.background,
         body: Stack(
           children: [
-            GoogleMap(
-              padding: EdgeInsets.only(
-                  bottom: MediaQuery.sizeOf(context).height * 0.50),
-              initialCameraPosition: CameraPosition(target: pickup, zoom: 13),
-              onMapCreated: (controller) async {
-                _mapController = controller;
-                await applyMapStyle(controller, _mapStyle);
-                _fitRoute();
-              },
-              myLocationEnabled: false,
-              myLocationButtonEnabled: false,
-              zoomControlsEnabled: false,
-              compassEnabled: false,
-              mapToolbarEnabled: false,
-              markers: {
-                Marker(
-                  markerId: const MarkerId('pickup'),
-                  position: pickup,
-                  icon: _pickupIcon ??
-                      BitmapDescriptor.defaultMarkerWithHue(
-                          BitmapDescriptor.hueGreen),
-                  anchor: _pickupIcon == null
-                      ? const Offset(0.5, 1)
-                      : const Offset(0.5, 1),
-                ),
-                if (dropoff != null)
-                  Marker(
-                    markerId: const MarkerId('dropoff'),
-                    position: dropoff,
-                    icon: _dropoffIcon ??
-                        BitmapDescriptor.defaultMarkerWithHue(
-                            BitmapDescriptor.hueRed),
-                    anchor: const Offset(0.5, 1),
-                  ),
-              },
-              polylines: {
-                if (dropoff != null) ...{
-                  Polyline(
-                    polylineId: const PolylineId('route-casing'),
-                    points: _routePoints.length > 1
-                        ? _routePoints
-                        : [pickup, dropoff],
-                    color: Colors.white,
-                    width: 10,
-                    startCap: Cap.roundCap,
-                    endCap: Cap.roundCap,
-                    jointType: JointType.round,
-                    zIndex: 1,
-                  ),
-                  Polyline(
-                    polylineId: const PolylineId('route'),
-                    points: _routePoints.length > 1
-                        ? _routePoints
-                        : [pickup, dropoff],
-                    color: const Color(0xFF32BB78),
-                    width: 6,
-                    startCap: Cap.roundCap,
-                    endCap: Cap.roundCap,
-                    jointType: JointType.round,
-                    zIndex: 2,
-                  ),
-                },
-              },
-            ),
+            _requestMap(context),
             SafeArea(
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
@@ -452,11 +408,12 @@ class _ServiceRequestSheetPageState
                   color: AppColors.card,
                   borderRadius:
                       const BorderRadius.vertical(top: Radius.circular(20)),
-                  boxShadow: const [
+                  boxShadow: [
                     BoxShadow(
-                        color: Colors.black26,
-                        blurRadius: 18,
-                        offset: Offset(0, -4))
+                      color: AppColors.obsidian.withValues(alpha: 0.06),
+                      blurRadius: 16,
+                      offset: const Offset(0, -4),
+                    ),
                   ],
                 ),
                 child: Column(
@@ -526,10 +483,14 @@ class _ServiceRequestSheetPageState
                             const SizedBox(height: 8),
                             Align(
                               alignment: Alignment.centerLeft,
-                              child: Text('Parcel size',
-                                  style: GoogleFonts.poppins(
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.w600)),
+                              child: Text(
+                                'Parcel size',
+                                style: RyvoTypography.style(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                  color: AppColors.textPrimary,
+                                ),
+                              ),
                             ),
                             Wrap(
                               spacing: 8,
@@ -569,9 +530,13 @@ class _ServiceRequestSheetPageState
                           return Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text('Your offer: ${value.toStringAsFixed(2)}',
-                                  style: GoogleFonts.poppins(
-                                      fontWeight: FontWeight.w600)),
+                              Text(
+                                'Your offer: ${value.toStringAsFixed(2)}',
+                                style: RyvoTypography.price(
+                                  fontSize: 16,
+                                  color: AppColors.textPrimary,
+                                ),
+                              ),
                               Slider(
                                 min: min,
                                 max: max <= min ? min + 1 : max,
@@ -589,7 +554,7 @@ class _ServiceRequestSheetPageState
                         child: Text(
                           AppLocalizations.of(context)
                               .noPaymentMethodsAreCurrentlyAvailablePleaseConta,
-                          style: GoogleFonts.poppins(
+                          style: RyvoTypography.style(
                               fontSize: 12, color: AppColors.error),
                         ),
                       )
@@ -607,7 +572,7 @@ class _ServiceRequestSheetPageState
                                     ? AppLocalizations.of(context)
                                         .choosePaymentMethod
                                     : _paymentLabel(context, _payment!),
-                                style: GoogleFonts.poppins(
+                                style: RyvoTypography.style(
                                   fontSize: 13,
                                   fontWeight: FontWeight.w600,
                                   color: AppColors.textPrimary,
@@ -722,19 +687,18 @@ class _ChooseRideHeader extends StatelessWidget {
               children: [
                 Text(
                   title,
-                  style: GoogleFonts.poppins(
+                  style: RyvoTypography.heading(
                     fontSize: 20,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.navy,
-                    height: 1.1,
+                    color: AppColors.textPrimary,
+                    letterSpacing: -0.5,
                   ),
                 ),
                 Text(
                   subtitle,
-                  style: GoogleFonts.poppins(
+                  style: RyvoTypography.style(
                     fontSize: 12,
-                    fontWeight: FontWeight.w400,
-                    color: const Color(0xFF9AA3B2),
+                    fontWeight: FontWeight.w500,
+                    color: AppColors.textSecondary,
                     height: 1.2,
                   ),
                 ),
@@ -745,21 +709,24 @@ class _ChooseRideHeader extends StatelessWidget {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
               decoration: BoxDecoration(
-                color: const Color(0xFFE7F6EE),
+                color: AppColors.primaryLight,
                 borderRadius: BorderRadius.circular(20),
               ),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Icon(Icons.workspace_premium_rounded,
-                      size: 13, color: Color(0xFF1B9A56)),
+                  const Icon(
+                    Icons.workspace_premium_rounded,
+                    size: 13,
+                    color: AppColors.primaryDark,
+                  ),
                   const SizedBox(width: 4),
                   Text(
                     'Best rates',
-                    style: GoogleFonts.poppins(
+                    style: RyvoTypography.style(
                       fontSize: 11,
                       fontWeight: FontWeight.w600,
-                      color: const Color(0xFF1B9A56),
+                      color: AppColors.primaryDark,
                       height: 1.1,
                     ),
                   ),
@@ -803,8 +770,10 @@ class _RideList extends StatelessWidget {
       return Center(
         child: Text(
           'No rides are available right now',
-          style:
-              GoogleFonts.poppins(fontSize: 14, color: AppColors.textSecondary),
+          style: RyvoTypography.style(
+            fontSize: 14,
+            color: AppColors.textSecondary,
+          ),
         ),
       );
     }
@@ -827,23 +796,21 @@ class _RideList extends StatelessWidget {
         final minutes =
             routeMinutes > 0 ? routeMinutes : (estimate?.durationMin ?? 0);
         final description = (service.description ?? '').trim();
+        final borderColor = selected
+            ? (AppColors.isDark ? AppColors.white : AppColors.obsidian)
+            : Colors.transparent;
         return Material(
-          color: selected ? const Color(0xFFE8F8EF) : AppColors.card,
+          color: selected ? AppColors.surface : Colors.transparent,
           borderRadius: BorderRadius.circular(14),
           child: InkWell(
             onTap:
                 estimate == null && !quoting ? null : () => onSelect(service),
             borderRadius: BorderRadius.circular(14),
             child: Container(
-              padding: const EdgeInsets.fromLTRB(8, 8, 10, 8),
+              padding: const EdgeInsets.fromLTRB(8, 8, 12, 8),
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(14),
-                border: Border.all(
-                  color: selected
-                      ? const Color(0xFF3CCB7A)
-                      : const Color(0xFFE6E8EC),
-                  width: selected ? 1.4 : 1,
-                ),
+                border: Border.all(color: borderColor, width: 2),
               ),
               child: Row(
                 children: [
@@ -860,24 +827,26 @@ class _RideList extends StatelessWidget {
                                 service.name,
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
-                                style: GoogleFonts.poppins(
-                                  fontSize: 14,
+                                style: RyvoTypography.style(
+                                  fontSize: 15,
                                   fontWeight: FontWeight.w700,
-                                  color: AppColors.navy,
+                                  color: AppColors.textPrimary,
+                                  letterSpacing: -0.3,
                                   height: 1.1,
                                 ),
                               ),
                             ),
-                            const SizedBox(width: 4),
-                            const Icon(Icons.person_outline_rounded,
-                                size: 12, color: Color(0xFF8B93A7)),
+                            const SizedBox(width: 6),
+                            Icon(
+                              Icons.person_outline_rounded,
+                              size: 12,
+                              color: AppColors.textSecondary,
+                            ),
                             Text(
                               '${_seats(service.slug)}',
-                              style: GoogleFonts.poppins(
+                              style: RyvoTypography.distance(
                                 fontSize: 12,
-                                fontWeight: FontWeight.w500,
-                                color: const Color(0xFF8B93A7),
-                                height: 1.1,
+                                color: AppColors.textSecondary,
                               ),
                             ),
                           ],
@@ -887,10 +856,10 @@ class _RideList extends StatelessWidget {
                             description,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                            style: GoogleFonts.poppins(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w400,
-                              color: const Color(0xFF8B93A7),
+                            style: RyvoTypography.style(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w500,
+                              color: AppColors.textSecondary,
                               height: 1.15,
                             ),
                           ),
@@ -904,23 +873,31 @@ class _RideList extends StatelessWidget {
                       children: [
                         Text(
                           formatMoney(estimate.estimatedFare),
-                          style: GoogleFonts.poppins(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w700,
-                            color: AppColors.navy,
-                            height: 1.1,
+                          style: RyvoTypography.price(
+                            fontSize: 16,
+                            color: AppColors.textPrimary,
                           ),
                         ),
-                        if (minutes > 0)
-                          Text(
-                            '~ $minutes min',
-                            style: GoogleFonts.poppins(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w400,
-                              color: const Color(0xFF8B93A7),
-                              height: 1.1,
+                        if (minutes > 0) ...[
+                          const SizedBox(height: 4),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 6,
+                              vertical: 2,
+                            ),
+                            decoration: BoxDecoration(
+                              color: AppColors.primaryLight,
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Text(
+                              '$minutes min',
+                              style: RyvoTypography.eta(
+                                fontSize: 11,
+                                color: AppColors.primaryDark,
+                              ),
                             ),
                           ),
+                        ],
                       ],
                     )
                   else if (quoting)
@@ -928,7 +905,9 @@ class _RideList extends StatelessWidget {
                       width: 14,
                       height: 14,
                       child: CircularProgressIndicator(
-                          strokeWidth: 2, color: AppColors.primary),
+                        strokeWidth: 2,
+                        color: AppColors.primary,
+                      ),
                     )
                   else
                     TextButton(
@@ -939,19 +918,15 @@ class _RideList extends StatelessWidget {
                         minimumSize: Size.zero,
                         tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                       ),
-                      child: Text(AppLocalizations.of(context).retry,
-                          style: GoogleFonts.poppins(fontSize: 12)),
+                      child: Text(
+                        AppLocalizations.of(context).retry,
+                        style: RyvoTypography.style(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.textPrimary,
+                        ),
+                      ),
                     ),
-                  const SizedBox(width: 8),
-                  Icon(
-                    selected
-                        ? Icons.check_circle_rounded
-                        : Icons.circle_outlined,
-                    size: 20,
-                    color: selected
-                        ? const Color(0xFF22C55E)
-                        : const Color(0xFFD1D5DB),
-                  ),
                 ],
               ),
             ),
@@ -1008,7 +983,7 @@ class _PaymentChip extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 5),
       alignment: Alignment.center,
       decoration: BoxDecoration(
-        color: card ? const Color(0xFF1A1F71) : const Color(0xFFF3F4F6),
+        color: card ? AppColors.obsidian : AppColors.surface,
         borderRadius: BorderRadius.circular(3),
       ),
       child: Text(
@@ -1019,10 +994,10 @@ class _PaymentChip extends StatelessWidget {
           'google_pay' => 'G PAY',
           _ => 'CARD',
         },
-        style: GoogleFonts.poppins(
+        style: RyvoTypography.style(
           fontSize: 8,
           fontWeight: FontWeight.w700,
-          color: card ? Colors.white : AppColors.navy,
+          color: card ? AppColors.white : AppColors.textPrimary,
           height: 1,
           letterSpacing: 0.2,
         ),
@@ -1051,20 +1026,20 @@ class _RequestRideButton extends StatelessWidget {
       height: 48,
       width: double.infinity,
       child: Material(
-        color: enabled
-            ? const Color(0xFF1B9A56)
-            : const Color(0xFF1B9A56).withValues(alpha: 0.45),
+        color: enabled ? AppColors.cta : AppColors.cta.withValues(alpha: 0.4),
         borderRadius: BorderRadius.circular(16),
         child: InkWell(
           onTap: enabled ? onPressed : null,
           borderRadius: BorderRadius.circular(16),
           child: loading
-              ? const Center(
+              ? Center(
                   child: SizedBox(
                     width: 20,
                     height: 20,
                     child: CircularProgressIndicator(
-                        strokeWidth: 2, color: Colors.white),
+                      strokeWidth: 2,
+                      color: AppColors.onCta,
+                    ),
                   ),
                 )
               : Stack(
@@ -1073,16 +1048,17 @@ class _RequestRideButton extends StatelessWidget {
                     Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        const Icon(Icons.directions_car_rounded,
-                            color: Colors.white, size: 18),
+                        Icon(
+                          Icons.directions_car_rounded,
+                          color: AppColors.onCta,
+                          size: 18,
+                        ),
                         const SizedBox(width: 8),
                         Text(
                           label,
-                          style: GoogleFonts.poppins(
+                          style: RyvoTypography.button(
                             fontSize: 15,
-                            fontWeight: FontWeight.w600,
-                            color: Colors.white,
-                            height: 1.1,
+                            color: AppColors.onCta,
                           ),
                         ),
                       ],
@@ -1093,17 +1069,16 @@ class _RequestRideButton extends StatelessWidget {
                         child: Row(
                           children: [
                             Container(
-                                width: 1,
-                                height: 16,
-                                color: Colors.white.withValues(alpha: 0.45)),
+                              width: 1,
+                              height: 16,
+                              color: AppColors.onCta.withValues(alpha: 0.45),
+                            ),
                             const SizedBox(width: 12),
                             Text(
                               price!,
-                              style: GoogleFonts.poppins(
+                              style: RyvoTypography.price(
                                 fontSize: 15,
-                                fontWeight: FontWeight.w600,
-                                color: Colors.white,
-                                height: 1.1,
+                                color: AppColors.onCta,
                               ),
                             ),
                           ],
@@ -1135,11 +1110,22 @@ class _RouteBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: AppColors.card,
-      elevation: 3,
-      borderRadius: BorderRadius.circular(28),
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(6, 6, 8, 6),
+      color: AppColors.modal,
+      elevation: 0,
+      borderRadius: BorderRadius.circular(18),
+      child: Container(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: AppColors.divider),
+          boxShadow: [
+            BoxShadow(
+              color: AppColors.obsidian.withValues(alpha: 0.06),
+              blurRadius: 12,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        padding: const EdgeInsets.fromLTRB(4, 8, 12, 8),
         child: Row(
           children: [
             IconButton(
@@ -1148,42 +1134,124 @@ class _RouteBar extends StatelessWidget {
               color: AppColors.textPrimary,
             ),
             Expanded(
-              child: Row(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
                 children: [
-                  Flexible(
-                    child: GestureDetector(
-                      onTap: onPickup,
-                      child: Text(
-                        pickup,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: GoogleFonts.poppins(
-                            fontSize: 13, fontWeight: FontWeight.w600),
-                      ),
-                    ),
+                  _RouteStop(
+                    marker: const _PickupDot(),
+                    label: pickup,
+                    onTap: onPickup,
                   ),
-                  const Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 6),
-                    child: Icon(Icons.arrow_forward,
-                        size: 16, color: AppColors.grey500),
-                  ),
-                  Flexible(
-                    child: GestureDetector(
-                      onTap: onDropoff,
-                      child: Text(
-                        dropoff,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: GoogleFonts.poppins(
-                            fontSize: 13, fontWeight: FontWeight.w600),
-                      ),
-                    ),
+                  const _RouteConnector(),
+                  _RouteStop(
+                    marker: const _DropoffMark(),
+                    label: dropoff,
+                    onTap: onDropoff,
                   ),
                 ],
               ),
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _RouteStop extends StatelessWidget {
+  const _RouteStop({
+    required this.marker,
+    required this.label,
+    required this.onTap,
+  });
+
+  final Widget marker;
+  final String label;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(8),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 2),
+        child: Row(
+          children: [
+            SizedBox(width: 16, height: 16, child: Center(child: marker)),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: RyvoTypography.style(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.textPrimary,
+                  letterSpacing: -0.2,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _RouteConnector extends StatelessWidget {
+  const _RouteConnector();
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 12,
+      child: Row(
+        children: [
+          SizedBox(
+            width: 16,
+            child: Center(
+              child: SizedBox(
+                width: 1.5,
+                height: 12,
+                child: ColoredBox(color: AppColors.divider),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PickupDot extends StatelessWidget {
+  const _PickupDot();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 8,
+      height: 8,
+      decoration: const BoxDecoration(
+        color: AppColors.primary,
+        shape: BoxShape.circle,
+      ),
+    );
+  }
+}
+
+class _DropoffMark extends StatelessWidget {
+  const _DropoffMark();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 8,
+      height: 8,
+      decoration: BoxDecoration(
+        border: Border.all(color: AppColors.textPrimary, width: 1.5),
+        borderRadius: BorderRadius.circular(1.5),
       ),
     );
   }

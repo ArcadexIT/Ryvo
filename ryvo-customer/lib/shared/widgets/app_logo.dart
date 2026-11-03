@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../core/theme/app_colors.dart';
 
 enum AppLogoVariant { mark, wordmark, lockup }
 
@@ -60,9 +61,8 @@ class AppLogo extends StatelessWidget {
         shape: BoxShape.circle,
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF32BB78).withOpacity(0.35),
-            blurRadius: 40,
-            spreadRadius: 8,
+            color: AppColors.primary.withValues(alpha: 0.08),
+            blurRadius: 12,
           ),
         ],
       ),

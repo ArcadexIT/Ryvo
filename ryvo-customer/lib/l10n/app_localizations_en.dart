@@ -56,25 +56,25 @@ class AppLocalizationsEn extends AppLocalizations {
   String get noCountriesFound => 'No countries found';
 
   @override
-  String get instantJumpStart => 'Request a ride';
+  String get instantJumpStart => 'Move Smarter';
 
   @override
   String get strandedWithADeadBatteryGetAVerifiedProviderToYo =>
-      'Set a pickup and dropoff. A nearby driver accepts, and you pay when you arrive.';
+      'A live route from pickup to dropoff,\nwith an ETA you can trust.';
 
   @override
-  String get verifiedTrusted => 'Verified & Trusted';
+  String get verifiedTrusted => 'Ride, Bid, or Send Parcels';
 
   @override
   String get everyProviderIsBackgroundCheckedCertifiedAndRate =>
-      'Every driver is licence-checked, insured, and rated by riders.';
+      'Three ways to move. The fare ticks\nlive before you confirm.';
 
   @override
-  String get liveTracking => 'Live Tracking';
+  String get liveTracking => 'Real-Time Tracking & Safety';
 
   @override
   String get watchYourProviderNavigateToYouInRealTimeKnowExac =>
-      'Watch your driver on the map, from pickup through to dropoff.';
+      'Follow your driver in real time,\nwith a verified badge on every trip.';
 
   @override
   String get skip => 'Skip';
@@ -1069,4 +1069,35 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get tripShareHint =>
       'Anyone with this link can follow the car until the trip ends.';
+
+  @override
+  String get activity => 'Activity';
+
+  @override
+  String get upcoming => 'Upcoming';
+
+  @override
+  String get past => 'Past';
+
+  @override
+  String get noUpcomingRides => 'No upcoming rides';
+
+  @override
+  String get noPastRides => 'No past rides';
+
+  @override
+  String get bookARide => 'Book a Ride';
+
+  @override
+  String get couldNotLoadRides => 'Couldn\'t load your rides';
+
+  @override
+  String todayAt(String time) {
+    return 'Today, $time';
+  }
+
+  @override
+  String yesterdayAt(String time) {
+    return 'Yesterday, $time';
+  }
 }

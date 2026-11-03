@@ -1,180 +1,258 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:google_fonts/google_fonts.dart';
+import 'package:ryvo_customer/l10n/app_localizations.dart';
+
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/theme/app_theme.dart';
 import '../../../../data/models/app_config.dart';
 import '../../../../data/models/models.dart';
 import '../../../../shared/providers/app_providers.dart';
-import 'package:ryvo_customer/l10n/app_localizations.dart';
+import '../../../../shared/widgets/shimmer_card.dart';
+import '../../../home/presentation/pages/shell_page.dart';
+import '../widgets/ryvo_grab_list_tile.dart';
+import '../widgets/ryvo_sign_out_dialog.dart';
 
-class ProfilePage extends ConsumerWidget {
+class ProfilePage extends ConsumerStatefulWidget {
   const ProfilePage({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<ProfilePage> createState() => _ProfilePageState();
+}
+
+class _ProfilePageState extends ConsumerState<ProfilePage> {
+  static const double _expandedHeight = 220;
+
+  final ScrollController _scroll = ScrollController();
+  final ValueNotifier<double> _titleOpacity = ValueNotifier<double>(0);
+
+  @override
+  void initState() {
+    super.initState();
+    _scroll.addListener(_onScroll);
+  }
+
+  @override
+  void dispose() {
+    _scroll.removeListener(_onScroll);
+    _scroll.dispose();
+    _titleOpacity.dispose();
+    super.dispose();
+  }
+
+  void _onScroll() {
+    if (!_scroll.hasClients) return;
+    final top = MediaQuery.paddingOf(context).top;
+    final distance = _expandedHeight - kToolbarHeight - top;
+    final next = _scroll.offset >= distance - 16 ? 1.0 : 0.0;
+    if (_titleOpacity.value != next) _titleOpacity.value = next;
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final profileAsync = ref.watch(profileProvider);
-    final config = ref.watch(appConfigProvider).valueOrNull ?? AppConfig.fallback;
+    final config =
+        ref.watch(appConfigProvider).valueOrNull ?? AppConfig.fallback;
     final walletAsync = config.customerWalletEnabled
         ? ref.watch(walletBalanceProvider)
         : const AsyncValue.data(null);
     final jobsAsync = ref.watch(jobsListProvider);
+    final unread = ref.watch(notificationsProvider).valueOrNull?.fold<int>(
+              0,
+              (count, item) => count + (item.isRead ? 0 : 1),
+            ) ??
+        0;
     final l10n = AppLocalizations.of(context);
+    final bottomPad = 24 + RyvoFloatingNav.reservedHeight(context);
 
     return Scaffold(
       backgroundColor: AppColors.background,
-      appBar: AppBar(
-        backgroundColor: AppColors.background,
-        title: Text(
-          l10n.profile,
-          style: GoogleFonts.poppins(fontSize: 20, fontWeight: FontWeight.w700),
-        ),
-        automaticallyImplyLeading: false,
-      ),
       body: profileAsync.when(
-        loading: () => const Center(child: CircularProgressIndicator(color: AppColors.primary)),
-        error: (e, _) => Center(
-          child: Padding(
-            padding: const EdgeInsets.all(24),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(e.toString(), textAlign: TextAlign.center, style: GoogleFonts.poppins(color: AppColors.textPrimary)),
-                const SizedBox(height: 12),
-                TextButton(onPressed: () => ref.invalidate(profileProvider), child: Text(l10n.retry)),
-              ],
-            ),
-          ),
+        loading: () => const _ProfileLoading(),
+        error: (error, _) => _ProfileMessage(
+          message: error.toString(),
+          action: l10n.retry,
+          onAction: () => ref.invalidate(profileProvider),
         ),
         data: (profile) {
           if (profile == null) {
-            return Center(
-              child: Text(l10n.notSignedIn, style: GoogleFonts.poppins(color: AppColors.textPrimary)),
-            );
+            return _ProfileMessage(message: l10n.notSignedIn);
           }
+          final jobs = jobsAsync.valueOrNull ?? const <JobModel>[];
           final balance = walletAsync.valueOrNull?.balance;
-          final tripCount = jobsAsync.valueOrNull?.length ?? 0;
-          final emailLabel = (profile.email == null || profile.email!.isEmpty) ? 'Add email' : 'Update email';
+          final name = profile.fullName.trim().isEmpty
+              ? 'Rider'
+              : profile.fullName.trim();
+          final themeLabel = switch (ref.watch(themeModeProvider)) {
+            ThemeMode.dark => l10n.dark,
+            ThemeMode.system => l10n.system,
+            ThemeMode.light => l10n.light,
+          };
+          final method = _methodLabel(
+            ref.watch(jobDraftProvider).paymentMethod,
+            l10n,
+          );
 
           return RefreshIndicator(
             color: AppColors.primary,
             onRefresh: () async {
               ref.invalidate(profileProvider);
               ref.invalidate(jobsListProvider);
-              if (config.customerWalletEnabled) ref.invalidate(walletBalanceProvider);
+              ref.invalidate(notificationsProvider);
+              if (config.customerWalletEnabled) {
+                ref.invalidate(walletBalanceProvider);
+              }
               await ref.read(profileProvider.future);
             },
-            child: ListView(
-              physics: const AlwaysScrollableScrollPhysics(),
-              padding: const EdgeInsets.fromLTRB(16, 4, 16, 28),
-              children: [
-                _IdentityHeader(profile: profile),
-                const SizedBox(height: 16),
-                Row(
-                  children: [
-                    Expanded(
-                      child: _StatCard(
-                        icon: Icons.route_rounded,
-                        value: '$tripCount',
-                        label: l10n.trips,
+            child: CustomScrollView(
+              controller: _scroll,
+              physics: const BouncingScrollPhysics(
+                parent: AlwaysScrollableScrollPhysics(),
+              ),
+              slivers: [
+                SliverAppBar(
+                  pinned: true,
+                  stretch: true,
+                  expandedHeight: _expandedHeight,
+                  automaticallyImplyLeading: false,
+                  backgroundColor: AppColors.background,
+                  surfaceTintColor: Colors.transparent,
+                  elevation: 0,
+                  scrolledUnderElevation: 0,
+                  systemOverlayStyle: AppColors.isDark
+                      ? SystemUiOverlayStyle.light
+                      : SystemUiOverlayStyle.dark,
+                  title: ValueListenableBuilder<double>(
+                    valueListenable: _titleOpacity,
+                    builder: (context, opacity, child) {
+                      return AnimatedOpacity(
+                        opacity: opacity,
+                        duration: const Duration(milliseconds: 180),
+                        child: child,
+                      );
+                    },
+                    child: Text(
+                      name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: RyvoTypography.style(
+                        fontSize: 17,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.textPrimary,
+                        letterSpacing: -0.4,
+                      ),
+                    ),
+                  ),
+                  flexibleSpace: FlexibleSpaceBar(
+                    stretchModes: const [StretchMode.zoomBackground],
+                    background: _ProfileHeader(
+                      profile: profile,
+                      name: name,
+                      onEdit: () => context.push('/profile/edit'),
+                    ),
+                  ),
+                ),
+                SliverToBoxAdapter(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const _SectionTitle('Account & Activity'),
+                      RyvoGrabListTile(
+                        icon: CupertinoIcons.creditcard,
+                        label: l10n.wallet,
+                        trailing: balance != null ? formatMoney(balance) : '--',
+                        onTap: () => context.push('/profile/wallet'),
+                      ),
+                      RyvoGrabListTile(
+                        icon: CupertinoIcons.clock,
+                        label: 'Ride history',
+                        trailing: _countLabel(jobs.length, 'ride', 'rides'),
                         onTap: () => context.go('/bookings'),
                       ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: _StatCard(
-                        icon: Icons.star_rounded,
-                        value: profile.ratingLabel,
-                        label: l10n.rating,
+                      RyvoGrabListTile(
+                        icon: CupertinoIcons.location,
+                        label: 'Saved places',
+                        trailing: _countLabel(
+                          _savedPlaceCount(jobs),
+                          'place',
+                          'places',
+                        ),
+                        onTap: () => context.push('/profile/places'),
                       ),
-                    ),
-                    if (config.customerWalletEnabled) ...[
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: _StatCard(
-                          icon: Icons.account_balance_wallet_rounded,
-                          value: balance != null ? formatMoney(balance) : '--',
-                          label: l10n.wallet,
-                          onTap: () => context.go('/wallet'),
+                      RyvoGrabListTile(
+                        icon: CupertinoIcons.money_dollar,
+                        label: 'Payment methods',
+                        trailing: method,
+                        onTap: () => context.push('/profile/payment'),
+                      ),
+                      RyvoGrabListTile(
+                        icon: CupertinoIcons.doc_text,
+                        label: 'Invoices',
+                        onTap: () => context.push('/invoices'),
+                      ),
+                      const _SectionTitle('Preferences'),
+                      RyvoGrabListTile(
+                        icon: CupertinoIcons.moon,
+                        label: 'App theme',
+                        trailing: themeLabel,
+                        onTap: () => context.push('/profile/appearance'),
+                      ),
+                      RyvoGrabListTile(
+                        icon: CupertinoIcons.bell,
+                        label: l10n.notifications,
+                        badge: unread > 0 ? 'New' : null,
+                        onTap: () => context.push('/notifications'),
+                      ),
+                      const _SectionTitle('Support & Legal'),
+                      RyvoGrabListTile(
+                        icon: CupertinoIcons.shield,
+                        label: 'Emergency contacts',
+                        onTap: () => context.push('/profile/safety'),
+                      ),
+                      RyvoGrabListTile(
+                        icon: CupertinoIcons.question_circle,
+                        label: l10n.helpSupport,
+                        onTap: () => context.push('/help'),
+                      ),
+                      RyvoGrabListTile(
+                        icon: CupertinoIcons.doc_text,
+                        label: l10n.termsAndConditions,
+                        onTap: () => context.push('/legal/terms'),
+                      ),
+                      RyvoGrabListTile(
+                        icon: CupertinoIcons.lock,
+                        label: l10n.privacyPolicy,
+                        onTap: () => context.push('/legal/privacy'),
+                      ),
+                      RyvoGrabListTile(
+                        icon: CupertinoIcons.square_arrow_right,
+                        label: l10n.signOut,
+                        showChevron: false,
+                        haptic: false,
+                        labelColor: AppColors.error,
+                        onTap: () async {
+                          HapticFeedback.mediumImpact();
+                          final confirmed =
+                              await showRyvoSignOutDialog(context);
+                          if (!confirmed || !context.mounted) return;
+                          await signOut(ref);
+                          if (context.mounted) context.go('/login');
+                        },
+                      ),
+                      Padding(
+                        padding: EdgeInsets.fromLTRB(20, 12, 20, bottomPad),
+                        child: Text(
+                          l10n.ryvoV100,
+                          style: RyvoTypography.style(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500,
+                            color: AppColors.textHint,
+                          ),
                         ),
                       ),
                     ],
-                  ],
-                ),
-                const SizedBox(height: 18),
-                _MenuGroup(
-                  title: 'Account',
-                  items: [
-                    _MenuEntry(
-                      icon: Icons.mail_outline_rounded,
-                      label: emailLabel,
-                      subtitle: (profile.email == null || profile.email!.isEmpty) ? 'Used on invoices' : profile.email,
-                      onTap: () => _editEmail(context, ref, profile.email),
-                    ),
-                    _MenuEntry(
-                      icon: Icons.notifications_none_rounded,
-                      label: l10n.notifications,
-                      onTap: () => context.push('/notifications'),
-                    ),
-                    _MenuEntry(
-                      icon: Icons.receipt_long_outlined,
-                      label: 'Invoices',
-                      onTap: () => context.push('/invoices'),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                _MenuGroup(
-                  title: l10n.settings,
-                  items: [
-                    _MenuEntry(
-                      icon: Icons.dark_mode_outlined,
-                      label: l10n.appearance,
-                      trailing: _themeModeLabel(ref.watch(themeModeProvider)),
-                      onTap: () => _showThemePicker(context, ref),
-                    ),
-                    _MenuEntry(
-                      icon: Icons.language_rounded,
-                      label: l10n.language,
-                      trailing: 'English',
-                      onTap: () {},
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                _MenuGroup(
-                  title: 'Support',
-                  items: [
-                    _MenuEntry(
-                      icon: Icons.support_agent_rounded,
-                      label: l10n.helpSupport,
-                      onTap: () => context.push('/help'),
-                    ),
-                    _MenuEntry(
-                      icon: Icons.description_outlined,
-                      label: l10n.termsAndConditions,
-                      onTap: () => context.push('/legal/terms'),
-                    ),
-                    _MenuEntry(
-                      icon: Icons.privacy_tip_outlined,
-                      label: l10n.privacyPolicy,
-                      onTap: () => context.push('/legal/privacy'),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                _SignOutButton(
-                  label: l10n.signOut,
-                  onTap: () async {
-                    await signOut(ref);
-                    if (context.mounted) context.go('/login');
-                  },
-                ),
-                const SizedBox(height: 18),
-                Center(
-                  child: Text(
-                    l10n.ryvoV100,
-                    style: GoogleFonts.poppins(fontSize: 12, color: AppColors.textHint),
                   ),
                 ),
               ],
@@ -186,77 +264,125 @@ class ProfilePage extends ConsumerWidget {
   }
 }
 
-class _IdentityHeader extends StatelessWidget {
-  const _IdentityHeader({required this.profile});
+class _ProfileHeader extends StatelessWidget {
+  const _ProfileHeader({
+    required this.profile,
+    required this.name,
+    required this.onEdit,
+  });
 
   final UserProfile profile;
+  final String name;
+  final VoidCallback onEdit;
 
   @override
   Widget build(BuildContext context) {
-    final hasEmail = profile.email != null && profile.email!.isNotEmpty;
-    return Container(
-      padding: const EdgeInsets.all(16),
+    final email = profile.email?.trim() ?? '';
+    return DecoratedBox(
       decoration: BoxDecoration(
-        color: AppColors.card,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: AppColors.divider),
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: AppColors.isDark
+              ? const [AppColors.modalDark, AppColors.backgroundDark]
+              : const [AppColors.headerMint, AppColors.backgroundLight],
+        ),
       ),
-      child: Row(
-        children: [
-          _Avatar(profile: profile),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  profile.fullName,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: GoogleFonts.poppins(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.textPrimary,
-                    height: 1.2,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Row(
+      child: Padding(
+        padding: EdgeInsets.fromLTRB(
+          20,
+          MediaQuery.paddingOf(context).top,
+          20,
+          8,
+        ),
+        child: Align(
+          alignment: const Alignment(0, -0.2),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              _Avatar(profile: profile),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Icon(Icons.star_rounded, color: Color(0xFFF5B400), size: 16),
-                    const SizedBox(width: 4),
                     Text(
-                      profile.ratingLabel,
-                      style: GoogleFonts.poppins(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
+                      name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: RyvoTypography.style(
+                        fontSize: 22,
+                        fontWeight: FontWeight.w700,
                         color: AppColors.textPrimary,
+                        letterSpacing: -0.5,
+                        height: 1.1,
                       ),
                     ),
+                    const SizedBox(height: 4),
                     Text(
-                      '  rider',
-                      style: GoogleFonts.poppins(fontSize: 13, color: AppColors.textSecondary),
+                      profile.phone,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: RyvoTypography.style(
+                        fontSize: 14,
+                        color: AppColors.textSecondary,
+                        tabular: true,
+                      ),
                     ),
+                    if (email.isNotEmpty) ...[
+                      const SizedBox(height: 2),
+                      Text(
+                        email,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: RyvoTypography.style(
+                          fontSize: 13,
+                          color: AppColors.textSecondary,
+                        ),
+                      ),
+                    ],
                   ],
                 ),
-                const SizedBox(height: 2),
-                Text(
-                  profile.phone,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: GoogleFonts.poppins(fontSize: 13, color: AppColors.textSecondary),
-                ),
-                if (hasEmail)
-                  Text(
-                    profile.email!,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: GoogleFonts.poppins(fontSize: 12, color: AppColors.textHint),
-                  ),
-              ],
+              ),
+              const SizedBox(width: 8),
+              _EditPill(onTap: onEdit),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _EditPill extends StatelessWidget {
+  const _EditPill({required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: AppColors.surface,
+      borderRadius: BorderRadius.circular(999),
+      child: InkWell(
+        onTap: () {
+          HapticFeedback.lightImpact();
+          onTap();
+        },
+        borderRadius: BorderRadius.circular(999),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          child: Text(
+            'Edit Profile',
+            style: RyvoTypography.style(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: AppColors.textPrimary,
+              letterSpacing: -0.2,
             ),
           ),
-        ],
+        ),
       ),
     );
   }
@@ -272,15 +398,20 @@ class _Avatar extends StatelessWidget {
     final url = profile.avatarUrl?.trim();
     final initials = Text(
       profile.initials,
-      style: GoogleFonts.poppins(fontSize: 24, fontWeight: FontWeight.w700, color: AppColors.primaryDark),
+      style: RyvoTypography.style(
+        fontSize: 18,
+        fontWeight: FontWeight.w700,
+        color: AppColors.textPrimary,
+        letterSpacing: -0.4,
+      ),
     );
     return Container(
-      width: 72,
-      height: 72,
+      width: 64,
+      height: 64,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
-        color: AppColors.primaryLight,
-        border: Border.all(color: AppColors.primary, width: 2),
+        color: AppColors.card,
+        border: Border.all(color: AppColors.divider),
       ),
       clipBehavior: Clip.antiAlias,
       child: url != null && url.isNotEmpty
@@ -294,413 +425,134 @@ class _Avatar extends StatelessWidget {
   }
 }
 
-class _StatCard extends StatelessWidget {
-  const _StatCard({
-    required this.icon,
-    required this.value,
-    required this.label,
-    this.onTap,
-  });
-
-  final IconData icon;
-  final String value;
-  final String label;
-  final VoidCallback? onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: AppColors.card,
-      borderRadius: BorderRadius.circular(16),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(16),
-        child: Container(
-          padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: AppColors.divider),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Icon(icon, size: 18, color: AppColors.primary),
-              const SizedBox(height: 8),
-              Text(
-                value,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: GoogleFonts.poppins(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.textPrimary,
-                  height: 1.1,
-                ),
-              ),
-              const SizedBox(height: 2),
-              Text(
-                label,
-                style: GoogleFonts.poppins(fontSize: 12, color: AppColors.textSecondary),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _MenuEntry {
-  const _MenuEntry({
-    required this.icon,
-    required this.label,
-    required this.onTap,
-    this.subtitle,
-    this.trailing,
-  });
-
-  final IconData icon;
-  final String label;
-  final String? subtitle;
-  final String? trailing;
-  final VoidCallback onTap;
-}
-
-class _MenuGroup extends StatelessWidget {
-  const _MenuGroup({required this.title, required this.items});
-
-  final String title;
-  final List<_MenuEntry> items;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _SectionLabel(title),
-        const SizedBox(height: 8),
-        Container(
-          decoration: BoxDecoration(
-            color: AppColors.card,
-            borderRadius: BorderRadius.circular(18),
-            border: Border.all(color: AppColors.divider),
-          ),
-          child: Column(
-            children: [
-              for (var i = 0; i < items.length; i++) ...[
-                _MenuTile(entry: items[i]),
-                if (i != items.length - 1) Divider(height: 1, indent: 62, color: AppColors.divider),
-              ],
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _MenuTile extends StatelessWidget {
-  const _MenuTile({required this.entry});
-
-  final _MenuEntry entry;
-
-  @override
-  Widget build(BuildContext context) {
-    return InkWell(
-      onTap: entry.onTap,
-      borderRadius: BorderRadius.circular(18),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-        child: Row(
-          children: [
-            Container(
-              width: 38,
-              height: 38,
-              decoration: const BoxDecoration(
-                color: AppColors.primaryLight,
-                shape: BoxShape.circle,
-              ),
-              child: Icon(entry.icon, size: 20, color: AppColors.primaryDark),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    entry.label,
-                    style: GoogleFonts.poppins(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.textPrimary,
-                    ),
-                  ),
-                  if (entry.subtitle != null)
-                    Text(
-                      entry.subtitle!,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: GoogleFonts.poppins(fontSize: 12, color: AppColors.textSecondary),
-                    ),
-                ],
-              ),
-            ),
-            if (entry.trailing != null)
-              Padding(
-                padding: const EdgeInsets.only(right: 2),
-                child: Text(
-                  entry.trailing!,
-                  style: GoogleFonts.poppins(fontSize: 13, color: AppColors.textSecondary),
-                ),
-              ),
-            const Icon(Icons.chevron_right_rounded, color: AppColors.grey400, size: 22),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _SignOutButton extends StatelessWidget {
-  const _SignOutButton({required this.label, required this.onTap});
-
-  final String label;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: AppColors.card,
-      borderRadius: BorderRadius.circular(18),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(18),
-        child: Container(
-          height: 52,
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(18),
-            border: Border.all(color: AppColors.error.withValues(alpha: 0.35)),
-          ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Icon(Icons.logout_rounded, color: AppColors.error, size: 20),
-              const SizedBox(width: 8),
-              Text(
-                label,
-                style: GoogleFonts.poppins(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w600,
-                  color: AppColors.error,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _SectionLabel extends StatelessWidget {
-  const _SectionLabel(this.title);
+class _SectionTitle extends StatelessWidget {
+  const _SectionTitle(this.title);
 
   final String title;
 
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(left: 4),
+      padding: const EdgeInsets.fromLTRB(16, 32, 16, 12),
       child: Text(
         title,
-        style: GoogleFonts.poppins(
-          fontSize: 13,
-          fontWeight: FontWeight.w600,
-          color: AppColors.textSecondary,
+        style: RyvoTypography.style(
+          fontSize: 20,
+          fontWeight: FontWeight.w700,
+          color: AppColors.textPrimary,
+          letterSpacing: -0.5,
         ),
       ),
     );
   }
 }
 
-String _themeModeLabel(ThemeMode mode) {
-  return switch (mode) {
-    ThemeMode.light => 'Light',
-    ThemeMode.dark => 'Dark',
-    ThemeMode.system => 'System',
-  };
-}
-
-Future<void> _editEmail(BuildContext context, WidgetRef ref, String? current) async {
-  final email = await showDialog<String>(
-    context: context,
-    builder: (ctx) => _InvoiceEmailDialog(initialEmail: current ?? ''),
-  );
-  if (email == null) return;
-  final trimmed = email.trim();
-  if (trimmed.isEmpty || !trimmed.contains('@')) return;
-  try {
-    await ref.read(profileRepositoryProvider).updateProfile(email: trimmed);
-    ref.invalidate(profileProvider);
-  } catch (e) {
-    if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
-    }
-  }
-}
-
-Future<void> _showThemePicker(BuildContext context, WidgetRef ref) async {
-  final selected = await showModalBottomSheet<ThemeMode>(
-    context: context,
-    backgroundColor: AppColors.modal,
-    shape: const RoundedRectangleBorder(
-      borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-    ),
-    builder: (context) {
-      final current = ref.read(themeModeProvider);
-      return SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(24, 16, 24, 24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                AppLocalizations.of(context).appearance,
-                style: GoogleFonts.poppins(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w600,
-                  color: AppColors.textPrimary,
-                ),
-              ),
-              const SizedBox(height: 16),
-              _ThemeOption(
-                label: AppLocalizations.of(context).light,
-                icon: Icons.light_mode_outlined,
-                selected: current == ThemeMode.light,
-                onTap: () => Navigator.pop(context, ThemeMode.light),
-              ),
-              _ThemeOption(
-                label: AppLocalizations.of(context).dark,
-                icon: Icons.dark_mode_outlined,
-                selected: current == ThemeMode.dark,
-                onTap: () => Navigator.pop(context, ThemeMode.dark),
-              ),
-              _ThemeOption(
-                label: AppLocalizations.of(context).system,
-                icon: Icons.brightness_auto_outlined,
-                selected: current == ThemeMode.system,
-                onTap: () => Navigator.pop(context, ThemeMode.system),
-              ),
-            ],
-          ),
-        ),
-      );
-    },
-  );
-
-  if (selected != null) {
-    ref.read(themeModeProvider.notifier).state = selected;
-  }
-}
-
-class _InvoiceEmailDialog extends StatefulWidget {
-  const _InvoiceEmailDialog({required this.initialEmail});
-
-  final String initialEmail;
-
-  @override
-  State<_InvoiceEmailDialog> createState() => _InvoiceEmailDialogState();
-}
-
-class _InvoiceEmailDialogState extends State<_InvoiceEmailDialog> {
-  late final TextEditingController _controller;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = TextEditingController(text: widget.initialEmail);
-  }
-
-  @override
-  void dispose() {
-    // The dialog route and keyboard inset animation can still update the
-    // TextField in the same frame as dispose. Drop the controller after that.
-    final controller = _controller;
-    WidgetsBinding.instance.addPostFrameCallback((_) => controller.dispose());
-    super.dispose();
-  }
+class _ProfileLoading extends StatelessWidget {
+  const _ProfileLoading();
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
-      backgroundColor: AppColors.card,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-      title: Text(
-        'Email for invoices',
-        style: GoogleFonts.poppins(fontWeight: FontWeight.w700, color: AppColors.textPrimary),
-      ),
-      content: TextField(
-        controller: _controller,
-        keyboardType: TextInputType.emailAddress,
-        autofocus: true,
-        style: GoogleFonts.poppins(color: AppColors.textPrimary),
-        decoration: const InputDecoration(hintText: 'you@email.com'),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () {
-            FocusManager.instance.primaryFocus?.unfocus();
-            Navigator.pop(context);
-          },
-          child: const Text('Cancel'),
-        ),
-        FilledButton(
-          style: FilledButton.styleFrom(
-            backgroundColor: AppColors.primary,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+    return CustomScrollView(
+      physics: const BouncingScrollPhysics(),
+      slivers: [
+        SliverAppBar(
+          pinned: true,
+          expandedHeight: 220,
+          automaticallyImplyLeading: false,
+          backgroundColor: AppColors.background,
+          flexibleSpace: FlexibleSpaceBar(
+            background: DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: AppColors.isDark
+                      ? const [AppColors.modalDark, AppColors.backgroundDark]
+                      : const [AppColors.headerMint, AppColors.backgroundLight],
+                ),
+              ),
+            ),
           ),
-          onPressed: () {
-            final email = _controller.text;
-            FocusManager.instance.primaryFocus?.unfocus();
-            Navigator.pop(context, email);
-          },
-          child: const Text('Save'),
+        ),
+        const SliverToBoxAdapter(
+          child: Padding(
+            padding: EdgeInsets.fromLTRB(16, 24, 16, 24),
+            child: Column(
+              children: [
+                ShimmerCard(height: 56, borderRadius: 12),
+                SizedBox(height: 12),
+                ShimmerCard(height: 56, borderRadius: 12),
+                SizedBox(height: 12),
+                ShimmerCard(height: 56, borderRadius: 12),
+              ],
+            ),
+          ),
         ),
       ],
     );
   }
 }
 
-class _ThemeOption extends StatelessWidget {
-  const _ThemeOption({
-    required this.label,
-    required this.icon,
-    required this.selected,
-    required this.onTap,
+class _ProfileMessage extends StatelessWidget {
+  const _ProfileMessage({
+    required this.message,
+    this.action,
+    this.onAction,
   });
 
-  final String label;
-  final IconData icon;
-  final bool selected;
-  final VoidCallback onTap;
+  final String message;
+  final String? action;
+  final VoidCallback? onAction;
 
   @override
   Widget build(BuildContext context) {
-    return ListTile(
-      onTap: onTap,
-      contentPadding: EdgeInsets.zero,
-      leading: Icon(icon, color: selected ? AppColors.primary : AppColors.textSecondary),
-      title: Text(
-        label,
-        style: GoogleFonts.poppins(
-          fontSize: 15,
-          fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
-          color: AppColors.textPrimary,
+    return SafeArea(
+      child: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                message,
+                textAlign: TextAlign.center,
+                style: RyvoTypography.style(color: AppColors.textPrimary),
+              ),
+              if (action != null && onAction != null) ...[
+                const SizedBox(height: 12),
+                TextButton(onPressed: onAction, child: Text(action!)),
+              ],
+            ],
+          ),
         ),
       ),
-      trailing: selected ? const Icon(Icons.check, color: AppColors.primary) : null,
     );
   }
+}
+
+int _savedPlaceCount(List<JobModel> jobs) {
+  final seen = <String>{};
+  for (final job in jobs) {
+    final address = job.dropoffAddress?.trim() ?? '';
+    if (address.isEmpty) continue;
+    if (job.status == 'cancelled' || job.status.startsWith('cancelled')) {
+      continue;
+    }
+    seen.add(address.toLowerCase());
+  }
+  return seen.length;
+}
+
+String _countLabel(int count, String singular, String plural) {
+  return '$count ${count == 1 ? singular : plural}';
+}
+
+String _methodLabel(String method, AppLocalizations l10n) {
+  return switch (method) {
+    'wallet' => l10n.wallet,
+    'cash' => l10n.cash,
+    'google_pay' => l10n.googlePay,
+    'apple_pay' => l10n.applePay,
+    _ => l10n.card,
+  };
 }

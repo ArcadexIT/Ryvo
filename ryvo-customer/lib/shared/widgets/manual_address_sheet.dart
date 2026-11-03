@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:google_fonts/google_fonts.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/theme/app_spacing.dart';
+import '../../core/theme/app_theme.dart';
+import 'ryvo_bottom_sheet.dart';
 import '../providers/app_providers.dart';
 import 'ryvo_button.dart';
 import 'ryvo_text_field.dart';
@@ -13,14 +15,9 @@ Future<bool> showManualAddressSheet({
   required WidgetRef ref,
   String? initialAddress,
 }) async {
-  final result = await showModalBottomSheet<bool>(
+  final result = await showRyvoModalSheet<bool>(
     context: context,
-    isScrollControlled: true,
-    backgroundColor: AppColors.modal,
-    shape: const RoundedRectangleBorder(
-      borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-    ),
-    builder: (ctx) => _ManualAddressSheet(
+    child: _ManualAddressSheet(
       initialAddress: initialAddress,
     ),
   );
@@ -33,7 +30,8 @@ class _ManualAddressSheet extends ConsumerStatefulWidget {
   final String? initialAddress;
 
   @override
-  ConsumerState<_ManualAddressSheet> createState() => _ManualAddressSheetState();
+  ConsumerState<_ManualAddressSheet> createState() =>
+      _ManualAddressSheetState();
 }
 
 class _ManualAddressSheetState extends ConsumerState<_ManualAddressSheet> {
@@ -46,7 +44,9 @@ class _ManualAddressSheetState extends ConsumerState<_ManualAddressSheet> {
     super.initState();
     final initial = widget.initialAddress?.trim() ?? '';
     _controller = TextEditingController(
-      text: (initial.isEmpty || initial == 'Locating your position…') ? '' : initial,
+      text: (initial.isEmpty || initial == 'Locating your position…')
+          ? ''
+          : initial,
     );
   }
 
@@ -82,36 +82,25 @@ class _ManualAddressSheetState extends ConsumerState<_ManualAddressSheet> {
   Widget build(BuildContext context) {
     final bottomInset = MediaQuery.of(context).viewInsets.bottom;
     return Padding(
-      padding: EdgeInsets.fromLTRB(20, 12, 20, 16 + bottomInset),
+      padding: EdgeInsets.fromLTRB(AppSpacing.s20, AppSpacing.sm,
+          AppSpacing.s20, AppSpacing.md + bottomInset),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Center(
-            child: Container(
-              width: 40,
-              height: 4,
-              margin: const EdgeInsets.only(bottom: 16),
-              decoration: BoxDecoration(
-                color: AppColors.divider,
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-          ),
           Text(
             AppLocalizations.of(context).enterAddress,
-            style: GoogleFonts.poppins(
-              fontSize: 18,
-              fontWeight: FontWeight.w600,
-              color: AppColors.textPrimary,
-            ),
+            style: RyvoTypography.heading(
+                fontSize: 18, color: AppColors.textPrimary),
           ),
-          const SizedBox(height: 6),
+          AppSpacing.h8,
           Text(
-            AppLocalizations.of(context).typeTheAssistanceAddressThenConfirmItOnTheMap,
-            style: GoogleFonts.poppins(fontSize: 13, color: AppColors.textSecondary),
+            AppLocalizations.of(context)
+                .typeTheAssistanceAddressThenConfirmItOnTheMap,
+            style: RyvoTypography.style(
+                fontSize: 13, color: AppColors.textSecondary),
           ),
-          const SizedBox(height: 16),
+          AppSpacing.h16,
           RyvoTextField(
             hint: AppLocalizations.of(context).streetCityOrLandmark,
             label: AppLocalizations.of(context).assistanceAddress,
@@ -123,19 +112,21 @@ class _ManualAddressSheetState extends ConsumerState<_ManualAddressSheet> {
             },
           ),
           if (_error != null) ...[
-            const SizedBox(height: 8),
+            AppSpacing.h8,
             Text(
               _error!,
-              style: GoogleFonts.poppins(fontSize: 12, color: AppColors.error),
+              style: RyvoTypography.style(fontSize: 12, color: AppColors.error),
             ),
           ],
-          const SizedBox(height: 16),
+          AppSpacing.h16,
           RyvoButton(
-            label: _submitting ? AppLocalizations.of(context).findingAddress : AppLocalizations.of(context).useThisAddress,
+            label: _submitting
+                ? AppLocalizations.of(context).findingAddress
+                : AppLocalizations.of(context).useThisAddress,
             isLoading: _submitting,
             onPressed: _submitting ? null : _submit,
           ),
-          const SizedBox(height: 8),
+          AppSpacing.h8,
         ],
       ),
     );

@@ -122,14 +122,16 @@ class TripMarkers {
     paint.color = const Color(0xFFD1D5DB);
     canvas.drawRRect(
       RRect.fromRectAndRadius(
-        Rect.fromCenter(center: const Offset(cx, cy - 5.2), width: 8.4, height: 5.4),
+        Rect.fromCenter(
+            center: const Offset(cx, cy - 5.2), width: 8.4, height: 5.4),
         const Radius.circular(1.4),
       ),
       paint,
     );
     canvas.drawRRect(
       RRect.fromRectAndRadius(
-        Rect.fromCenter(center: const Offset(cx, cy + 5.6), width: 8.4, height: 4.6),
+        Rect.fromCenter(
+            center: const Offset(cx, cy + 5.6), width: 8.4, height: 4.6),
         const Radius.circular(1.4),
       ),
       paint,

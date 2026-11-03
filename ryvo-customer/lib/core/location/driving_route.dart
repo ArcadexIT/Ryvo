@@ -72,7 +72,8 @@ class DrivingRouteService {
       }
       final points = decodePolyline(encoded);
       if (points.length < 2) return null;
-      return DrivingRoute(points: points, durationMin: durationMin, distanceKm: distanceKm);
+      return DrivingRoute(
+          points: points, durationMin: durationMin, distanceKm: distanceKm);
     } catch (_) {
       return _fetchOsrm(
         originLat: originLat,
@@ -102,7 +103,8 @@ class DrivingRouteService {
       final data = response.data;
       if (data == null || data['code'] != 'Ok') return null;
       final routes = data['routes'];
-      if (routes is! List || routes.isEmpty || routes.first is! Map) return null;
+      if (routes is! List || routes.isEmpty || routes.first is! Map)
+        return null;
       final route = routes.first as Map;
       final encoded = route['geometry'];
       if (encoded is! String || encoded.isEmpty) return null;

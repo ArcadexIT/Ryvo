@@ -187,37 +187,37 @@ abstract class AppLocalizations {
   /// No description provided for @instantJumpStart.
   ///
   /// In en, this message translates to:
-  /// **'Request a ride'**
+  /// **'Move Smarter'**
   String get instantJumpStart;
 
   /// No description provided for @strandedWithADeadBatteryGetAVerifiedProviderToYo.
   ///
   /// In en, this message translates to:
-  /// **'Set a pickup and dropoff. A nearby driver accepts, and you pay when you arrive.'**
+  /// **'A live route from pickup to dropoff,\nwith an ETA you can trust.'**
   String get strandedWithADeadBatteryGetAVerifiedProviderToYo;
 
   /// No description provided for @verifiedTrusted.
   ///
   /// In en, this message translates to:
-  /// **'Verified & Trusted'**
+  /// **'Ride, Bid, or Send Parcels'**
   String get verifiedTrusted;
 
   /// No description provided for @everyProviderIsBackgroundCheckedCertifiedAndRate.
   ///
   /// In en, this message translates to:
-  /// **'Every driver is licence-checked, insured, and rated by riders.'**
+  /// **'Three ways to move. The fare ticks\nlive before you confirm.'**
   String get everyProviderIsBackgroundCheckedCertifiedAndRate;
 
   /// No description provided for @liveTracking.
   ///
   /// In en, this message translates to:
-  /// **'Live Tracking'**
+  /// **'Real-Time Tracking & Safety'**
   String get liveTracking;
 
   /// No description provided for @watchYourProviderNavigateToYouInRealTimeKnowExac.
   ///
   /// In en, this message translates to:
-  /// **'Watch your driver on the map, from pickup through to dropoff.'**
+  /// **'Follow your driver in real time,\nwith a verified badge on every trip.'**
   String get watchYourProviderNavigateToYouInRealTimeKnowExac;
 
   /// No description provided for @skip.
@@ -2133,6 +2133,60 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Anyone with this link can follow the car until the trip ends.'**
   String get tripShareHint;
+
+  /// No description provided for @activity.
+  ///
+  /// In en, this message translates to:
+  /// **'Activity'**
+  String get activity;
+
+  /// No description provided for @upcoming.
+  ///
+  /// In en, this message translates to:
+  /// **'Upcoming'**
+  String get upcoming;
+
+  /// No description provided for @past.
+  ///
+  /// In en, this message translates to:
+  /// **'Past'**
+  String get past;
+
+  /// No description provided for @noUpcomingRides.
+  ///
+  /// In en, this message translates to:
+  /// **'No upcoming rides'**
+  String get noUpcomingRides;
+
+  /// No description provided for @noPastRides.
+  ///
+  /// In en, this message translates to:
+  /// **'No past rides'**
+  String get noPastRides;
+
+  /// No description provided for @bookARide.
+  ///
+  /// In en, this message translates to:
+  /// **'Book a Ride'**
+  String get bookARide;
+
+  /// No description provided for @couldNotLoadRides.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t load your rides'**
+  String get couldNotLoadRides;
+
+  /// No description provided for @todayAt.
+  ///
+  /// In en, this message translates to:
+  /// **'Today, {time}'**
+  String todayAt(String time);
+
+  /// No description provided for @yesterdayAt.
+  ///
+  /// In en, this message translates to:
+  /// **'Yesterday, {time}'**
+  String yesterdayAt(String time);
 }
 
 class _AppLocalizationsDelegate

@@ -54,15 +54,11 @@ class _ShareTripButtonState extends ConsumerState<ShareTripButton> {
 
   Future<void> _showExisting(String url) async {
     final l10n = AppLocalizations.of(context);
-    await showModalBottomSheet<void>(
+    await showRyvoModalSheet<void>(
       context: context,
-      backgroundColor: AppColors.surface,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      builder: (sheetContext) {
-        return SafeArea(
-          child: Padding(
+      child: Builder(
+        builder: (sheetContext) {
+          return Padding(
             padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -100,9 +96,9 @@ class _ShareTripButtonState extends ConsumerState<ShareTripButton> {
                 ),
               ],
             ),
-          ),
-        );
-      },
+          );
+        },
+      ),
     );
   }
 

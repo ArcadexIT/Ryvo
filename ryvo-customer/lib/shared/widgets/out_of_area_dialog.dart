@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:google_fonts/google_fonts.dart';
 
 import '../../core/theme/app_colors.dart';
+import '../../core/theme/app_spacing.dart';
+import '../../core/theme/app_theme.dart';
 import '../providers/app_providers.dart';
+import 'ryvo_button.dart';
 
 /// True when [lat]/[lng] is inside an active customer service zone from the
 /// admin panel. Null when the check could not be completed.
@@ -38,19 +41,24 @@ Future<bool> showServiceUnavailableDialog(
     barrierDismissible: false,
     barrierColor: Colors.black54,
     builder: (ctx) => Dialog(
-      backgroundColor: Colors.white,
-      surfaceTintColor: Colors.white,
-      insetPadding: const EdgeInsets.symmetric(horizontal: 28),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      elevation: 0,
+      backgroundColor: AppColors.modal,
+      surfaceTintColor: AppColors.modal,
+      insetPadding: const EdgeInsets.symmetric(horizontal: AppSpacing.s24),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(20),
+        side: BorderSide(color: AppColors.divider),
+      ),
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(24, 22, 16, 12),
+        padding: const EdgeInsets.fromLTRB(
+            AppSpacing.s24, AppSpacing.s24, AppSpacing.md, AppSpacing.md),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Container(
-              width: 52,
-              height: 52,
+              width: 48,
+              height: 48,
               decoration: const BoxDecoration(
                 color: AppColors.primaryLight,
                 shape: BoxShape.circle,
@@ -58,57 +66,62 @@ Future<bool> showServiceUnavailableDialog(
               child: const Icon(
                 Icons.location_off_rounded,
                 color: AppColors.primary,
-                size: 26,
+                size: 24,
               ),
             ),
-            const SizedBox(height: 14),
+            AppSpacing.h16,
             Text(
               'Rides unavailable',
-              style: GoogleFonts.poppins(
-                fontSize: 18,
-                fontWeight: FontWeight.w700,
-                color: const Color(0xFF111827),
-              ),
+              style: RyvoTypography.heading(
+                  fontSize: 18, color: AppColors.textPrimary),
             ),
-            const SizedBox(height: 8),
+            AppSpacing.h8,
             Text(
               'RYVO is unavailable in the current area',
-              style: GoogleFonts.poppins(
+              style: RyvoTypography.style(
                 fontSize: 14,
                 height: 1.4,
-                color: const Color(0xFF4B5563),
+                color: AppColors.textSecondary,
               ),
             ),
-            const SizedBox(height: 8),
+            AppSpacing.h8,
             Row(
               mainAxisAlignment: MainAxisAlignment.end,
               children: [
                 TextButton(
-                  onPressed: () => Navigator.pop(ctx, false),
+                  onPressed: () {
+                    HapticFeedback.lightImpact();
+                    Navigator.pop(ctx, false);
+                  },
                   child: Text(
                     'Close',
-                    style: GoogleFonts.poppins(
-                      color: AppColors.primary,
-                      fontWeight: FontWeight.w600,
-                      fontSize: 15,
-                    ),
+                    style: RyvoTypography.button(
+                        fontSize: 15, color: AppColors.primary),
                   ),
                 ),
-                const SizedBox(width: 4),
-                FilledButton(
-                  style: FilledButton.styleFrom(
-                    backgroundColor: AppColors.primary,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 18, vertical: 10),
-                    shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(24)),
-                  ),
-                  onPressed: () => Navigator.pop(ctx, true),
-                  child: Text(
-                    'Notify me',
-                    style: GoogleFonts.poppins(
-                        fontWeight: FontWeight.w600, fontSize: 15),
+                AppSpacing.w4,
+                RyvoPressScale(
+                  child: FilledButton(
+                    style: FilledButton.styleFrom(
+                      backgroundColor: AppColors.cta,
+                      foregroundColor: AppColors.onCta,
+                      minimumSize: const Size(64, 40),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: AppSpacing.md, vertical: AppSpacing.xs),
+                      elevation: 0,
+                      shadowColor: Colors.transparent,
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(20)),
+                    ),
+                    onPressed: () {
+                      HapticFeedback.lightImpact();
+                      Navigator.pop(ctx, true);
+                    },
+                    child: Text(
+                      'Notify me',
+                      style: RyvoTypography.button(
+                          fontSize: 15, color: AppColors.onCta),
+                    ),
                   ),
                 ),
               ],

@@ -1,66 +1,223 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:google_fonts/google_fonts.dart';
-import 'package:intl/intl.dart';
-import '../../../../core/theme/app_colors.dart';
-import '../../../../data/models/models.dart';
-import '../../../../shared/providers/app_providers.dart';
+import 'package:go_router/go_router.dart';
 import 'package:ryvo_customer/l10n/app_localizations.dart';
 
-class BookingsPage extends ConsumerWidget {
+import '../../../../core/theme/app_colors.dart';
+import '../../../../core/theme/app_spacing.dart';
+import '../../../../core/theme/app_theme.dart';
+import '../../../../data/models/models.dart';
+import '../../../../shared/providers/app_providers.dart';
+import '../../../../shared/widgets/ryvo_button.dart';
+import '../../../home/presentation/pages/shell_page.dart';
+import '../widgets/ryvo_booking_card.dart';
+
+class BookingsPage extends ConsumerStatefulWidget {
   const BookingsPage({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<BookingsPage> createState() => _BookingsPageState();
+}
+
+class _BookingsPageState extends ConsumerState<BookingsPage> {
+  /// False shows upcoming rides. True shows past rides.
+  bool _past = false;
+
+  Future<void> _reload() async {
+    ref.invalidate(jobsListProvider);
+    await ref.read(jobsListProvider.future);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     final jobsAsync = ref.watch(jobsListProvider);
+    final bottomInset = RyvoFloatingNav.reservedHeight(context);
 
     return Scaffold(
       backgroundColor: AppColors.background,
-      appBar: AppBar(
-        backgroundColor: AppColors.background,
-        title: Text(AppLocalizations.of(context).myBookings, style: GoogleFonts.poppins(fontSize: 20, fontWeight: FontWeight.w700)),
-        automaticallyImplyLeading: false,
-      ),
       body: SafeArea(
-        child: RefreshIndicator(
-          color: AppColors.primary,
-          onRefresh: () async {
-            ref.invalidate(jobsListProvider);
-            await ref.read(jobsListProvider.future);
-          },
-          child: jobsAsync.when(
-            loading: () => const Center(child: CircularProgressIndicator(color: AppColors.primary)),
-            error: (e, _) => ListView(
-              physics: const AlwaysScrollableScrollPhysics(),
-              children: [Padding(padding: const EdgeInsets.all(24), child: Text(e.toString()))],
-            ),
-            data: (jobs) {
-              final totalSpent = jobs
-                  .where((j) => j.status == 'completed')
-                  .fold<double>(0, (sum, j) => sum + j.displayFare);
-
-              return SingleChildScrollView(
-                physics: const AlwaysScrollableScrollPhysics(),
-                padding: const EdgeInsets.all(24),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Expanded(child: _StatCard(label: AppLocalizations.of(context).totalJobs, value: '${jobs.length}', icon: Icons.receipt_long, color: AppColors.primary)),
-                        const SizedBox(width: 12),
-                        Expanded(child: _StatCard(label: AppLocalizations.of(context).totalSpent, value: formatMoney(totalSpent), icon: Icons.payments_outlined, color: AppColors.info)),
-                      ],
-                    ),
-                    const SizedBox(height: 24),
-                    Text(AppLocalizations.of(context).recentBookings, style: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.w600, color: AppColors.textPrimary)),
-                    const SizedBox(height: 16),
-                    if (jobs.isEmpty)
-                      Text(AppLocalizations.of(context).noBookingsYet, style: GoogleFonts.poppins(color: AppColors.textSecondary))
-                    else
-                      ...jobs.map((job) => _BookingCard(job: job)),
-                  ],
+        bottom: false,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(
+                AppSpacing.md,
+                AppSpacing.xs,
+                AppSpacing.md,
+                0,
+              ),
+              child: Text(
+                l10n.activity,
+                style: RyvoTypography.heading(
+                  fontSize: 32,
+                  color: AppColors.textPrimary,
+                  letterSpacing: -0.8,
                 ),
+              ),
+            ),
+            const SizedBox(height: AppSpacing.md),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
+              child: _ActivitySegmentedControl(
+                past: _past,
+                upcomingLabel: l10n.upcoming,
+                pastLabel: l10n.past,
+                onChanged: (past) => setState(() => _past = past),
+              ),
+            ),
+            const SizedBox(height: AppSpacing.md),
+            Expanded(
+              child: jobsAsync.when(
+                loading: () =>
+                    RyvoBookingSkeletonList(bottomInset: bottomInset),
+                error: (error, _) => _RefreshFill(
+                  onRefresh: _reload,
+                  bottomInset: bottomInset,
+                  child: Text(
+                    l10n.couldNotLoadRides,
+                    textAlign: TextAlign.center,
+                    style: RyvoTypography.style(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.textSecondary,
+                      letterSpacing: -0.2,
+                    ),
+                  ),
+                ),
+                data: (jobs) {
+                  final rides = [
+                    for (final job in jobs)
+                      if (_isPastRide(job) == _past) job,
+                  ]..sort(
+                      (a, b) => bookingActivityStamp(b)
+                          .compareTo(bookingActivityStamp(a)),
+                    );
+                  if (rides.isEmpty) {
+                    return _RefreshFill(
+                      onRefresh: _reload,
+                      bottomInset: bottomInset,
+                      child: _EmptyBookings(
+                        message:
+                            _past ? l10n.noPastRides : l10n.noUpcomingRides,
+                        actionLabel: l10n.bookARide,
+                        onBook: () => context.go('/home'),
+                      ),
+                    );
+                  }
+                  return RefreshIndicator(
+                    color: AppColors.primary,
+                    onRefresh: _reload,
+                    child: ListView.builder(
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      padding: EdgeInsets.fromLTRB(
+                        AppSpacing.md,
+                        0,
+                        AppSpacing.md,
+                        AppSpacing.md + bottomInset,
+                      ),
+                      itemCount: rides.length,
+                      itemBuilder: (context, index) {
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+                          child: RyvoBookingCard(job: rides[index]),
+                        );
+                      },
+                    ),
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+bool _isPastRide(JobModel job) {
+  return switch (job.status) {
+    'completed' ||
+    'cancelled_by_customer' ||
+    'cancelled_by_provider' ||
+    'cancelled_by_admin' ||
+    'no_provider_found' =>
+      true,
+    _ => false,
+  };
+}
+
+class _ActivitySegmentedControl extends StatelessWidget {
+  const _ActivitySegmentedControl({
+    required this.past,
+    required this.upcomingLabel,
+    required this.pastLabel,
+    required this.onChanged,
+  });
+
+  final bool past;
+  final String upcomingLabel;
+  final String pastLabel;
+  final ValueChanged<bool> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final pill = AppColors.isDark ? AppColors.white : AppColors.modal;
+    final selectedColor =
+        AppColors.isDark ? AppColors.obsidian : AppColors.textPrimary;
+
+    return SizedBox(
+      height: 40,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: AppColors.surface,
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(AppSpacing.xxs),
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final segmentWidth = constraints.maxWidth / 2;
+              return Stack(
+                alignment: Alignment.center,
+                fit: StackFit.expand,
+                children: [
+                  AnimatedAlign(
+                    duration: const Duration(milliseconds: 220),
+                    curve: Curves.fastOutSlowIn,
+                    alignment: Alignment(past ? 1 : -1, 0),
+                    child: SizedBox(
+                      width: segmentWidth,
+                      height: constraints.maxHeight,
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          color: pill,
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                      ),
+                    ),
+                  ),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      _SegmentLabel(
+                        label: upcomingLabel,
+                        selected: !past,
+                        selectedColor: selectedColor,
+                        onTap: () => _select(false),
+                      ),
+                      _SegmentLabel(
+                        label: pastLabel,
+                        selected: past,
+                        selectedColor: selectedColor,
+                        onTap: () => _select(true),
+                      ),
+                    ],
+                  ),
+                ],
               );
             },
           ),
@@ -68,126 +225,140 @@ class BookingsPage extends ConsumerWidget {
       ),
     );
   }
+
+  void _select(bool value) {
+    if (value == past) return;
+    HapticFeedback.selectionClick();
+    onChanged(value);
+  }
 }
 
-class _StatCard extends StatelessWidget {
+class _SegmentLabel extends StatelessWidget {
+  const _SegmentLabel({
+    required this.label,
+    required this.selected,
+    required this.selectedColor,
+    required this.onTap,
+  });
+
   final String label;
-  final String value;
-  final IconData icon;
-  final Color color;
-  const _StatCard({required this.label, required this.value, required this.icon, required this.color});
+  final bool selected;
+  final Color selectedColor;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: AppColors.divider),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 40,
-            height: 40,
-            decoration: BoxDecoration(color: color.withOpacity(0.15), borderRadius: BorderRadius.circular(10)),
-            child: Icon(icon, color: color, size: 20),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(value, style: GoogleFonts.poppins(fontSize: 18, fontWeight: FontWeight.w700, color: AppColors.textPrimary), overflow: TextOverflow.ellipsis),
-                Text(label, style: GoogleFonts.poppins(fontSize: 11, color: AppColors.textSecondary)),
-              ],
+    return Expanded(
+      child: Semantics(
+        button: true,
+        selected: selected,
+        label: label,
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: onTap,
+          child: Center(
+            child: Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: RyvoTypography.style(
+                fontSize: 13,
+                height: 1,
+                fontWeight: selected ? FontWeight.w700 : FontWeight.w600,
+                color: selected ? selectedColor : AppColors.textSecondary,
+                letterSpacing: -0.2,
+              ),
             ),
           ),
-        ],
+        ),
       ),
     );
   }
 }
 
-class _BookingCard extends StatelessWidget {
-  final JobModel job;
-  const _BookingCard({required this.job});
+class _RefreshFill extends StatelessWidget {
+  const _RefreshFill({
+    required this.onRefresh,
+    required this.bottomInset,
+    required this.child,
+  });
+
+  final Future<void> Function() onRefresh;
+  final double bottomInset;
+  final Widget child;
 
   @override
   Widget build(BuildContext context) {
-    final serviceName = job.serviceCategory?.name ?? AppLocalizations.of(context).service;
-    final date = job.createdAt != null ? DateFormat('MMM d, yyyy').format(job.createdAt!) : '';
-    final statusColor = jobStatusColor(job.status);
-
-    return Container(
-      margin: const EdgeInsets.only(bottom: 14),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.divider),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
+    return RefreshIndicator(
+      color: AppColors.primary,
+      onRefresh: onRefresh,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          return ListView(
+            physics: const AlwaysScrollableScrollPhysics(),
             children: [
-              Container(
-                width: 44,
-                height: 44,
-                decoration: BoxDecoration(
-                  color: AppColors.primary.withOpacity(0.12),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Icon(
-                  serviceIcon(job.serviceCategory?.slug, job.serviceCategory?.icon),
-                  color: AppColors.primary,
-                  size: 24,
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(serviceName, style: GoogleFonts.poppins(fontSize: 15, fontWeight: FontWeight.w600, color: AppColors.textPrimary)),
-                    Text(date, style: GoogleFonts.poppins(fontSize: 12, color: AppColors.textSecondary)),
-                  ],
-                ),
-              ),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  Text(formatMoney(job.displayFare), style: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.w700, color: AppColors.textPrimary)),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                    decoration: BoxDecoration(
-                      color: statusColor.withOpacity(0.15),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: Text(formatJobStatus(job.status), style: GoogleFonts.poppins(fontSize: 11, fontWeight: FontWeight.w600, color: statusColor)),
+              SizedBox(
+                height: constraints.maxHeight,
+                child: Padding(
+                  padding: EdgeInsets.fromLTRB(
+                    AppSpacing.lg,
+                    0,
+                    AppSpacing.lg,
+                    bottomInset,
                   ),
-                ],
+                  child: Center(child: child),
+                ),
               ),
             ],
-          ),
-          if (job.pickupAddress.isNotEmpty) ...[
-            const SizedBox(height: 12),
-            Divider(color: AppColors.divider, height: 1),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                const Icon(Icons.location_on_outlined, color: AppColors.grey500, size: 15),
-                const SizedBox(width: 6),
-                Expanded(
-                  child: Text(job.pickupAddress, style: GoogleFonts.poppins(fontSize: 12, color: AppColors.textSecondary)),
-                ),
-              ],
-            ),
-          ],
-        ],
+          );
+        },
       ),
+    );
+  }
+}
+
+class _EmptyBookings extends StatelessWidget {
+  const _EmptyBookings({
+    required this.message,
+    required this.actionLabel,
+    required this.onBook,
+  });
+
+  final String message;
+  final String actionLabel;
+  final VoidCallback onBook;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(
+          CupertinoIcons.car_detailed,
+          size: 48,
+          color: AppColors.textHint,
+        ),
+        const SizedBox(height: AppSpacing.md),
+        Text(
+          message,
+          textAlign: TextAlign.center,
+          style: RyvoTypography.heading(
+            fontSize: 18,
+            color: AppColors.textPrimary,
+            letterSpacing: -0.4,
+          ),
+        ),
+        const SizedBox(height: AppSpacing.lg),
+        SizedBox(
+          width: 200,
+          child: RyvoButton(
+            label: actionLabel,
+            height: 48,
+            borderRadius: 12,
+            onPressed: onBook,
+          ),
+        ),
+      ],
     );
   }
 }

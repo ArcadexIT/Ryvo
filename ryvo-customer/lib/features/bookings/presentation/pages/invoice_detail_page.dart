@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:printing/printing.dart';
 
 import '../../../../core/theme/app_colors.dart';
+import '../../../../shared/widgets/ryvo_close_button.dart';
 import '../../../../shared/providers/app_providers.dart';
 import '../../../../shared/widgets/ryvo_button.dart';
 import '../../domain/customer_invoice.dart';
@@ -73,6 +74,8 @@ class _InvoiceDetailPageState extends ConsumerState<InvoiceDetailPage> {
       backgroundColor: AppColors.background,
       appBar: AppBar(
         backgroundColor: AppColors.background,
+        automaticallyImplyLeading: false,
+        leading: const RyvoCloseButton(),
         title: Text('Invoice', style: GoogleFonts.poppins(fontWeight: FontWeight.w600)),
         actions: [
           if (invoice != null)

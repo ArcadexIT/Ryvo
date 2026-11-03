@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../shared/widgets/ryvo_close_button.dart';
 import '../../../../data/models/support_models.dart';
 import '../../../../shared/providers/app_providers.dart';
 import 'package:ryvo_customer/l10n/app_localizations.dart';
@@ -55,6 +56,8 @@ class _SupportTicketDetailPageState extends ConsumerState<SupportTicketDetailPag
       backgroundColor: AppColors.background,
       appBar: AppBar(
         backgroundColor: AppColors.background,
+        automaticallyImplyLeading: false,
+        leading: const RyvoCloseButton(),
         title: ticketAsync.maybeWhen(
           data: (t) => Text(t.ticketNumber, style: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.w600)),
           orElse: () => Text(AppLocalizations.of(context).ticket, style: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.w600)),

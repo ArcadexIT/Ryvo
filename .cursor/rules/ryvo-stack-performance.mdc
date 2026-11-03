@@ -1,0 +1,19 @@
+---
+description: Enforces Riverpod 2.5+, GoRouter, Socket.IO, and Google Maps 120fps performance rules for ryvo_customer.
+globs: ["ryvo-customer/lib/**/*.dart"]
+alwaysApply: false
+---
+
+# Ryvo Customer — Tech Stack & 120 FPS Architecture Rules
+
+## 1. Riverpod State Isolation (Zero-Jank Rebuilds)
+- NEVER watch an entire state object in UI widgets when listening to high-frequency streams (`socket_io_client` driver location or `geolocator` updates).
+- ALWAYS use `.select()` to listen only to the exact primitive needed:
+  `final eta = ref.watch(rideProvider.select((s) => s.etaMinutes));`
+- Keep `GoogleMap` inside an isolated `ConsumerWidget` wrapped in a `RepaintBoundary`. Update markers and polylines via controller/state streams without rebuilding the parent Scaffold or `DraggableScrollableSheet`.
+
+## 2. Package-Specific UI Standards
+- **Loading States (`shimmer`):** Never use `CircularProgressIndicator` for screen or list loads. Always build skeleton placeholders using the `shimmer` package that mirror the exact dimensions of the loaded cards/rows.
+- **OTP & Auth (`pin_code_fields`):** Style `PinCodeTextField` with crisp 1.5px borders, subtle active surface fill, haptic feedback on digit entry, and zero drop shadows.
+- **Typography (`google_fonts`):** Centralize font definitions in `RyvoTypography`. Enforce `FontFeature.tabularFigures()` on all fare prices, Stripe payment totals, socket countdowns, and distance metrics.
+- **Payments (`flutter_stripe`):** Configure Stripe `PaymentSheetAppearance` to match `RyvoColors` (obsidian primary button, `#B5F558` accent badge, matching corner radii) so the native payment sheet feels built-in.

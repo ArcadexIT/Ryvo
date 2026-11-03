@@ -1,15 +1,20 @@
 import 'dart:async';
+import 'dart:ui';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:ryvo_customer/l10n/app_localizations.dart';
 
 import '../../core/location/location_service.dart';
 import '../../core/location/uk_places_search.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/theme/app_theme.dart';
+import '../../core/widgets/ryvo_live_location_pulse.dart';
+import '../../core/widgets/ryvo_map_canvas.dart';
 import '../providers/app_providers.dart';
+import 'ryvo_button.dart';
 
 /// Opens the location page. Returns true when the pickup draft was updated.
 Future<bool> showPickupLocationPicker({
@@ -41,11 +46,14 @@ class PickupLocationPicker extends ConsumerStatefulWidget {
     this.forDropoff = false,
   });
 
+  /// Retained for existing call sites. The map is the primary control; typed
+  /// search opens from the address pill.
   final bool autofocusSearch;
   final bool forDropoff;
 
   @override
-  ConsumerState<PickupLocationPicker> createState() => _PickupLocationPickerState();
+  ConsumerState<PickupLocationPicker> createState() =>
+      _PickupLocationPickerState();
 }
 
 class _PickupLocationPickerState extends ConsumerState<PickupLocationPicker> {
@@ -54,37 +62,30 @@ class _PickupLocationPickerState extends ConsumerState<PickupLocationPicker> {
     {"featureType":"transit","stylers":[{"visibility":"simplified"}]}
   ]''';
 
-  final _searchController = TextEditingController();
-  final _searchFocus = FocusNode();
-  final _movingPin = ValueNotifier<bool>(false);
+  final _dragging = ValueNotifier<bool>(false);
   final _locatingPin = ValueNotifier<bool>(false);
+  final _streetText = ValueNotifier<String>('');
   final _addressText = ValueNotifier<String>('');
   final _regionText = ValueNotifier<String?>(null);
   final _errorText = ValueNotifier<String?>(null);
 
   GoogleMapController? _mapController;
   late final Widget _mapLayer;
+  late final ValueNotifier<CameraPosition> _viewCamera;
 
   late double _lat;
   late double _lng;
-  bool _searching = false;
-  bool _suggesting = false;
-  bool _suggestSettled = false;
-  bool _suppressSuggest = false;
   bool _skipIdle = true;
   int _resolveToken = 0;
-  int _suggestToken = 0;
   LatLng? _mapCenter;
-  double _keyboardOverlap = 0;
-  Timer? _suggestTimer;
-  String _sessionToken = newPlacesSessionToken();
-  List<UkAddressSuggestion> _suggestions = const [];
 
   @override
   void initState() {
     super.initState();
     final draft = ref.read(jobDraftProvider);
-    if (widget.forDropoff && draft.dropoffLat != null && draft.dropoffLng != null) {
+    if (widget.forDropoff &&
+        draft.dropoffLat != null &&
+        draft.dropoffLng != null) {
       _lat = draft.dropoffLat!;
       _lng = draft.dropoffLng!;
       _addressText.value = draft.dropoffAddress;
@@ -94,87 +95,43 @@ class _PickupLocationPickerState extends ConsumerState<PickupLocationPicker> {
       _addressText.value = widget.forDropoff ? '' : draft.pickupAddress;
       _regionText.value = widget.forDropoff ? null : draft.pickupRegion;
     }
+    _streetText.value = _streetLine(_addressText.value);
     if (_addressText.value.trim().isEmpty) {
       _locatingPin.value = true;
       Future.microtask(_resolveInitialPin);
     }
+    _viewCamera = ValueNotifier(
+      CameraPosition(target: LatLng(_lat, _lng), zoom: 16),
+    );
     _mapLayer = _StableLocationMap(
       initialTarget: LatLng(_lat, _lng),
       mapStyle: _mapStyle,
-      moving: _movingPin,
       onCreated: (controller) => _mapController = controller,
-      onMove: (target) {
-        _mapCenter = target;
-        if (!_movingPin.value) _movingPin.value = true;
+      onMoveStarted: () {
+        if (!_dragging.value) _dragging.value = true;
       },
+      onMove: (target) => _mapCenter = target,
+      onView: (position) => _viewCamera.value = position,
       onIdle: _onCameraIdle,
     );
   }
 
   @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    _syncKeyboardOverlap();
-  }
-
-  /// This page can sit above the tab bar, so the raw keyboard inset lifts the
-  /// sheet too far and leaves a strip of map between the sheet and the keyboard.
-  void _syncKeyboardOverlap() {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      final media = MediaQuery.of(context);
-      final keyboard = media.viewInsets.bottom;
-      var overlap = keyboard;
-      final box = context.findRenderObject() as RenderBox?;
-      if (box != null && box.hasSize && box.attached) {
-        final pageBottom = box.localToGlobal(Offset(0, box.size.height)).dy;
-        final gapBelowPage = media.size.height - pageBottom;
-        overlap = keyboard - gapBelowPage;
-        if (overlap < 0) overlap = 0;
-      }
-      if ((overlap - _keyboardOverlap).abs() > 0.5) {
-        setState(() => _keyboardOverlap = overlap);
-      }
-    });
-  }
-
-  Future<void> _resolveInitialPin() async {
-    final token = ++_resolveToken;
-    _locatingPin.value = true;
-    _errorText.value = null;
-    try {
-      final resolved = await ref.read(locationServiceProvider).reverseGeocode(_lat, _lng);
-      if (!mounted || token != _resolveToken) return;
-      _addressText.value = resolved.address ??
-          resolved.shortAddress ??
-          '${_lat.toStringAsFixed(5)}, ${_lng.toStringAsFixed(5)}';
-      _regionText.value = resolved.region;
-    } catch (_) {
-      if (!mounted || token != _resolveToken) return;
-      if (_addressText.value.trim().isEmpty) {
-        _addressText.value = '${_lat.toStringAsFixed(5)}, ${_lng.toStringAsFixed(5)}';
-      }
-    } finally {
-      if (mounted && token == _resolveToken) _locatingPin.value = false;
-    }
-  }
-
-  @override
   void dispose() {
-    _suggestTimer?.cancel();
-    _searchController.dispose();
-    _searchFocus.dispose();
-    _movingPin.dispose();
+    _dragging.dispose();
     _locatingPin.dispose();
+    _streetText.dispose();
     _addressText.dispose();
     _regionText.dispose();
     _errorText.dispose();
+    _viewCamera.dispose();
     super.dispose();
   }
 
   ({double lat, double lng}) _bias() {
     final draft = ref.read(jobDraftProvider);
-    final pinMoved = (_lat - draft.pickupLat).abs() > 0.0001 || (_lng - draft.pickupLng).abs() > 0.0001;
+    final pinMoved = (_lat - draft.pickupLat).abs() > 0.0001 ||
+        (_lng - draft.pickupLng).abs() > 0.0001;
     return UkSearchBias.resolve(
       lat: _lat,
       lng: _lng,
@@ -182,128 +139,72 @@ class _PickupLocationPickerState extends ConsumerState<PickupLocationPicker> {
     );
   }
 
-  void _onQueryChanged(String value) {
-    if (_suppressSuggest) return;
-    _suggestTimer?.cancel();
-    final query = value.trim();
-    if (query.length < 2) {
-      setState(() {
-        _suggestions = const [];
-        _suggesting = false;
-        _suggestSettled = false;
-      });
-      return;
-    }
-    setState(() => _suggestSettled = false);
-    _suggestTimer = Timer(const Duration(milliseconds: 300), () => _loadSuggestions(query));
-  }
-
-  Future<void> _loadSuggestions(String query) async {
-    final token = ++_suggestToken;
-    setState(() => _suggesting = true);
+  Future<void> _openSearch() async {
     final bias = _bias();
-    try {
-      final results = await ref.read(ukPlacesSearchProvider).suggest(
-            query: query,
-            biasLat: bias.lat,
-            biasLng: bias.lng,
-            sessionToken: _sessionToken,
+    final resolved = await Navigator.of(context).push<ResolvedLocation>(
+      PageRouteBuilder<ResolvedLocation>(
+        fullscreenDialog: true,
+        transitionDuration: const Duration(milliseconds: 220),
+        reverseTransitionDuration: const Duration(milliseconds: 180),
+        pageBuilder: (_, __, ___) => _AddressSearchPage(
+          biasLat: bias.lat,
+          biasLng: bias.lng,
+        ),
+        transitionsBuilder: (_, animation, __, child) {
+          final slide = Tween<Offset>(
+            begin: const Offset(0, 0.06),
+            end: Offset.zero,
+          ).animate(CurvedAnimation(parent: animation, curve: Curves.easeOut));
+          return FadeTransition(
+            opacity: animation,
+            child: SlideTransition(position: slide, child: child),
           );
-      if (!mounted || token != _suggestToken || _searchController.text.trim() != query) return;
-      setState(() {
-        _suggestions = results;
-        _suggesting = false;
-        _suggestSettled = true;
-      });
-    } catch (_) {
-      if (!mounted || token != _suggestToken) return;
-      setState(() {
-        _suggestions = const [];
-        _suggesting = false;
-        _suggestSettled = true;
-      });
-    }
+        },
+      ),
+    );
+    if (!mounted || resolved == null) return;
+    _applyResolved(resolved, moveCamera: true);
   }
 
-  Future<void> _selectSuggestion(UkAddressSuggestion suggestion) async {
-    if (_searching) return;
-    _suggestTimer?.cancel();
-    _searchFocus.unfocus();
-    _suppressSuggest = true;
-    _searchController.text = suggestion.description.isNotEmpty ? suggestion.description : suggestion.primaryText;
-    _searchController.selection = TextSelection.collapsed(offset: _searchController.text.length);
-    _suppressSuggest = false;
-    setState(() {
-      _searching = true;
-      _suggestions = const [];
-      _suggesting = false;
-      _suggestSettled = false;
-    });
+  Future<void> _resolveInitialPin() async {
+    final token = ++_resolveToken;
+    _locatingPin.value = true;
     _errorText.value = null;
     try {
-      final resolved = await ref.read(ukPlacesSearchProvider).detailsFor(
-            suggestion,
-            sessionToken: _sessionToken,
-          );
-      if (!mounted) return;
-      _sessionToken = newPlacesSessionToken();
-      _applyResolved(resolved, moveCamera: true);
-    } on LocationFailure catch (e) {
-      if (mounted) _errorText.value = e.message;
-    } on PlacesLookupException catch (e) {
-      if (mounted) _errorText.value = e.message;
+      final resolved =
+          await ref.read(locationServiceProvider).reverseGeocode(_lat, _lng);
+      if (!mounted || token != _resolveToken) return;
+      _publishResolved(
+        resolved,
+        lat: _lat,
+        lng: _lng,
+      );
     } catch (_) {
-      if (mounted) _errorText.value = 'Could not find that address. Try a more specific one.';
+      if (!mounted || token != _resolveToken) return;
+      if (_addressText.value.trim().isEmpty) {
+        _publishCoords(_lat, _lng);
+      }
     } finally {
-      if (mounted) setState(() => _searching = false);
-    }
-  }
-
-  Future<void> _search() async {
-    final query = _searchController.text.trim();
-    if (query.isEmpty || _searching) return;
-    if (_suggestions.isNotEmpty) {
-      await _selectSuggestion(_suggestions.first);
-      return;
-    }
-    _searchFocus.unfocus();
-    setState(() => _searching = true);
-    _errorText.value = null;
-    final bias = _bias();
-    try {
-      final resolved = await ref.read(ukPlacesSearchProvider).resolve(
-            query: query,
-            biasLat: bias.lat,
-            biasLng: bias.lng,
-            sessionToken: _sessionToken,
-          );
-      if (!mounted) return;
-      _sessionToken = newPlacesSessionToken();
-      _applyResolved(resolved, moveCamera: true);
-    } on LocationFailure catch (e) {
-      if (mounted) _errorText.value = e.message;
-    } on PlacesLookupException catch (e) {
-      if (mounted) _errorText.value = e.message;
-    } catch (_) {
-      if (mounted) _errorText.value = 'Could not find that address. Try a more specific one.';
-    } finally {
-      if (mounted) setState(() => _searching = false);
+      if (mounted && token == _resolveToken) _locatingPin.value = false;
     }
   }
 
   Future<void> _useCurrentLocation() async {
     if (_locatingPin.value) return;
-    _searchFocus.unfocus();
     _locatingPin.value = true;
     _errorText.value = null;
     try {
-      final resolved = await ref.read(locationServiceProvider).getCurrentLocation();
+      final resolved =
+          await ref.read(locationServiceProvider).getCurrentLocation();
       if (!mounted) return;
       _applyResolved(resolved, moveCamera: true);
     } on LocationFailure catch (e) {
       if (mounted) _errorText.value = e.message;
     } catch (_) {
-      if (mounted) _errorText.value = 'Could not determine your location. Please try again.';
+      if (mounted) {
+        _errorText.value =
+            'Could not determine your location. Please try again.';
+      }
     } finally {
       if (mounted) _locatingPin.value = false;
     }
@@ -312,12 +213,9 @@ class _PickupLocationPickerState extends ConsumerState<PickupLocationPicker> {
   void _applyResolved(ResolvedLocation resolved, {required bool moveCamera}) {
     _resolveToken++;
     _skipIdle = true;
-    _lat = resolved.lat;
-    _lng = resolved.lng;
-    _addressText.value = resolved.address ?? resolved.shortAddress ?? _addressText.value;
-    _regionText.value = resolved.region;
+    _publishResolved(resolved, lat: resolved.lat, lng: resolved.lng);
     _errorText.value = null;
-    _movingPin.value = false;
+    _dragging.value = false;
     if (moveCamera) {
       _mapController?.moveCamera(
         CameraUpdate.newLatLngZoom(LatLng(resolved.lat, resolved.lng), 16),
@@ -325,32 +223,55 @@ class _PickupLocationPickerState extends ConsumerState<PickupLocationPicker> {
     }
   }
 
+  void _publishResolved(
+    ResolvedLocation resolved, {
+    required double lat,
+    required double lng,
+  }) {
+    _lat = lat;
+    _lng = lng;
+    final full = resolved.address ??
+        resolved.shortAddress ??
+        '${lat.toStringAsFixed(5)}, ${lng.toStringAsFixed(5)}';
+    _addressText.value = full;
+    _streetText.value = _streetLine(full, short: resolved.shortAddress);
+    _regionText.value = resolved.region;
+  }
+
+  void _publishCoords(double lat, double lng) {
+    _lat = lat;
+    _lng = lng;
+    final coords = '${lat.toStringAsFixed(5)}, ${lng.toStringAsFixed(5)}';
+    _addressText.value = coords;
+    _streetText.value = coords;
+    _regionText.value = null;
+  }
+
   Future<void> _onCameraIdle() async {
-    _movingPin.value = false;
+    _dragging.value = false;
     if (_skipIdle) {
       _skipIdle = false;
       return;
     }
     final center = _mapCenter;
     if (center == null) return;
+    HapticFeedback.mediumImpact();
     final token = ++_resolveToken;
     _locatingPin.value = true;
     _errorText.value = null;
     try {
-      final resolved = await ref.read(locationServiceProvider).reverseGeocode(center.latitude, center.longitude);
+      final resolved = await ref
+          .read(locationServiceProvider)
+          .reverseGeocode(center.latitude, center.longitude);
       if (!mounted || token != _resolveToken) return;
-      _lat = center.latitude;
-      _lng = center.longitude;
-      _addressText.value = resolved.address ??
-          resolved.shortAddress ??
-          '${center.latitude.toStringAsFixed(5)}, ${center.longitude.toStringAsFixed(5)}';
-      _regionText.value = resolved.region;
+      _publishResolved(
+        resolved,
+        lat: center.latitude,
+        lng: center.longitude,
+      );
     } catch (_) {
       if (!mounted || token != _resolveToken) return;
-      _lat = center.latitude;
-      _lng = center.longitude;
-      _addressText.value = '${center.latitude.toStringAsFixed(5)}, ${center.longitude.toStringAsFixed(5)}';
-      _regionText.value = null;
+      _publishCoords(center.latitude, center.longitude);
     } finally {
       if (mounted && token == _resolveToken) _locatingPin.value = false;
     }
@@ -358,9 +279,7 @@ class _PickupLocationPickerState extends ConsumerState<PickupLocationPicker> {
 
   void _confirm() {
     final address = _addressText.value.trim();
-    if (address.isEmpty || address == 'Locating your position…' || _locatingPin.value || _searching) {
-      return;
-    }
+    if (address.isEmpty || _locatingPin.value || _dragging.value) return;
     ref.read(pickupEditGenerationProvider.notifier).state++;
     final latest = ref.read(jobDraftProvider);
     ref.read(jobDraftProvider.notifier).state = widget.forDropoff
@@ -382,14 +301,25 @@ class _PickupLocationPickerState extends ConsumerState<PickupLocationPicker> {
 
   @override
   Widget build(BuildContext context) {
-    final l10n = AppLocalizations.of(context);
-
     return Scaffold(
       backgroundColor: AppColors.background,
       resizeToAvoidBottomInset: false,
       body: Stack(
         children: [
           Positioned.fill(child: _mapLayer),
+          Positioned.fill(
+            child: RyvoLiveLocationPulse(camera: _viewCamera),
+          ),
+          Positioned.fill(
+            child: IgnorePointer(
+              child: Align(
+                alignment: Alignment.center,
+                child: RepaintBoundary(
+                  child: _AnchoredPin(dragging: _dragging),
+                ),
+              ),
+            ),
+          ),
           Positioned(
             top: 0,
             left: 0,
@@ -397,197 +327,227 @@ class _PickupLocationPickerState extends ConsumerState<PickupLocationPicker> {
             child: SafeArea(
               bottom: false,
               child: Padding(
-                padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
-                child: Column(
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                child: Row(
                   children: [
-                    Row(
-                      children: [
-                        _RoundIconButton(
-                          icon: Icons.arrow_back,
-                          onTap: () => Navigator.pop(context),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Text(
-                            l10n.setYourLocation,
-                            style: GoogleFonts.poppins(
-                              fontSize: 18,
-                              fontWeight: FontWeight.w600,
-                              color: AppColors.textPrimary,
-                            ),
-                          ),
-                        ),
-                      ],
+                    _RoundIconButton(
+                      icon: Icons.arrow_back,
+                      onTap: () => Navigator.pop(context),
                     ),
-                    const SizedBox(height: 12),
-                    Material(
-                      color: AppColors.surface,
-                      elevation: 6,
-                      shadowColor: Colors.black26,
-                      borderRadius: BorderRadius.circular(16),
-                      child: TextField(
-                        controller: _searchController,
-                        focusNode: _searchFocus,
-                        autofocus: widget.autofocusSearch,
-                        textInputAction: TextInputAction.search,
-                        onChanged: _onQueryChanged,
-                        onSubmitted: (_) => _search(),
-                        style: GoogleFonts.poppins(fontSize: 14, color: AppColors.textPrimary),
-                        decoration: InputDecoration(
-                          hintText: l10n.searchUkAddress,
-                          hintStyle: GoogleFonts.poppins(fontSize: 14, color: AppColors.textHint),
-                          prefixIcon: const Icon(Icons.search, color: AppColors.primary, size: 22),
-                          suffixIcon: _searching || _suggesting
-                              ? const Padding(
-                                  padding: EdgeInsets.all(14),
-                                  child: SizedBox(
-                                    width: 18,
-                                    height: 18,
-                                    child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primary),
-                                  ),
-                                )
-                              : IconButton(
-                                  onPressed: _search,
-                                  icon: const Icon(Icons.arrow_forward, color: AppColors.primary, size: 20),
-                                ),
-                          filled: true,
-                          fillColor: AppColors.surface,
-                          isDense: true,
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 14),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(16),
-                            borderSide: BorderSide.none,
-                          ),
-                          enabledBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(16),
-                            borderSide: BorderSide.none,
-                          ),
-                          focusedBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(16),
-                            borderSide: const BorderSide(color: AppColors.primary, width: 1.4),
-                          ),
-                        ),
-                      ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: _SearchAddressPill(onTap: _openSearch),
                     ),
-                    if (_suggestions.isNotEmpty ||
-                        (_suggestSettled && _searchController.text.trim().length >= 2 && !_suggesting && !_searching))
-                      Padding(
-                        padding: const EdgeInsets.only(top: 8),
-                        child: Material(
-                          color: AppColors.surface,
-                          elevation: 8,
-                          shadowColor: Colors.black26,
-                          borderRadius: BorderRadius.circular(16),
-                          clipBehavior: Clip.antiAlias,
-                          child: _suggestions.isEmpty
-                              ? Padding(
-                                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                                  child: Text(
-                                    l10n.noMatchingUkAddresses,
-                                    style: GoogleFonts.poppins(fontSize: 13, color: AppColors.textSecondary),
-                                  ),
-                                )
-                              : ConstrainedBox(
-                                  constraints: const BoxConstraints(maxHeight: 280),
-                                  child: ListView.separated(
-                                    padding: EdgeInsets.zero,
-                                    shrinkWrap: true,
-                                    itemCount: _suggestions.length,
-                                    separatorBuilder: (_, __) => Divider(height: 1, color: AppColors.divider),
-                                    itemBuilder: (context, index) {
-                                      final suggestion = _suggestions[index];
-                                      final distance = suggestion.distanceMeters;
-                                      return InkWell(
-                                        onTap: _searching ? null : () => _selectSuggestion(suggestion),
-                                        child: Padding(
-                                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                                          child: Row(
-                                            children: [
-                                              const Icon(Icons.location_on_outlined, color: AppColors.primary, size: 20),
-                                              const SizedBox(width: 10),
-                                              Expanded(
-                                                child: Column(
-                                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                                  children: [
-                                                    Text(
-                                                      suggestion.primaryText,
-                                                      maxLines: 1,
-                                                      overflow: TextOverflow.ellipsis,
-                                                      style: GoogleFonts.poppins(
-                                                        fontSize: 14,
-                                                        fontWeight: FontWeight.w600,
-                                                        color: AppColors.textPrimary,
-                                                      ),
-                                                    ),
-                                                    if (suggestion.secondaryText.isNotEmpty)
-                                                      Text(
-                                                        suggestion.secondaryText,
-                                                        maxLines: 1,
-                                                        overflow: TextOverflow.ellipsis,
-                                                        style: GoogleFonts.poppins(fontSize: 12, color: AppColors.textSecondary),
-                                                      ),
-                                                  ],
-                                                ),
-                                              ),
-                                              if (distance != null) ...[
-                                                const SizedBox(width: 8),
-                                                Text(
-                                                  formatUkDistance(distance),
-                                                  style: GoogleFonts.poppins(
-                                                    fontSize: 12,
-                                                    fontWeight: FontWeight.w500,
-                                                    color: AppColors.textSecondary,
-                                                  ),
-                                                ),
-                                              ],
-                                            ],
-                                          ),
-                                        ),
-                                      );
-                                    },
-                                  ),
-                                ),
-                        ),
-                      ),
                   ],
                 ),
               ),
             ),
           ),
           Positioned(
+            left: 16,
             right: 16,
-            bottom: 220 + _keyboardOverlap,
-            child: ValueListenableBuilder<bool>(
-              valueListenable: _locatingPin,
-              builder: (_, locating, __) {
-                return _RoundIconButton(
-                  icon: Icons.my_location,
-                  iconColor: AppColors.primary,
-                  busy: locating,
-                  onTap: locating || _searching ? null : _useCurrentLocation,
-                );
-              },
-            ),
-          ),
-          Positioned(
-            left: 0,
-            right: 0,
-            bottom: 0,
-            child: AnimatedPadding(
-              duration: const Duration(milliseconds: 120),
-              curve: Curves.easeOut,
-              padding: EdgeInsets.only(bottom: _keyboardOverlap),
-              child: _LocationConfirmCard(
-                address: _addressText,
-                region: _regionText,
-                error: _errorText,
-                locating: _locatingPin,
-                searching: _searching,
-                onConfirm: _confirm,
-              ),
+            bottom: 16,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                ValueListenableBuilder<bool>(
+                  valueListenable: _locatingPin,
+                  builder: (_, locating, __) {
+                    return _RoundIconButton(
+                      icon: Icons.my_location,
+                      iconColor: AppColors.primary,
+                      busy: locating,
+                      onTap: locating ? null : _useCurrentLocation,
+                    );
+                  },
+                ),
+                const SizedBox(height: 12),
+                _LocationConfirmCard(
+                  street: _streetText,
+                  address: _addressText,
+                  region: _regionText,
+                  error: _errorText,
+                  dragging: _dragging,
+                  locating: _locatingPin,
+                  onConfirm: _confirm,
+                ),
+              ],
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+String _streetLine(String full, {String? short}) {
+  final primary = short?.trim();
+  if (primary != null && primary.isNotEmpty) return primary;
+  final trimmed = full.trim();
+  if (trimmed.isEmpty) return '';
+  final first = trimmed.split(',').first.trim();
+  return first.isEmpty ? trimmed : first;
+}
+
+/// Center-anchored pin. The ground dot stays on the camera target while the
+/// head lifts. [ValueNotifier] keeps this off the map widget's rebuild path.
+class _AnchoredPin extends StatelessWidget {
+  const _AnchoredPin({required this.dragging});
+
+  final ValueNotifier<bool> dragging;
+
+  @override
+  Widget build(BuildContext context) {
+    return ValueListenableBuilder<bool>(
+      valueListenable: dragging,
+      builder: (_, lifted, __) {
+        return FractionalTranslation(
+          translation: const Offset(0, -0.5),
+          child: SizedBox(
+            width: 44,
+            height: 64,
+            child: Stack(
+              clipBehavior: Clip.none,
+              alignment: Alignment.bottomCenter,
+              children: [
+                AnimatedContainer(
+                  duration: const Duration(milliseconds: 180),
+                  curve: Curves.easeOut,
+                  width: lifted ? 16 : 8,
+                  height: lifted ? 6 : 4,
+                  decoration: BoxDecoration(
+                    color: AppColors.obsidian.withValues(
+                      alpha: lifted ? 0.28 : 0.16,
+                    ),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+                AnimatedContainer(
+                  duration: Duration(milliseconds: lifted ? 180 : 520),
+                  curve: lifted ? Curves.easeOut : Curves.elasticOut,
+                  transform: Matrix4.translationValues(0, lifted ? -16 : 0, 0),
+                  transformAlignment: Alignment.bottomCenter,
+                  child: const RyvoFloatingPin(),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+/// Sleek brand pin. The tip is the bottom of the widget so the anchor math
+/// in [_AnchoredPin] lands on the camera target.
+class RyvoFloatingPin extends StatelessWidget {
+  const RyvoFloatingPin({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return const CustomPaint(
+      size: Size(36, 48),
+      painter: _RyvoPinPainter(
+        fill: AppColors.primary,
+        ring: AppColors.white,
+        core: AppColors.white,
+      ),
+    );
+  }
+}
+
+class _RyvoPinPainter extends CustomPainter {
+  const _RyvoPinPainter({
+    required this.fill,
+    required this.ring,
+    required this.core,
+  });
+
+  final Color fill;
+  final Color ring;
+  final Color core;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final head = Offset(size.width / 2, 16);
+    final tip = Offset(size.width / 2, size.height - 1);
+    final body = Path()
+      ..moveTo(head.dx - 8, head.dy + 6)
+      ..quadraticBezierTo(head.dx, head.dy + 18, tip.dx, tip.dy)
+      ..quadraticBezierTo(head.dx, head.dy + 18, head.dx + 8, head.dy + 6)
+      ..close();
+    canvas.drawPath(body, Paint()..color = fill);
+    canvas.drawCircle(head, 14, Paint()..color = fill);
+    canvas.drawCircle(
+      head,
+      14,
+      Paint()
+        ..color = ring
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2.5,
+    );
+    canvas.drawCircle(head, 5, Paint()..color = core);
+  }
+
+  @override
+  bool shouldRepaint(covariant _RyvoPinPainter oldDelegate) {
+    return oldDelegate.fill != fill ||
+        oldDelegate.ring != ring ||
+        oldDelegate.core != core;
+  }
+}
+
+class _SearchAddressPill extends StatelessWidget {
+  const _SearchAddressPill({required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(24),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
+        child: Material(
+          color: AppColors.modal.withValues(alpha: 0.92),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(24),
+            side: BorderSide(color: AppColors.divider),
+          ),
+          child: InkWell(
+            onTap: () {
+              HapticFeedback.selectionClick();
+              onTap();
+            },
+            borderRadius: BorderRadius.circular(24),
+            child: SizedBox(
+              height: 48,
+              child: Row(
+                children: [
+                  const SizedBox(width: 14),
+                  const Icon(Icons.search_rounded,
+                      color: AppColors.primary, size: 20),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      'Search address...',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: RyvoTypography.style(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.textSecondary,
+                        letterSpacing: -0.2,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 14),
+                ],
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -595,160 +555,168 @@ class _PickupLocationPickerState extends ConsumerState<PickupLocationPicker> {
 
 class _LocationConfirmCard extends StatelessWidget {
   const _LocationConfirmCard({
+    required this.street,
     required this.address,
     required this.region,
     required this.error,
+    required this.dragging,
     required this.locating,
-    required this.searching,
     required this.onConfirm,
   });
 
+  final ValueNotifier<String> street;
   final ValueNotifier<String> address;
   final ValueNotifier<String?> region;
   final ValueNotifier<String?> error;
+  final ValueNotifier<bool> dragging;
   final ValueNotifier<bool> locating;
-  final bool searching;
   final VoidCallback onConfirm;
 
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
-    return Container(
+    return DecoratedBox(
       decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+        color: AppColors.modal,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: AppColors.divider),
         boxShadow: [
-          BoxShadow(color: Colors.black.withValues(alpha: 0.12), blurRadius: 18, offset: const Offset(0, -4)),
+          BoxShadow(
+            color: AppColors.obsidian.withValues(alpha: 0.08),
+            blurRadius: 24,
+            offset: const Offset(0, 8),
+          ),
         ],
       ),
-      padding: EdgeInsets.fromLTRB(20, 14, 20, 12 + MediaQuery.paddingOf(context).bottom),
-      child: ValueListenableBuilder<bool>(
-        valueListenable: locating,
-        builder: (_, isLocating, __) {
-          return ValueListenableBuilder<String>(
-            valueListenable: address,
-            builder: (_, addressText, __) {
-              return ValueListenableBuilder<String?>(
-                valueListenable: region,
-                builder: (_, regionText, __) {
-                  return ValueListenableBuilder<String?>(
-                    valueListenable: error,
-                    builder: (_, errorText, __) {
-                      final busy = isLocating || searching;
-                      final canConfirm = !busy &&
-                          addressText.trim().isNotEmpty &&
-                          addressText != 'Locating your position…';
-                      return Column(
-                        mainAxisSize: MainAxisSize.min,
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Center(
-                            child: Container(
-                              width: 36,
-                              height: 4,
-                              margin: const EdgeInsets.only(bottom: 14),
-                              decoration: BoxDecoration(
-                                color: AppColors.grey600,
-                                borderRadius: BorderRadius.circular(2),
-                              ),
-                            ),
-                          ),
-                          Row(
-                            children: [
-                              Container(
-                                width: 40,
-                                height: 40,
-                                decoration: BoxDecoration(
-                                  color: AppColors.primary.withValues(alpha: 0.12),
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                                child: const Icon(Icons.location_on, color: AppColors.primary, size: 22),
-                              ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: Column(
+      child: Padding(
+        padding: EdgeInsets.fromLTRB(
+          16,
+          16,
+          16,
+          16 + MediaQuery.paddingOf(context).bottom,
+        ),
+        child: ValueListenableBuilder<bool>(
+          valueListenable: dragging,
+          builder: (_, isDragging, __) {
+            return ValueListenableBuilder<bool>(
+              valueListenable: locating,
+              builder: (_, isLocating, __) {
+                return ValueListenableBuilder<String>(
+                  valueListenable: street,
+                  builder: (_, streetText, __) {
+                    return ValueListenableBuilder<String>(
+                      valueListenable: address,
+                      builder: (_, addressText, __) {
+                        return ValueListenableBuilder<String?>(
+                          valueListenable: region,
+                          builder: (_, regionText, __) {
+                            return ValueListenableBuilder<String?>(
+                              valueListenable: error,
+                              builder: (_, errorText, __) {
+                                final busy = isDragging || isLocating;
+                                final headline = isLocating
+                                    ? l10n.resolvingAddress
+                                    : (streetText.trim().isEmpty
+                                        ? l10n.searchUkAddress
+                                        : streetText);
+                                final detail = !isLocating &&
+                                        addressText.trim().isNotEmpty &&
+                                        addressText.trim() != streetText.trim()
+                                    ? addressText
+                                    : regionText;
+                                final canConfirm = !busy &&
+                                    addressText.trim().isNotEmpty &&
+                                    streetText.trim().isNotEmpty;
+                                return Column(
+                                  mainAxisSize: MainAxisSize.min,
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     Text(
-                                      isLocating
-                                          ? l10n.resolvingAddress
-                                          : (addressText.trim().isEmpty ? l10n.searchUkAddress : addressText),
+                                      headline,
                                       maxLines: 2,
                                       overflow: TextOverflow.ellipsis,
-                                      style: GoogleFonts.poppins(
-                                        fontSize: 14,
-                                        fontWeight: FontWeight.w600,
+                                      style: RyvoTypography.heading(
+                                        fontSize: 18,
                                         color: AppColors.textPrimary,
+                                        letterSpacing: -0.5,
                                       ),
                                     ),
-                                    if (regionText != null && !isLocating)
+                                    if (detail != null &&
+                                        detail.trim().isNotEmpty) ...[
+                                      const SizedBox(height: 4),
                                       Text(
-                                        regionText,
+                                        detail,
                                         maxLines: 1,
                                         overflow: TextOverflow.ellipsis,
-                                        style: GoogleFonts.poppins(fontSize: 12, color: AppColors.textSecondary),
+                                        style: RyvoTypography.style(
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.w500,
+                                          color: AppColors.textSecondary,
+                                          letterSpacing: -0.2,
+                                        ),
                                       ),
+                                    ],
+                                    if (errorText != null) ...[
+                                      const SizedBox(height: 8),
+                                      Text(
+                                        errorText,
+                                        style: RyvoTypography.style(
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w500,
+                                          color: AppColors.error,
+                                        ),
+                                      ),
+                                    ],
+                                    const SizedBox(height: 16),
+                                    AnimatedOpacity(
+                                      opacity: isDragging ? 0.4 : 1,
+                                      duration:
+                                          const Duration(milliseconds: 180),
+                                      curve: Curves.easeOut,
+                                      child: RyvoButton(
+                                        label: l10n.confirmLocation,
+                                        isLoading: isLocating,
+                                        onPressed:
+                                            canConfirm ? onConfirm : null,
+                                      ),
+                                    ),
                                   ],
-                                ),
-                              ),
-                            ],
-                          ),
-                          if (errorText != null) ...[
-                            const SizedBox(height: 8),
-                            Text(
-                              errorText,
-                              style: GoogleFonts.poppins(fontSize: 12, color: AppColors.error),
-                            ),
-                          ],
-                          const SizedBox(height: 14),
-                          SizedBox(
-                            width: double.infinity,
-                            height: 52,
-                            child: FilledButton(
-                              onPressed: canConfirm ? onConfirm : null,
-                              style: FilledButton.styleFrom(
-                                backgroundColor: AppColors.primary,
-                                disabledBackgroundColor: AppColors.primary.withValues(alpha: 0.4),
-                                foregroundColor: Colors.white,
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                              ),
-                              child: Text(
-                                l10n.confirmThisLocation,
-                                style: GoogleFonts.poppins(fontSize: 15, fontWeight: FontWeight.w600, color: Colors.white),
-                              ),
-                            ),
-                          ),
-                        ],
-                      );
-                    },
-                  );
-                },
-              );
-            },
-          );
-        },
+                                );
+                              },
+                            );
+                          },
+                        );
+                      },
+                    );
+                  },
+                );
+              },
+            );
+          },
+        ),
       ),
     );
   }
 }
 
-/// The platform map is built once. Camera moves only update the pin notifier,
-/// so dragging does not rebuild the map view.
+/// The platform map is built once. Camera gestures only notify the pin.
 class _StableLocationMap extends StatefulWidget {
   const _StableLocationMap({
     required this.initialTarget,
     required this.mapStyle,
-    required this.moving,
     required this.onCreated,
+    required this.onMoveStarted,
     required this.onMove,
+    required this.onView,
     required this.onIdle,
   });
 
   final LatLng initialTarget;
   final String mapStyle;
-  final ValueNotifier<bool> moving;
   final ValueChanged<GoogleMapController> onCreated;
+  final VoidCallback onMoveStarted;
   final ValueChanged<LatLng> onMove;
+  final ValueChanged<CameraPosition> onView;
   final VoidCallback onIdle;
 
   @override
@@ -758,65 +726,362 @@ class _StableLocationMap extends StatefulWidget {
 class _StableLocationMapState extends State<_StableLocationMap> {
   @override
   Widget build(BuildContext context) {
-    return Stack(
-      children: [
-        GoogleMap(
-          initialCameraPosition: CameraPosition(target: widget.initialTarget, zoom: 16),
-          style: widget.mapStyle,
-          onMapCreated: widget.onCreated,
-          onCameraMove: (position) => widget.onMove(position.target),
-          onCameraIdle: widget.onIdle,
-          myLocationEnabled: true,
-          myLocationButtonEnabled: false,
-          zoomControlsEnabled: false,
-          compassEnabled: false,
-          mapToolbarEnabled: false,
-          buildingsEnabled: false,
-          tiltGesturesEnabled: false,
-          rotateGesturesEnabled: false,
-          liteModeEnabled: false,
-        ),
-        IgnorePointer(
-          child: Center(
-            child: ValueListenableBuilder<bool>(
-              valueListenable: widget.moving,
-              builder: (_, moving, __) {
-                return Transform.translate(
-                  offset: const Offset(0, -40),
-                  child: SizedBox(
-                    width: 56,
-                    height: 80,
-                    child: Stack(
-                      clipBehavior: Clip.none,
-                      alignment: Alignment.bottomCenter,
-                      children: [
-                        Positioned(
-                          bottom: 0,
-                          child: AnimatedContainer(
-                            duration: const Duration(milliseconds: 120),
-                            width: moving ? 14 : 8,
-                            height: moving ? 6 : 4,
-                            decoration: BoxDecoration(
-                              color: Colors.black.withValues(alpha: moving ? 0.28 : 0.16),
-                              borderRadius: BorderRadius.circular(6),
-                            ),
+    // Theme.of makes this State follow the app theme: the style is swapped in
+    // place on the live map, so the camera and pin position survive.
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    return RepaintBoundary(
+      child: GoogleMap(
+        initialCameraPosition:
+            CameraPosition(target: widget.initialTarget, zoom: 16),
+        style: dark ? RyvoMapCanvas.darkStyle : widget.mapStyle,
+        onMapCreated: widget.onCreated,
+        onCameraMoveStarted: widget.onMoveStarted,
+        onCameraMove: (position) {
+          widget.onMove(position.target);
+          widget.onView(position);
+        },
+        onCameraIdle: widget.onIdle,
+        myLocationEnabled: false,
+        myLocationButtonEnabled: false,
+        zoomControlsEnabled: false,
+        compassEnabled: false,
+        mapToolbarEnabled: false,
+        buildingsEnabled: false,
+        tiltGesturesEnabled: false,
+        rotateGesturesEnabled: false,
+      ),
+    );
+  }
+}
+
+class _AddressSearchPage extends ConsumerStatefulWidget {
+  const _AddressSearchPage({
+    required this.biasLat,
+    required this.biasLng,
+  });
+
+  final double biasLat;
+  final double biasLng;
+
+  @override
+  ConsumerState<_AddressSearchPage> createState() => _AddressSearchPageState();
+}
+
+class _AddressSearchPageState extends ConsumerState<_AddressSearchPage> {
+  final _controller = TextEditingController();
+  final _focus = FocusNode();
+  Timer? _timer;
+  final String _sessionToken = newPlacesSessionToken();
+  List<UkAddressSuggestion> _suggestions = const [];
+  bool _loading = false;
+  bool _settled = false;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _focus.requestFocus();
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    _controller.dispose();
+    _focus.dispose();
+    super.dispose();
+  }
+
+  void _onChanged(String value) {
+    _timer?.cancel();
+    final query = value.trim();
+    if (query.length < 2) {
+      setState(() {
+        _suggestions = const [];
+        _loading = false;
+        _settled = false;
+        _error = null;
+      });
+      return;
+    }
+    setState(() => _settled = false);
+    _timer = Timer(const Duration(milliseconds: 300), () => _suggest(query));
+  }
+
+  Future<void> _suggest(String query) async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final results = await ref.read(ukPlacesSearchProvider).suggest(
+            query: query,
+            biasLat: widget.biasLat,
+            biasLng: widget.biasLng,
+            sessionToken: _sessionToken,
+          );
+      if (!mounted || _controller.text.trim() != query) return;
+      setState(() {
+        _suggestions = results;
+        _loading = false;
+        _settled = true;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _suggestions = const [];
+        _loading = false;
+        _settled = true;
+      });
+    }
+  }
+
+  Future<void> _choose(UkAddressSuggestion suggestion) async {
+    if (_loading) return;
+    _focus.unfocus();
+    setState(() => _loading = true);
+    try {
+      final resolved = await ref.read(ukPlacesSearchProvider).detailsFor(
+            suggestion,
+            sessionToken: _sessionToken,
+          );
+      if (!mounted) return;
+      Navigator.pop(context, resolved);
+    } on LocationFailure catch (e) {
+      if (mounted) setState(() => _error = e.message);
+    } on PlacesLookupException catch (e) {
+      if (mounted) setState(() => _error = e.message);
+    } catch (_) {
+      if (mounted) {
+        setState(() =>
+            _error = 'Could not find that address. Try a more specific one.');
+      }
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _submit() async {
+    final query = _controller.text.trim();
+    if (query.isEmpty || _loading) return;
+    if (_suggestions.isNotEmpty) {
+      await _choose(_suggestions.first);
+      return;
+    }
+    _focus.unfocus();
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final resolved = await ref.read(ukPlacesSearchProvider).resolve(
+            query: query,
+            biasLat: widget.biasLat,
+            biasLng: widget.biasLng,
+            sessionToken: _sessionToken,
+          );
+      if (!mounted) return;
+      Navigator.pop(context, resolved);
+    } on LocationFailure catch (e) {
+      if (mounted) setState(() => _error = e.message);
+    } on PlacesLookupException catch (e) {
+      if (mounted) setState(() => _error = e.message);
+    } catch (_) {
+      if (mounted) {
+        setState(() =>
+            _error = 'Could not find that address. Try a more specific one.');
+      }
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    return Scaffold(
+      backgroundColor: AppColors.background,
+      body: SafeArea(
+        child: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+              child: Row(
+                children: [
+                  _RoundIconButton(
+                    icon: Icons.arrow_back,
+                    onTap: () => Navigator.pop(context),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: TextField(
+                      controller: _controller,
+                      focusNode: _focus,
+                      textInputAction: TextInputAction.search,
+                      onChanged: _onChanged,
+                      onSubmitted: (_) => _submit(),
+                      style: RyvoTypography.style(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.textPrimary,
+                        letterSpacing: -0.2,
+                      ),
+                      decoration: InputDecoration(
+                        hintText: 'Search address...',
+                        hintStyle: RyvoTypography.style(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w500,
+                          color: AppColors.textHint,
+                        ),
+                        filled: true,
+                        fillColor: AppColors.surface,
+                        isDense: true,
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 14,
+                        ),
+                        prefixIcon: const Icon(Icons.search_rounded,
+                            color: AppColors.primary, size: 20),
+                        suffixIcon: _loading
+                            ? const Padding(
+                                padding: EdgeInsets.all(14),
+                                child: SizedBox(
+                                  width: 18,
+                                  height: 18,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: AppColors.primary,
+                                  ),
+                                ),
+                              )
+                            : IconButton(
+                                onPressed: _submit,
+                                icon: const Icon(Icons.arrow_forward_rounded,
+                                    color: AppColors.primary, size: 20),
+                              ),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(16),
+                          borderSide: BorderSide(color: AppColors.divider),
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(16),
+                          borderSide: BorderSide(color: AppColors.divider),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(16),
+                          borderSide: BorderSide(
+                            color: AppColors.focusBorder,
+                            width: 1.4,
                           ),
                         ),
-                        AnimatedPositioned(
-                          duration: const Duration(milliseconds: 120),
-                          curve: Curves.easeOut,
-                          bottom: moving ? 16 : 2,
-                          child: const Icon(Icons.location_on, color: AppColors.primary, size: 46),
-                        ),
-                      ],
+                      ),
                     ),
                   ),
-                );
-              },
+                ],
+              ),
             ),
-          ),
+            if (_error != null)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 4, 20, 8),
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    _error!,
+                    style: RyvoTypography.style(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                      color: AppColors.error,
+                    ),
+                  ),
+                ),
+              ),
+            Expanded(
+              child: _settled && _suggestions.isEmpty && !_loading
+                  ? Padding(
+                      padding: const EdgeInsets.all(24),
+                      child: Align(
+                        alignment: Alignment.topLeft,
+                        child: Text(
+                          l10n.noMatchingUkAddresses,
+                          style: RyvoTypography.style(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w500,
+                            color: AppColors.textSecondary,
+                          ),
+                        ),
+                      ),
+                    )
+                  : ListView.separated(
+                      padding: const EdgeInsets.fromLTRB(8, 4, 8, 24),
+                      itemCount: _suggestions.length,
+                      separatorBuilder: (_, __) =>
+                          Divider(height: 1, color: AppColors.divider),
+                      itemBuilder: (context, index) {
+                        final suggestion = _suggestions[index];
+                        final distance = suggestion.distanceMeters;
+                        return InkWell(
+                          onTap: _loading ? null : () => _choose(suggestion),
+                          borderRadius: BorderRadius.circular(12),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 12,
+                            ),
+                            child: Row(
+                              children: [
+                                const Icon(Icons.location_on_outlined,
+                                    color: AppColors.primary, size: 20),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        suggestion.primaryText,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: RyvoTypography.style(
+                                          fontSize: 15,
+                                          fontWeight: FontWeight.w700,
+                                          color: AppColors.textPrimary,
+                                          letterSpacing: -0.3,
+                                        ),
+                                      ),
+                                      if (suggestion.secondaryText.isNotEmpty)
+                                        Text(
+                                          suggestion.secondaryText,
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: RyvoTypography.style(
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.w500,
+                                            color: AppColors.textSecondary,
+                                          ),
+                                        ),
+                                    ],
+                                  ),
+                                ),
+                                if (distance != null) ...[
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    formatUkDistance(distance),
+                                    style: RyvoTypography.distance(
+                                      color: AppColors.textSecondary,
+                                    ),
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+            ),
+          ],
         ),
-      ],
+      ),
     );
   }
 }
@@ -836,23 +1101,35 @@ class _RoundIconButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: AppColors.surface,
-      shape: const CircleBorder(),
-      elevation: 4,
-      shadowColor: Colors.black26,
-      child: InkWell(
-        customBorder: const CircleBorder(),
-        onTap: onTap,
-        child: SizedBox(
-          width: 44,
-          height: 44,
-          child: busy
-              ? const Padding(
-                  padding: EdgeInsets.all(12),
-                  child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primary),
-                )
-              : Icon(icon, color: iconColor ?? AppColors.textPrimary, size: 22),
+    return RyvoPressScale(
+      enabled: onTap != null && !busy,
+      child: Material(
+        color: AppColors.modal,
+        elevation: 0,
+        shadowColor: Colors.transparent,
+        shape: CircleBorder(side: BorderSide(color: AppColors.divider)),
+        child: InkWell(
+          customBorder: const CircleBorder(),
+          onTap: onTap == null
+              ? null
+              : () {
+                  HapticFeedback.lightImpact();
+                  onTap!();
+                },
+          child: SizedBox(
+            width: 48,
+            height: 48,
+            child: busy
+                ? const Padding(
+                    padding: EdgeInsets.all(12),
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: AppColors.primary,
+                    ),
+                  )
+                : Icon(icon,
+                    color: iconColor ?? AppColors.textPrimary, size: 22),
+          ),
         ),
       ),
     );

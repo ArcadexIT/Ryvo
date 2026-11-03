@@ -8,7 +8,8 @@ import '../../core/job/resume_customer_job.dart';
 import '../../shared/providers/app_providers.dart';
 
 /// Navigate based on FCM data payload from the Ryvo API.
-Future<void> navigateFromPushMessage(BuildContext context, RemoteMessage message) async {
+Future<void> navigateFromPushMessage(
+    BuildContext context, RemoteMessage message) async {
   final container = ProviderScope.containerOf(context, listen: false);
   await fetchAndApplyActiveJob(container);
   if (!context.mounted) return;

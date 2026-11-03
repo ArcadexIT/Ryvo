@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../../../../core/theme/app_colors.dart';
+import '../../../../shared/widgets/ryvo_close_button.dart';
 import '../../../../shared/providers/app_providers.dart';
 import '../../../../shared/widgets/ryvo_button.dart';
 import '../../domain/customer_invoice.dart';
@@ -86,6 +87,8 @@ class _InvoicesPageState extends ConsumerState<InvoicesPage> {
       backgroundColor: AppColors.background,
       appBar: AppBar(
         backgroundColor: AppColors.background,
+        automaticallyImplyLeading: false,
+        leading: const RyvoCloseButton(),
         title: Text('Invoices', style: GoogleFonts.poppins(fontWeight: FontWeight.w600)),
       ),
       body: _loading

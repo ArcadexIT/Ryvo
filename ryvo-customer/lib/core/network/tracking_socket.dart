@@ -60,7 +60,8 @@ class TrackingSocket {
 
     socket.onConnect((_) {});
     socket.on('job:location', (data) {
-      if (data is Map) _location.add(JobLocation.fromMap(Map<String, dynamic>.from(data)));
+      if (data is Map)
+        _location.add(JobLocation.fromMap(Map<String, dynamic>.from(data)));
     });
     socket.on('job:status', (data) {
       if (data is Map) _status.add(Map<String, dynamic>.from(data));

@@ -9,12 +9,13 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:ryvo_customer/l10n/app_localizations.dart';
 
 import '../../../../core/job/active_job_session.dart';
+import '../../../../core/widgets/ryvo_map_canvas.dart';
 import '../../../payment/presentation/widgets/payment_sheet.dart';
 import '../../../../core/location/driving_route.dart';
 import '../../../../core/theme/app_colors.dart';
-import '../../../../core/utils/map_style_utils.dart';
 import '../../../../data/models/models.dart';
 import '../../../home/presentation/widgets/map_markers.dart';
+import '../../../tracking/presentation/trip_map_providers.dart';
 import '../../../../shared/providers/app_providers.dart';
 import '../../../../shared/widgets/widgets.dart';
 
@@ -25,17 +26,8 @@ class SearchingPage extends ConsumerStatefulWidget {
   ConsumerState<SearchingPage> createState() => _SearchingPageState();
 }
 
-class _SearchingPageState extends ConsumerState<SearchingPage> with TickerProviderStateMixin {
-  static const _mapStyle = '''[
-    {"featureType":"poi","stylers":[{"visibility":"off"}]},
-    {"featureType":"transit","stylers":[{"visibility":"simplified"}]},
-    {"featureType":"road","elementType":"geometry","stylers":[{"color":"#ffffff"}]},
-    {"featureType":"road","elementType":"labels.text.fill","stylers":[{"color":"#444444"}]},
-    {"featureType":"landscape","stylers":[{"color":"#f5f5f5"}]},
-    {"featureType":"water","stylers":[{"color":"#c9e8f5"}]},
-    {"featureType":"road.arterial","elementType":"geometry","stylers":[{"color":"#ffd180"}]}
-  ]''';
-
+class _SearchingPageState extends ConsumerState<SearchingPage>
+    with TickerProviderStateMixin {
   late final AnimationController _radar;
   late final AnimationController _zoomBreath;
   final DrivingRouteService _routes = DrivingRouteService();
@@ -43,6 +35,9 @@ class _SearchingPageState extends ConsumerState<SearchingPage> with TickerProvid
   Timer? _pollTimer;
   Timer? _clock;
   Timer? _providerTimer;
+  StreamSubscription<Map<String, dynamic>>? _statusSub;
+  Widget? _map;
+  String? _socketJobId;
 
   bool _cancelling = false;
   int _paymentPendingHits = 0;
@@ -68,16 +63,25 @@ class _SearchingPageState extends ConsumerState<SearchingPage> with TickerProvid
   void initState() {
     super.initState();
     _startedAt = DateTime.now();
-    _radar = AnimationController(vsync: this, duration: const Duration(milliseconds: 2800))
+    final pickup = _pickupOf(ref.read(jobDraftProvider));
+    ref.read(tripCameraProvider(TripMapScope.searching).notifier).state =
+        RyvoMapCamera(target: pickup, zoom: 14.6);
+    _radar = AnimationController(
+        vsync: this, duration: const Duration(milliseconds: 2800))
       ..addListener(_onRadarTick)
       ..repeat();
-    _zoomBreath = AnimationController(vsync: this, duration: const Duration(milliseconds: 5600))
+    _zoomBreath = AnimationController(
+        vsync: this, duration: const Duration(milliseconds: 5600))
       ..addListener(_onZoomBreath);
-    _pollTimer = Timer.periodic(const Duration(seconds: 3), (_) => _pollJob());
+    _pollTimer = Timer.periodic(const Duration(seconds: 3), (_) {
+      if (ref.read(trackingSocketProvider).connected) return;
+      _pollJob();
+    });
     _clock = Timer.periodic(const Duration(seconds: 1), (_) {
       if (mounted) setState(() {});
     });
-    _providerTimer = Timer.periodic(const Duration(seconds: 8), (_) => _loadProviders());
+    _providerTimer =
+        Timer.periodic(const Duration(seconds: 8), (_) => _loadProviders());
     Future.microtask(_pollJob);
     Future.microtask(_prepareMap);
   }
@@ -85,20 +89,21 @@ class _SearchingPageState extends ConsumerState<SearchingPage> with TickerProvid
   Duration get _elapsed => DateTime.now().difference(_startedAt);
 
   void _onRadarTick() {
-    final step = (_radar.value * 20).floor();
+    final step = (_radar.value * 24).floor();
     if (step == _radarStep) return;
     _radarStep = step;
-    if (mounted) setState(() {});
+    _publishCircles();
   }
 
   Future<void> _prepareMap() async {
     final pickupIcon = await MapMarkers.buildStopLabel(
       title: 'Pickup',
       subtitle: 'Now',
-      color: const Color(0xFF32BB78),
+      color: AppColors.primary,
     );
     if (!mounted) return;
     setState(() => _pickupIcon = pickupIcon);
+    _publishScene();
     await Future.wait([_loadRoute(), _loadProviders()]);
     if (!mounted) return;
     _sceneReady = true;
@@ -118,14 +123,15 @@ class _SearchingPageState extends ConsumerState<SearchingPage> with TickerProvid
     );
     if (!mounted) return;
     final minutes = route?.durationMin ?? 0;
-    final arrival = DateTime.now().add(Duration(minutes: minutes == 0 ? 1 : minutes));
+    final arrival =
+        DateTime.now().add(Duration(minutes: minutes == 0 ? 1 : minutes));
     final hour = arrival.hour % 12 == 0 ? 12 : arrival.hour % 12;
     final minute = arrival.minute.toString().padLeft(2, '0');
     final suffix = arrival.hour >= 12 ? 'PM' : 'AM';
     final dropoffIcon = await MapMarkers.buildStopLabel(
       title: 'Dropoff',
       subtitle: '$hour:$minute $suffix',
-      color: const Color(0xFF1F2937),
+      color: AppColors.obsidian,
     );
     if (!mounted) return;
     setState(() {
@@ -133,6 +139,7 @@ class _SearchingPageState extends ConsumerState<SearchingPage> with TickerProvid
       _routeMinutes = minutes;
       _dropoffIcon = dropoffIcon;
     });
+    _publishScene();
   }
 
   Future<void> _loadProviders() async {
@@ -177,7 +184,11 @@ class _SearchingPageState extends ConsumerState<SearchingPage> with TickerProvid
 
   Future<void> _lockAndBreathe() async {
     final controller = _mapController;
-    if (_cameraLocked || !_mapReady || !_sceneReady || controller == null || !mounted) return;
+    if (_cameraLocked ||
+        !_mapReady ||
+        !_sceneReady ||
+        controller == null ||
+        !mounted) return;
     _cameraLocked = true;
 
     final draft = ref.read(jobDraftProvider);
@@ -201,7 +212,8 @@ class _SearchingPageState extends ConsumerState<SearchingPage> with TickerProvid
     final bottomInset = MediaQuery.paddingOf(context).bottom;
     final visibleHeight = math.max(180.0, size.height - 88 - 420 - bottomInset);
     final center = LatLng((south + north) / 2, (west + east) / 2);
-    final zoom = points.length < 2 || ((north - south).abs() < 0.0001 && (east - west).abs() < 0.0001)
+    final zoom = points.length < 2 ||
+            ((north - south).abs() < 0.0001 && (east - west).abs() < 0.0001)
         ? 15.2
         : _zoomToFit(
             south: south,
@@ -214,7 +226,8 @@ class _SearchingPageState extends ConsumerState<SearchingPage> with TickerProvid
 
     _baseZoom = zoom;
     await controller.animateCamera(
-      CameraUpdate.newCameraPosition(CameraPosition(target: center, zoom: zoom)),
+      CameraUpdate.newCameraPosition(
+          CameraPosition(target: center, zoom: zoom)),
     );
     if (!mounted || _touchingMap) return;
     _startZoomBreath();
@@ -254,7 +267,8 @@ class _SearchingPageState extends ConsumerState<SearchingPage> with TickerProvid
     if (_touchingMap || controller == null || base == null || !mounted) return;
     final t = Curves.easeInOutCubic.transform(_zoomBreath.value);
     final zoom = base - 0.62 + t * 1.24;
-    if (_lastAppliedZoom != null && (zoom - _lastAppliedZoom!).abs() < 0.008) return;
+    if (_lastAppliedZoom != null && (zoom - _lastAppliedZoom!).abs() < 0.008)
+      return;
     _lastAppliedZoom = zoom;
     controller.moveCamera(CameraUpdate.zoomTo(zoom));
   }
@@ -275,7 +289,8 @@ class _SearchingPageState extends ConsumerState<SearchingPage> with TickerProvid
     final latFraction = (_mercatorY(south) - _mercatorY(north)).abs();
     var lngDiff = (east - west).abs();
     if (lngDiff > 180) lngDiff = 360 - lngDiff;
-    final fitted = math.min(zoomFor(latFraction, heightPx), zoomFor(lngDiff / 360, widthPx));
+    final fitted = math.min(
+        zoomFor(latFraction, heightPx), zoomFor(lngDiff / 360, widthPx));
     return (fitted - 0.55).clamp(12.4, 16.2);
   }
 
@@ -308,17 +323,19 @@ class _SearchingPageState extends ConsumerState<SearchingPage> with TickerProvid
       Marker(
         markerId: const MarkerId('pickup'),
         position: pickup,
-        icon: _pickupIcon ?? BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueGreen),
+        icon: _pickupIcon ??
+            BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueGreen),
         anchor: const Offset(0.5, 1),
-        zIndex: 3,
+        zIndexInt: 3,
       ),
       if (dropoff != null)
         Marker(
           markerId: const MarkerId('dropoff'),
           position: dropoff,
-          icon: _dropoffIcon ?? BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed),
+          icon: _dropoffIcon ??
+              BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed),
           anchor: const Offset(0.5, 1),
-          zIndex: 2,
+          zIndexInt: 2,
         ),
     };
   }
@@ -330,7 +347,7 @@ class _SearchingPageState extends ConsumerState<SearchingPage> with TickerProvid
       Polyline(
         polylineId: const PolylineId('route-casing'),
         points: points,
-        color: Colors.white,
+        color: AppColors.white,
         width: 10,
         startCap: Cap.roundCap,
         endCap: Cap.roundCap,
@@ -340,7 +357,7 @@ class _SearchingPageState extends ConsumerState<SearchingPage> with TickerProvid
       Polyline(
         polylineId: const PolylineId('route'),
         points: points,
-        color: const Color(0xFF32BB78),
+        color: AppColors.primary,
         width: 6,
         startCap: Cap.roundCap,
         endCap: Cap.roundCap,
@@ -405,10 +422,57 @@ class _SearchingPageState extends ConsumerState<SearchingPage> with TickerProvid
     if (driver == null) return null;
     final parts = <String>[
       if (driver.etaMinutes != null) '${driver.etaMinutes} min away',
-      if (driver.distanceKm != null) '${driver.distanceKm!.toStringAsFixed(1)} km',
+      if (driver.distanceKm != null)
+        '${driver.distanceKm!.toStringAsFixed(1)} km',
     ];
     if (parts.isEmpty) return null;
     return parts.join(' · ');
+  }
+
+  void _publishScene() {
+    final draft = ref.read(jobDraftProvider);
+    final pickup = _pickupOf(draft);
+    final dropoff = _dropoffOf(draft);
+    ref.read(tripMarkersProvider(TripMapScope.searching).notifier).state =
+        _markers(pickup, dropoff);
+    ref.read(tripPolylinesProvider(TripMapScope.searching).notifier).state =
+        _polylines(pickup, dropoff);
+    _publishCircles();
+  }
+
+  void _publishCircles() {
+    final pickup = _pickupOf(ref.read(jobDraftProvider));
+    ref.read(tripCirclesProvider(TripMapScope.searching).notifier).state =
+        _radarCircles(pickup);
+  }
+
+  Widget _searchMap() {
+    return _map ??= RyvoMapCanvas(
+      markers: tripMarkersProvider(TripMapScope.searching),
+      polylines: tripPolylinesProvider(TripMapScope.searching),
+      circles: tripCirclesProvider(TripMapScope.searching),
+      camera: tripCameraProvider(TripMapScope.searching),
+      padding: const EdgeInsets.only(top: 88, bottom: 420),
+      onMapCreated: (controller) {
+        _mapController = controller;
+        _mapReady = true;
+        _lockAndBreathe();
+      },
+    );
+  }
+
+  Future<void> _ensureSocket(String jobId) async {
+    if (_socketJobId == jobId) return;
+    _socketJobId = jobId;
+    final socket = ref.read(trackingSocketProvider);
+    await socket.connect();
+    if (!mounted || _socketJobId != jobId) return;
+    socket.subscribeJob(jobId);
+    await _statusSub?.cancel();
+    _statusSub = socket.onStatus.listen((_) {
+      if (!mounted) return;
+      _pollJob();
+    });
   }
 
   String _clockLabel(Duration elapsed) {
@@ -417,15 +481,11 @@ class _SearchingPageState extends ConsumerState<SearchingPage> with TickerProvid
     return '$minutes:$seconds';
   }
 
-  double get _searchProgress {
-    final seconds = _elapsed.inMilliseconds / 1000;
-    return (1 - math.exp(-seconds / 42)).clamp(0.06, 0.92);
-  }
-
   Future<void> _pollJob() async {
     if (!mounted) return;
     final job = ref.read(jobDraftProvider).activeJob;
     if (job == null) return;
+    _ensureSocket(job.id);
 
     try {
       final updated = await ref.read(jobRepositoryProvider).getJob(job.id);
@@ -467,7 +527,8 @@ class _SearchingPageState extends ConsumerState<SearchingPage> with TickerProvid
       } else {
         _paymentPendingHits = 0;
         if (updated.jobType == 'bidding' && updated.status == 'searching') {
-          final bids = await ref.read(jobRepositoryProvider).listBids(updated.id);
+          final bids =
+              await ref.read(jobRepositoryProvider).listBids(updated.id);
           if (mounted) setState(() => _bids = bids);
         }
       }
@@ -493,7 +554,8 @@ class _SearchingPageState extends ConsumerState<SearchingPage> with TickerProvid
                 color: AppColors.primary.withOpacity(0.12),
                 shape: BoxShape.circle,
               ),
-              child: const Icon(Icons.person_off_outlined, color: AppColors.primary, size: 24),
+              child: const Icon(Icons.person_off_outlined,
+                  color: AppColors.primary, size: 24),
             ),
             const SizedBox(width: 12),
             Expanded(
@@ -543,7 +605,9 @@ class _SearchingPageState extends ConsumerState<SearchingPage> with TickerProvid
     if (job == null) return;
     setState(() => _cancelling = true);
     try {
-      await ref.read(jobRepositoryProvider).cancelJob(job.id, reason: 'Cancelled by customer');
+      await ref
+          .read(jobRepositoryProvider)
+          .cancelJob(job.id, reason: 'Cancelled by customer');
       ref.invalidate(jobsListProvider);
       if (!mounted) return;
       markJobSessionFinished(
@@ -566,6 +630,11 @@ class _SearchingPageState extends ConsumerState<SearchingPage> with TickerProvid
     _pollTimer?.cancel();
     _clock?.cancel();
     _providerTimer?.cancel();
+    _statusSub?.cancel();
+    final socketJobId = _socketJobId;
+    if (socketJobId != null) {
+      ref.read(trackingSocketProvider).unsubscribeJob(socketJobId);
+    }
     super.dispose();
   }
 
@@ -573,14 +642,17 @@ class _SearchingPageState extends ConsumerState<SearchingPage> with TickerProvid
   Widget build(BuildContext context) {
     final draft = ref.watch(jobDraftProvider);
     final job = draft.activeJob;
-    final pickup = _pickupOf(draft);
-    final dropoff = _dropoffOf(draft);
     final status = _status();
-    final serviceName = draft.serviceCategory?.name ?? job?.serviceCategory?.name ?? AppLocalizations.of(context).service;
-    final pickupAddress = (job?.pickupAddress.trim().isNotEmpty ?? false) ? job!.pickupAddress : draft.pickupAddress;
-    final dropoffAddress = (job?.dropoffAddress?.trim().isNotEmpty ?? false) ? job!.dropoffAddress! : draft.dropoffAddress;
+    final serviceName = draft.serviceCategory?.name ??
+        job?.serviceCategory?.name ??
+        AppLocalizations.of(context).service;
+    final pickupAddress = (job?.pickupAddress.trim().isNotEmpty ?? false)
+        ? job!.pickupAddress
+        : draft.pickupAddress;
+    final dropoffAddress = (job?.dropoffAddress?.trim().isNotEmpty ?? false)
+        ? job!.dropoffAddress!
+        : draft.dropoffAddress;
     final fare = job?.displayFare ?? draft.estimate?.estimatedFare ?? 0;
-    final bottomInset = MediaQuery.paddingOf(context).bottom;
 
     return PopScope(
       canPop: false,
@@ -593,26 +665,7 @@ class _SearchingPageState extends ConsumerState<SearchingPage> with TickerProvid
               onPointerDown: (_) => _onMapPointerDown(),
               onPointerUp: (_) => _onMapPointerUp(),
               onPointerCancel: (_) => _onMapPointerUp(),
-              child: GoogleMap(
-                padding: EdgeInsets.only(top: 88, bottom: 420 + bottomInset),
-                initialCameraPosition: CameraPosition(target: pickup, zoom: 14.6),
-                onMapCreated: (controller) async {
-                  _mapController = controller;
-                  await applyMapStyle(controller, _mapStyle);
-                  if (!mounted) return;
-                  _mapReady = true;
-                  _lockAndBreathe();
-                },
-                mapType: MapType.normal,
-                myLocationEnabled: false,
-                myLocationButtonEnabled: false,
-                zoomControlsEnabled: false,
-                compassEnabled: false,
-                mapToolbarEnabled: false,
-                markers: _markers(pickup, dropoff),
-                circles: _radarCircles(pickup),
-                polylines: _polylines(pickup, dropoff),
-              ),
+              child: _searchMap(),
             ),
             SafeArea(
               child: Padding(
@@ -621,12 +674,16 @@ class _SearchingPageState extends ConsumerState<SearchingPage> with TickerProvid
                   children: [
                     const Spacer(),
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 14, vertical: 8),
                       decoration: BoxDecoration(
                         color: AppColors.card,
                         borderRadius: BorderRadius.circular(24),
                         boxShadow: [
-                          BoxShadow(color: Colors.black.withOpacity(0.12), blurRadius: 12, offset: const Offset(0, 4)),
+                          BoxShadow(
+                              color: Colors.black.withOpacity(0.12),
+                              blurRadius: 12,
+                              offset: const Offset(0, 4)),
                         ],
                       ),
                       child: Row(
@@ -635,7 +692,9 @@ class _SearchingPageState extends ConsumerState<SearchingPage> with TickerProvid
                           Container(
                             width: 8,
                             height: 8,
-                            decoration: const BoxDecoration(color: AppColors.primary, shape: BoxShape.circle),
+                            decoration: const BoxDecoration(
+                                color: AppColors.primary,
+                                shape: BoxShape.circle),
                           ),
                           const SizedBox(width: 8),
                           Text(
@@ -658,7 +717,6 @@ class _SearchingPageState extends ConsumerState<SearchingPage> with TickerProvid
               alignment: Alignment.bottomCenter,
               child: _SearchSheet(
                 status: status,
-                progress: _searchProgress,
                 serviceName: serviceName,
                 fare: formatMoney(fare),
                 pickupAddress: pickupAddress,
@@ -672,11 +730,14 @@ class _SearchingPageState extends ConsumerState<SearchingPage> with TickerProvid
                   final job = ref.read(jobDraftProvider).activeJob;
                   if (job == null) return;
                   try {
-                    final updated = await ref.read(jobRepositoryProvider).acceptBid(job.id, bid.id);
+                    final updated = await ref
+                        .read(jobRepositoryProvider)
+                        .acceptBid(job.id, bid.id);
                     if (!mounted) return;
                     ref.read(jobDraftProvider.notifier).state =
                         ref.read(jobDraftProvider).copyWith(activeJob: updated);
-                    context.pushReplacement(routeForActiveCustomerJob(updated.status));
+                    context.pushReplacement(
+                        routeForActiveCustomerJob(updated.status));
                   } catch (e) {
                     if (mounted) showApiError(context, e);
                   }
@@ -705,7 +766,6 @@ class _SearchStatus {
 class _SearchSheet extends StatelessWidget {
   const _SearchSheet({
     required this.status,
-    required this.progress,
     required this.serviceName,
     required this.fare,
     required this.pickupAddress,
@@ -719,7 +779,6 @@ class _SearchSheet extends StatelessWidget {
   });
 
   final _SearchStatus status;
-  final double progress;
   final String serviceName;
   final String fare;
   final String pickupAddress;
@@ -739,7 +798,10 @@ class _SearchSheet extends StatelessWidget {
         color: AppColors.card,
         borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
         boxShadow: [
-          BoxShadow(color: Colors.black.withOpacity(0.16), blurRadius: 24, offset: const Offset(0, -6)),
+          BoxShadow(
+              color: Colors.black.withOpacity(0.16),
+              blurRadius: 24,
+              offset: const Offset(0, -6)),
         ],
       ),
       child: SafeArea(
@@ -772,35 +834,33 @@ class _SearchSheet extends StatelessWidget {
               const SizedBox(height: 4),
               Text(
                 status.subtitle,
-                style: GoogleFonts.poppins(fontSize: 13, height: 1.4, color: AppColors.textSecondary),
+                style: GoogleFonts.poppins(
+                    fontSize: 13, height: 1.4, color: AppColors.textSecondary),
               ),
               const SizedBox(height: 14),
-              ClipRRect(
-                borderRadius: BorderRadius.circular(99),
-                child: LinearProgressIndicator(
-                  value: progress,
-                  minHeight: 4,
-                  backgroundColor: AppColors.primaryLight,
-                  color: AppColors.primary,
-                ),
-              ),
+              const _PulsingSearchBar(),
               const SizedBox(height: 14),
               _StatusSteps(activeStep: status.step),
               if (bids.isNotEmpty) ...[
                 const SizedBox(height: 12),
-                Text('Driver offers', style: GoogleFonts.poppins(fontWeight: FontWeight.w600)),
+                Text('Driver offers',
+                    style: GoogleFonts.poppins(fontWeight: FontWeight.w600)),
                 ...bids.take(4).map(
-                  (bid) => ListTile(
-                    dense: true,
-                    contentPadding: EdgeInsets.zero,
-                    title: Text(bid.providerName ?? 'Driver'),
-                    subtitle: Text(bid.kind == 'counter' ? 'Counter offer' : 'Accepted your price'),
-                    trailing: TextButton(
-                      onPressed: onAcceptBid == null ? null : () => onAcceptBid!(bid),
-                      child: Text(formatMoney(bid.amount)),
+                      (bid) => ListTile(
+                        dense: true,
+                        contentPadding: EdgeInsets.zero,
+                        title: Text(bid.providerName ?? 'Driver'),
+                        subtitle: Text(bid.kind == 'counter'
+                            ? 'Counter offer'
+                            : 'Accepted your price'),
+                        trailing: TextButton(
+                          onPressed: onAcceptBid == null
+                              ? null
+                              : () => onAcceptBid!(bid),
+                          child: Text(formatMoney(bid.amount)),
+                        ),
+                      ),
                     ),
-                  ),
-                ),
               ],
               const SizedBox(height: 16),
               Row(
@@ -812,7 +872,8 @@ class _SearchSheet extends StatelessWidget {
                       color: AppColors.primary.withOpacity(0.12),
                       borderRadius: BorderRadius.circular(12),
                     ),
-                    child: const Icon(Icons.directions_car_filled, color: AppColors.primary, size: 22),
+                    child: const Icon(Icons.directions_car_filled,
+                        color: AppColors.primary, size: 22),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
@@ -829,11 +890,14 @@ class _SearchSheet extends StatelessWidget {
                         ),
                         Text(
                           driverCount == 0
-                              ? (routeMinutes > 0 ? '$routeMinutes min trip' : 'Request sent')
+                              ? (routeMinutes > 0
+                                  ? '$routeMinutes min trip'
+                                  : 'Request sent')
                               : driverCount == 1
                                   ? '1 driver nearby'
                                   : '$driverCount drivers nearby',
-                          style: GoogleFonts.poppins(fontSize: 12, color: AppColors.textSecondary),
+                          style: GoogleFonts.poppins(
+                              fontSize: 12, color: AppColors.textSecondary),
                         ),
                       ],
                     ),
@@ -883,7 +947,8 @@ class _StatusSteps extends StatelessWidget {
                 color: i <= activeStep ? AppColors.primary : AppColors.divider,
               ),
             ),
-          _StepDot(label: labels[i], done: i < activeStep, active: i == activeStep),
+          _StepDot(
+              label: labels[i], done: i < activeStep, active: i == activeStep),
         ],
       ],
     );
@@ -891,7 +956,8 @@ class _StatusSteps extends StatelessWidget {
 }
 
 class _StepDot extends StatelessWidget {
-  const _StepDot({required this.label, required this.done, required this.active});
+  const _StepDot(
+      {required this.label, required this.done, required this.active});
 
   final String label;
   final bool done;
@@ -906,7 +972,9 @@ class _StepDot extends StatelessWidget {
           width: 22,
           height: 22,
           decoration: BoxDecoration(
-            color: done ? AppColors.primary : (active ? AppColors.primaryLight : AppColors.card),
+            color: done
+                ? AppColors.primary
+                : (active ? AppColors.primaryLight : AppColors.card),
             shape: BoxShape.circle,
             border: Border.all(color: color, width: 2),
           ),
@@ -917,7 +985,8 @@ class _StepDot extends StatelessWidget {
                       child: Container(
                         width: 8,
                         height: 8,
-                        decoration: const BoxDecoration(color: AppColors.primary, shape: BoxShape.circle),
+                        decoration: const BoxDecoration(
+                            color: AppColors.primary, shape: BoxShape.circle),
                       ),
                     )
                   : null,
@@ -928,7 +997,9 @@ class _StepDot extends StatelessWidget {
           style: GoogleFonts.poppins(
             fontSize: 11,
             fontWeight: active ? FontWeight.w600 : FontWeight.w500,
-            color: done || active ? AppColors.textPrimary : AppColors.textSecondary,
+            color: done || active
+                ? AppColors.textPrimary
+                : AppColors.textSecondary,
           ),
         ),
       ],
@@ -959,7 +1030,8 @@ class _RouteStops extends StatelessWidget {
                 width: 10,
                 height: 10,
                 margin: const EdgeInsets.only(top: 4),
-                decoration: const BoxDecoration(color: AppColors.primary, shape: BoxShape.circle),
+                decoration: const BoxDecoration(
+                    color: AppColors.primary, shape: BoxShape.circle),
               ),
               Container(width: 2, height: 22, color: AppColors.divider),
               Container(
@@ -981,20 +1053,66 @@ class _RouteStops extends StatelessWidget {
                   pickup.trim().isEmpty ? 'Pickup' : pickup,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: GoogleFonts.poppins(fontSize: 13, fontWeight: FontWeight.w500, color: AppColors.textPrimary),
+                  style: GoogleFonts.poppins(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w500,
+                      color: AppColors.textPrimary),
                 ),
                 const SizedBox(height: 14),
                 Text(
                   dropoff.trim().isEmpty ? 'Dropoff' : dropoff,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: GoogleFonts.poppins(fontSize: 13, fontWeight: FontWeight.w500, color: AppColors.textPrimary),
+                  style: GoogleFonts.poppins(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w500,
+                      color: AppColors.textPrimary),
                 ),
               ],
             ),
           ),
         ],
       ),
+    );
+  }
+}
+
+class _PulsingSearchBar extends StatefulWidget {
+  const _PulsingSearchBar();
+
+  @override
+  State<_PulsingSearchBar> createState() => _PulsingSearchBarState();
+}
+
+class _PulsingSearchBarState extends State<_PulsingSearchBar>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _pulse = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 1400),
+  )..repeat();
+
+  @override
+  void dispose() {
+    _pulse.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _pulse,
+      builder: (context, _) {
+        final t = Curves.easeInOut.transform(_pulse.value);
+        return ClipRRect(
+          borderRadius: BorderRadius.circular(99),
+          child: LinearProgressIndicator(
+            value: 0.18 + t * 0.72,
+            minHeight: 4,
+            backgroundColor: AppColors.primaryLight,
+            color: AppColors.primary,
+          ),
+        );
+      },
     );
   }
 }

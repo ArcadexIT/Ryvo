@@ -1,0 +1,9 @@
+# Ignore other apps in monorepo while focusing on customer
+ryvo-admin/**
+ryvo-driver/**
+
+# Ignore heavy build/generated artifacts
+**/build/**
+**/.dart_tool/**
+**/ios/Pods/**
+**/android/.gradle/**

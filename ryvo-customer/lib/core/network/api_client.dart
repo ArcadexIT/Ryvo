@@ -1,7 +1,9 @@
 import 'dart:io';
 
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 import 'package:mime/mime.dart';
+import 'package:pretty_dio_logger/pretty_dio_logger.dart';
 
 import '../constants/app_constants.dart';
 import 'api_exception.dart';
@@ -13,9 +15,12 @@ class ApiClient {
     _dio = Dio(
       BaseOptions(
         baseUrl: AppConstants.apiBaseUrl,
-        connectTimeout: const Duration(seconds: 15),
-        receiveTimeout: const Duration(seconds: 15),
-        headers: {'Content-Type': 'application/json', 'Accept': 'application/json'},
+        connectTimeout: const Duration(seconds: 30),
+        receiveTimeout: const Duration(seconds: 30),
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
       ),
     );
 
@@ -46,6 +51,7 @@ class ApiClient {
         },
       ),
     );
+    _attachLogger(_dio);
   }
 
   late final Dio _dio;
@@ -62,9 +68,14 @@ class ApiClient {
     if (refreshToken == null) return false;
 
     try {
-      final response = await Dio(
+      final refreshDio = Dio(
         BaseOptions(baseUrl: AppConstants.apiBaseUrl),
-      ).post('/customer/auth/refresh', data: {'refreshToken': refreshToken});
+      );
+      _attachLogger(refreshDio);
+      final response = await refreshDio.post(
+        '/customer/auth/refresh',
+        data: {'refreshToken': refreshToken},
+      );
 
       final data = _unwrap(response.data);
       if (data is! Map<String, dynamic>) return false;
@@ -90,8 +101,7 @@ class ApiClient {
     Map<String, dynamic>? queryParameters,
     T Function(dynamic json)? parser,
   }) =>
-      _request('GET', path,
-          queryParameters: queryParameters, parser: parser);
+      _request('GET', path, queryParameters: queryParameters, parser: parser);
 
   Future<T> post<T>(
     String path, {
@@ -129,7 +139,8 @@ class ApiClient {
     }
     final formData = FormData.fromMap({
       'folder': folder,
-      'file': await MultipartFile.fromFile(file.path, filename: name, contentType: DioMediaType.parse(mime)),
+      'file': await MultipartFile.fromFile(file.path,
+          filename: name, contentType: DioMediaType.parse(mime)),
     });
     try {
       // Leave Content-Type unset so Dio can add the multipart boundary.
@@ -166,32 +177,51 @@ class ApiClient {
   }
 
   dynamic _unwrap(dynamic body) {
-    if (body is Map<String, dynamic>) {
-      if (body['success'] == false) {
+    if (body is Map) {
+      final map = Map<String, dynamic>.from(body);
+      if (map['success'] == false) {
         throw ApiException(
-          body['message']?.toString() ?? 'Request failed',
+          serverErrorMessage(map) ?? 'Request failed',
+          statusCode: _statusCode(map['statusCode']),
         );
       }
-      return body['data'];
+      return map['data'];
     }
     return body;
   }
 
   ApiException _mapError(DioException error) {
     final response = error.response;
-    if (response?.data is Map<String, dynamic>) {
-      final map = response!.data as Map<String, dynamic>;
-      final message = map['message'] ??
-          (map['error'] is Map ? map['error']['message'] : null) ??
-          error.message;
-      return ApiException(message?.toString() ?? 'Request failed',
-          statusCode: response.statusCode);
-    }
-    return ApiException(
-      error.message ?? 'Network error',
+    final serverMessage = serverErrorMessage(response?.data);
+    final message = serverMessage ?? error.message ?? 'Network error';
+    final exception = ApiException(
+      message,
       statusCode: response?.statusCode,
     );
+    if (kDebugMode) debugPrint('ApiException: $exception');
+    return exception;
   }
+}
+
+void _attachLogger(Dio dio) {
+  if (!kDebugMode) return;
+  dio.interceptors.add(
+    PrettyDioLogger(
+      requestHeader: true,
+      requestBody: true,
+      responseHeader: true,
+      responseBody: true,
+      error: true,
+      compact: true,
+      maxWidth: 90,
+    ),
+  );
+}
+
+int? _statusCode(dynamic value) {
+  if (value is int) return value;
+  if (value is String) return int.tryParse(value);
+  return null;
 }
 
 class PaginatedResult<T> {
@@ -207,10 +237,7 @@ PaginatedResult<T> parsePaginated<T>(
 ) {
   if (data is List) {
     return PaginatedResult(
-      items: data
-          .whereType<Map<String, dynamic>>()
-          .map(fromJson)
-          .toList(),
+      items: data.whereType<Map<String, dynamic>>().map(fromJson).toList(),
     );
   }
   return PaginatedResult(items: const []);

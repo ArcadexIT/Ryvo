@@ -6,7 +6,9 @@ Future<void> dialPhone(BuildContext context, String? phone) async {
   final trimmed = phone?.trim() ?? '';
   if (trimmed.isEmpty) {
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(AppLocalizations.of(context).contactNumberNotAvailableYet)),
+      SnackBar(
+          content:
+              Text(AppLocalizations.of(context).contactNumberNotAvailableYet)),
     );
     return;
   }

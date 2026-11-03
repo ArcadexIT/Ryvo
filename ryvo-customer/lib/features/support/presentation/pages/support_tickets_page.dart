@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../shared/widgets/ryvo_close_button.dart';
 import '../../../../data/models/support_models.dart';
 import '../../../../shared/providers/app_providers.dart';
 import 'package:ryvo_customer/l10n/app_localizations.dart';
@@ -19,6 +20,8 @@ class SupportTicketsPage extends ConsumerWidget {
       backgroundColor: AppColors.background,
       appBar: AppBar(
         backgroundColor: AppColors.background,
+        automaticallyImplyLeading: false,
+        leading: const RyvoCloseButton(),
         title: Text(AppLocalizations.of(context).myTickets, style: GoogleFonts.poppins(fontSize: 18, fontWeight: FontWeight.w600)),
         actions: [
           IconButton(
