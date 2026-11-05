@@ -190,6 +190,7 @@
   "resumeActiveJob": "Resume active job",
   "chatWithCustomer": "Chat with customer",
   "logout": "Logout",
+  "logoutConfirmBody": "You will need to sign in again to get back online.",
   "jobHistory": "Job History",
   "couldNotLoadHistory": "Could not load history",
   "noCompletedJobsYet": "No completed jobs yet",

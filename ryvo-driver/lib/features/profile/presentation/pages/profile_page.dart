@@ -4,8 +4,8 @@ import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../shared/providers/app_providers.dart';
-import '../../../../shared/widgets/rating_stars.dart';
-import '../../../../shared/widgets/widgets.dart';
+import '../../../../shared/widgets/job_chat_button.dart';
+import '../../../../shared/widgets/provider_avatar.dart';
 import 'package:ryvo_driver/l10n/app_localizations.dart';
 
 class ProfilePage extends ConsumerWidget {
@@ -15,75 +15,152 @@ class ProfilePage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final profile = ref.watch(providerProfileProvider);
     final provider = profile.value;
-    final name = provider?.name.isNotEmpty == true ? provider!.name : AppLocalizations.of(context).provider;
+    final l10n = AppLocalizations.of(context);
+    final name = provider?.name.isNotEmpty == true ? provider!.name : l10n.provider;
+    final phone = provider?.phone.trim() ?? '';
     final rating = provider?.rating ?? 0;
     final trips = provider?.totalTrips ?? 0;
     final activeJob = ref.watch(activeJobProvider);
+    final resumeRoute = activeJob == null ? null : routeForActiveJob(activeJob.status);
 
     return Scaffold(
       backgroundColor: AppColors.background,
       body: SafeArea(
+        bottom: false,
         child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24),
+          physics: const AlwaysScrollableScrollPhysics(),
           child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              ProviderAvatar(
-                name: name,
-                avatarUrl: provider?.avatarUrl,
-                radius: 44,
+              Padding(
+                padding: const EdgeInsets.fromLTRB(24, 12, 24, 32),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(l10n.profile, style: _type(size: 22, weight: FontWeight.w700, letterSpacing: -0.4)),
+                    const SizedBox(height: 28),
+                    Row(
+                      children: [
+                        ProviderAvatar(name: name, avatarUrl: provider?.avatarUrl, radius: 26),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                name,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                style: _type(size: 22, weight: FontWeight.w700, letterSpacing: -0.4, height: 1.15),
+                              ),
+                              if (phone.isNotEmpty) ...[
+                                const SizedBox(height: 4),
+                                Text(phone, style: _type(size: 13, color: AppColors.textSecondary, tabular: true)),
+                              ],
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 28),
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                rating.toStringAsFixed(1),
+                                style: _type(size: 40, weight: FontWeight.w700, letterSpacing: -0.8, height: 1, tabular: true),
+                              ),
+                              const SizedBox(height: 6),
+                              Text(l10n.rating, style: _type(size: 13, color: AppColors.textSecondary)),
+                            ],
+                          ),
+                        ),
+                        DecoratedBox(
+                          decoration: const BoxDecoration(
+                            border: Border(left: BorderSide(color: AppColors.divider)),
+                          ),
+                          child: Padding(
+                            padding: const EdgeInsets.only(left: 16),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.end,
+                              children: [
+                                Text(l10n.jobs, style: _type(size: 11, weight: FontWeight.w500, color: AppColors.textHint)),
+                                const SizedBox(height: 2),
+                                Text(
+                                  '$trips',
+                                  style: _type(size: 16, weight: FontWeight.w700, letterSpacing: -0.4, tabular: true),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
               ),
-              const SizedBox(height: 16),
-              Text(name, style: GoogleFonts.poppins(fontSize: 22, fontWeight: FontWeight.w700, color: AppColors.textPrimary)),
-              const SizedBox(height: 8),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  RatingStars(rating: rating, size: 18),
-                  const SizedBox(width: 8),
-                  Text('${rating.toStringAsFixed(1)} • $trips trips', style: GoogleFonts.poppins(fontSize: 13, color: AppColors.textSecondary)),
-                ],
-              ),
-              const SizedBox(height: 32),
-              _SettingsSection(title: AppLocalizations.of(context).account, items: [
-                _SettingsItem(icon: Icons.verified_user_outlined, label: AppLocalizations.of(context).documentsVerification, route: '/documents-verification'),
-                _SettingsItem(icon: Icons.gavel_outlined, label: 'Tax & insurance', route: '/compliance'),
-                _SettingsItem(icon: Icons.person_outline, label: AppLocalizations.of(context).personalInfo, route: '/personal-info'),
-                _SettingsItem(icon: Icons.directions_car_outlined, label: AppLocalizations.of(context).vehicleInfo, route: '/vehicle-info'),
-                _SettingsItem(icon: Icons.payment_outlined, label: AppLocalizations.of(context).paymentMethods2, route: '/payment-methods'),
-              ]),
-              const SizedBox(height: 16),
-              _SettingsSection(title: AppLocalizations.of(context).preferences, items: [
-                _SettingsItem(icon: Icons.notifications_outlined, label: AppLocalizations.of(context).notifications, route: '/notifications'),
-                _SettingsItem(icon: Icons.language_outlined, label: AppLocalizations.of(context).languageRegion, route: '/language'),
-              ]),
-              const SizedBox(height: 16),
-              _SettingsSection(title: AppLocalizations.of(context).support, items: [
-                _SettingsItem(icon: Icons.analytics_outlined, label: AppLocalizations.of(context).myPerformance, route: '/performance'),
-                _SettingsItem(icon: Icons.account_balance_wallet_outlined, label: AppLocalizations.of(context).wallet, route: '/wallet'),
-                _SettingsItem(icon: Icons.help_outline, label: AppLocalizations.of(context).helpSupport, route: '/help'),
-                if (activeJob != null && routeForActiveJob(activeJob.status) != null) ...[
-                  _SettingsItem(
-                    icon: Icons.navigation_outlined,
-                    label: AppLocalizations.of(context).resumeActiveJob,
-                    route: routeForActiveJob(activeJob.status)!,
+              Material(
+                color: AppColors.surface,
+                child: DecoratedBox(
+                  decoration: const BoxDecoration(
+                    border: Border(top: BorderSide(color: AppColors.divider)),
                   ),
-                  _SettingsItem(
-                    icon: Icons.chat_outlined,
-                    label: AppLocalizations.of(context).chatWithCustomer,
-                    onTap: () => openJobChat(context, ref, jobId: activeJob.id),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      _Section(
+                        title: l10n.account,
+                        first: true,
+                        rows: [
+                          _Row(l10n.documentsVerification, () => context.push('/documents-verification')),
+                          _Row('Tax & insurance', () => context.push('/compliance')),
+                          _Row(l10n.personalInfo, () => context.push('/personal-info')),
+                          _Row(l10n.vehicleInfo, () => context.push('/vehicle-info')),
+                          _Row(l10n.paymentMethods2, () => context.push('/payment-methods')),
+                        ],
+                      ),
+                      _Section(
+                        title: l10n.preferences,
+                        rows: [
+                          _Row(l10n.notifications, () => context.push('/notifications')),
+                          _Row(l10n.languageRegion, () => context.push('/language')),
+                        ],
+                      ),
+                      _Section(
+                        title: l10n.support,
+                        rows: [
+                          _Row(l10n.myPerformance, () => context.push('/performance')),
+                          _Row(l10n.wallet, () => context.push('/wallet')),
+                          _Row(l10n.helpSupport, () => context.push('/help')),
+                          if (resumeRoute != null)
+                            _Row(l10n.resumeActiveJob, () => context.push(resumeRoute), color: AppColors.primary),
+                          if (activeJob != null && resumeRoute != null)
+                            _Row(l10n.chatWithCustomer, () => openJobChat(context, ref, jobId: activeJob.id)),
+                        ],
+                      ),
+                      InkWell(
+                        onTap: () => _confirmLogout(context, ref),
+                        splashColor: AppColors.grey100,
+                        highlightColor: AppColors.grey100,
+                        child: Container(
+                          padding: const EdgeInsets.fromLTRB(24, 18, 24, 36),
+                          decoration: const BoxDecoration(
+                            border: Border(top: BorderSide(color: AppColors.divider)),
+                          ),
+                          alignment: Alignment.centerLeft,
+                          child: Text(
+                            l10n.logout,
+                            style: _type(size: 15, weight: FontWeight.w700, color: AppColors.error),
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
-                ],
-              ]),
-              const SizedBox(height: 24),
-              ListTile(
-                onTap: () async {
-                  await providerSignOut(ref);
-                  ref.read(isKycApprovedProvider.notifier).state = false;
-                  if (context.mounted) context.go('/login');
-                },
-                leading: const Icon(Icons.logout, color: AppColors.error),
-                title: Text(AppLocalizations.of(context).logout, style: GoogleFonts.poppins(color: AppColors.error, fontWeight: FontWeight.w600)),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: const BorderSide(color: AppColors.divider)),
+                ),
               ),
             ],
           ),
@@ -93,45 +170,108 @@ class ProfilePage extends ConsumerWidget {
   }
 }
 
-class _SettingsSection extends StatelessWidget {
+Future<void> _confirmLogout(BuildContext context, WidgetRef ref) async {
+  final l10n = AppLocalizations.of(context);
+  final confirmed = await showDialog<bool>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      backgroundColor: AppColors.surface,
+      elevation: 0,
+      surfaceTintColor: AppColors.surface,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: const BorderSide(color: AppColors.divider),
+      ),
+      title: Text(l10n.logout, style: _type(size: 18, weight: FontWeight.w700, letterSpacing: -0.3)),
+      content: Text(l10n.logoutConfirmBody, style: _type(size: 14, color: AppColors.textSecondary)),
+      actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(ctx, false),
+          child: Text(l10n.cancel, style: _type(size: 14, weight: FontWeight.w600, color: AppColors.textSecondary)),
+        ),
+        TextButton(
+          onPressed: () => Navigator.pop(ctx, true),
+          child: Text(l10n.logout, style: _type(size: 14, weight: FontWeight.w700, color: AppColors.error)),
+        ),
+      ],
+    ),
+  );
+  if (confirmed != true || !context.mounted) return;
+  await providerSignOut(ref);
+  ref.read(isKycApprovedProvider.notifier).state = false;
+  if (context.mounted) context.go('/login');
+}
+
+class _Row {
+  const _Row(this.label, this.onTap, {this.color});
+
+  final String label;
+  final VoidCallback onTap;
+  final Color? color;
+}
+
+class _Section extends StatelessWidget {
+  const _Section({required this.title, required this.rows, this.first = false});
+
   final String title;
-  final List<_SettingsItem> items;
-  const _SettingsSection({required this.title, required this.items});
+  final List<_Row> rows;
+  final bool first;
 
   @override
   Widget build(BuildContext context) {
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Text(title, style: GoogleFonts.poppins(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.textSecondary)),
-        const SizedBox(height: 8),
-        Container(
-          decoration: BoxDecoration(color: AppColors.surface, borderRadius: BorderRadius.circular(12), border: Border.all(color: AppColors.divider)),
-          child: Column(
-            children: items.map((item) {
-              return ListTile(
-                leading: Icon(item.icon, color: AppColors.textSecondary, size: 22),
-                title: Text(item.label, style: GoogleFonts.poppins(fontSize: 14, color: AppColors.textPrimary)),
-                trailing: const Icon(Icons.chevron_right, color: AppColors.grey500, size: 20),
-                onTap: item.onTap ?? () => context.push(item.route!),
-              );
-            }).toList(),
+        Padding(
+          padding: EdgeInsets.fromLTRB(24, first ? 22 : 26, 24, 2),
+          child: Text(
+            title,
+            style: _type(size: 12, weight: FontWeight.w700, color: AppColors.textHint, letterSpacing: 0.2),
           ),
         ),
+        for (var i = 0; i < rows.length; i++)
+          InkWell(
+            onTap: rows[i].onTap,
+            splashColor: AppColors.grey100,
+            highlightColor: AppColors.grey100,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+              decoration: BoxDecoration(
+                border: i == rows.length - 1 ? null : const Border(bottom: BorderSide(color: AppColors.divider)),
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      rows[i].label,
+                      style: _type(size: 15, weight: FontWeight.w600, letterSpacing: -0.2, color: rows[i].color ?? AppColors.textPrimary),
+                    ),
+                  ),
+                  const Icon(Icons.chevron_right, size: 18, color: AppColors.textHint),
+                ],
+              ),
+            ),
+          ),
       ],
     );
   }
 }
 
-class _SettingsItem {
-  final IconData icon;
-  final String label;
-  final String? route;
-  final VoidCallback? onTap;
-  const _SettingsItem({
-    required this.icon,
-    required this.label,
-    this.route,
-    this.onTap,
-  }) : assert(route != null || onTap != null);
+TextStyle _type({
+  required double size,
+  FontWeight weight = FontWeight.w500,
+  Color color = AppColors.textPrimary,
+  double letterSpacing = 0,
+  double height = 1.2,
+  bool tabular = false,
+}) {
+  return GoogleFonts.plusJakartaSans(
+    fontSize: size,
+    fontWeight: weight,
+    color: color,
+    letterSpacing: letterSpacing,
+    height: height,
+    fontFeatures: tabular ? const [FontFeature.tabularFigures()] : null,
+  );
 }
