@@ -10,30 +10,36 @@ const config: Config = {
         mono: ['var(--font-geist-mono)', 'ui-monospace', 'SFMono-Regular', 'monospace'],
       },
       fontSize: {
-        // [fontSize, { lineHeight, letterSpacing, fontWeight }]
-        xs: ['0.75rem', { lineHeight: '1.1rem', letterSpacing: '0' }],
-        sm: ['0.8125rem', { lineHeight: '1.25rem', letterSpacing: '-0.006em' }],
-        base: ['0.875rem', { lineHeight: '1.4rem', letterSpacing: '-0.008em' }],
+        xs: ['0.75rem', { lineHeight: '1rem', letterSpacing: '0' }],
+        sm: ['0.8125rem', { lineHeight: '1.125rem', letterSpacing: '-0.006em' }],
+        base: ['0.875rem', { lineHeight: '1.25rem', letterSpacing: '-0.011em' }],
         lg: ['1rem', { lineHeight: '1.5rem', letterSpacing: '-0.011em' }],
-        xl: ['1.125rem', { lineHeight: '1.6rem', letterSpacing: '-0.014em' }],
-        '2xl': ['1.375rem', { lineHeight: '1.75rem', letterSpacing: '-0.017em' }],
-        '3xl': ['1.75rem', { lineHeight: '2.1rem', letterSpacing: '-0.02em' }],
-        '4xl': ['2.25rem', { lineHeight: '2.5rem', letterSpacing: '-0.025em' }],
-        // Data/number-forward sizes for KPI figures
-        stat: ['1.75rem', { lineHeight: '2rem', letterSpacing: '-0.02em', fontWeight: '600' }],
-        'stat-lg': ['2.25rem', { lineHeight: '2.5rem', letterSpacing: '-0.025em', fontWeight: '600' }],
+        xl: ['1.25rem', { lineHeight: '1.75rem', letterSpacing: '-0.02em' }],
+        '2xl': ['1.5rem', { lineHeight: '2rem', letterSpacing: '-0.02em' }],
+        '3xl': ['2rem', { lineHeight: '2.25rem', letterSpacing: '-0.02em' }],
+        stat: ['1.5rem', { lineHeight: '2rem', letterSpacing: '-0.02em', fontWeight: '700' }],
+        'stat-lg': ['2rem', { lineHeight: '2.25rem', letterSpacing: '-0.02em', fontWeight: '700' }],
       },
       colors: {
-        canvas: 'var(--bg-canvas)',
+        canvas: 'var(--canvas)',
+        sheet: 'var(--sheet)',
+        card: 'var(--card)',
+        input: 'var(--input)',
+        foreground: 'var(--text)',
+        hairline: 'var(--hairline)',
         base: 'var(--bg-base)',
         surface: 'var(--bg-surface)',
         elevated: 'var(--bg-elevated)',
         overlay: 'var(--bg-overlay)',
         border: 'var(--border)',
         'border-strong': 'var(--border-strong)',
-        primary: 'var(--text-primary)',
-        secondary: 'var(--text-secondary)',
+        primary: 'var(--text)',
+        secondary: 'var(--text-muted)',
         muted: 'var(--text-muted)',
+        emphasis: {
+          DEFAULT: 'var(--emphasis)',
+          fg: 'var(--emphasis-fg)',
+        },
         accent: {
           DEFAULT: 'var(--accent)',
           hover: 'var(--accent-hover)',
@@ -54,6 +60,12 @@ const config: Config = {
         warning: 'var(--warning)',
         info: 'var(--info)',
       },
+      backgroundColor: {
+        primary: 'var(--primary)',
+      },
+      textColor: {
+        'primary-fg': 'var(--primary-fg)',
+      },
       boxShadow: {
         xs: 'var(--shadow-xs)',
         sm: 'var(--shadow-sm)',
@@ -61,6 +73,7 @@ const config: Config = {
         lg: 'var(--shadow-lg)',
         xl: 'var(--shadow-xl)',
         focus: 'var(--shadow-focus)',
+        popover: 'var(--shadow-popover)',
       },
       borderRadius: {
         sm: 'var(--radius-sm)',
@@ -69,7 +82,7 @@ const config: Config = {
         xl: 'var(--radius-xl)',
       },
       height: {
-        topbar: '60px',
+        topbar: '56px',
         nav: '40px',
       },
       width: {
@@ -78,6 +91,9 @@ const config: Config = {
       },
       transitionDuration: {
         DEFAULT: '150ms',
+      },
+      transitionTimingFunction: {
+        out: 'cubic-bezier(0, 0, 0.2, 1)',
       },
     },
   },
