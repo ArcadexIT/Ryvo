@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../shared/widgets/ryvo_close_button.dart';
 import '../../../../data/models/support_models.dart';
 import '../../../../shared/providers/app_providers.dart';
 import '../../../../shared/widgets/widgets.dart';
@@ -77,6 +78,8 @@ class _CreateSupportTicketPageState extends ConsumerState<CreateSupportTicketPag
       backgroundColor: AppColors.background,
       appBar: AppBar(
         backgroundColor: AppColors.background,
+        automaticallyImplyLeading: false,
+        leading: const RyvoCloseButton(),
         title: Text(AppLocalizations.of(context).newTicket, style: GoogleFonts.poppins(fontSize: 18, fontWeight: FontWeight.w600)),
       ),
       body: SafeArea(
@@ -88,7 +91,7 @@ class _CreateSupportTicketPageState extends ConsumerState<CreateSupportTicketPag
               Text(AppLocalizations.of(context).category, style: GoogleFonts.poppins(fontSize: 13, fontWeight: FontWeight.w500, color: AppColors.textSecondary)),
               const SizedBox(height: 8),
               DropdownButtonFormField<String>(
-                value: _category,
+                initialValue: _category,
                 dropdownColor: AppColors.modal,
                 style: GoogleFonts.poppins(color: AppColors.textPrimary),
                 decoration: InputDecoration(

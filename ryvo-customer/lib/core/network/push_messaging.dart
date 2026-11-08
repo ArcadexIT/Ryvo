@@ -62,7 +62,8 @@ class PushMessaging {
 
     try {
       if (Firebase.apps.isEmpty) {
-        await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+        await Firebase.initializeApp(
+            options: DefaultFirebaseOptions.currentPlatform);
       }
 
       await FirebaseMessaging.instance.setAutoInitEnabled(true);
@@ -91,7 +92,8 @@ class PushMessaging {
               )
               .timeout(const Duration(seconds: 5));
         } catch (e) {
-          if (kDebugMode) debugPrint('Foreground presentation options skipped: $e');
+          if (kDebugMode)
+            debugPrint('Foreground presentation options skipped: $e');
         }
       }
 
@@ -158,7 +160,8 @@ class PushMessaging {
 
     if (Platform.isAndroid) {
       await _local
-          .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
+          .resolvePlatformSpecificImplementation<
+              AndroidFlutterLocalNotificationsPlugin>()
           ?.createNotificationChannel(
             const AndroidNotificationChannel(
               _androidChannelId,
@@ -210,7 +213,8 @@ class PushMessaging {
     }
     if (Platform.isIOS) {
       await _local
-          .resolvePlatformSpecificImplementation<IOSFlutterLocalNotificationsPlugin>()
+          .resolvePlatformSpecificImplementation<
+              IOSFlutterLocalNotificationsPlugin>()
           ?.requestPermissions(alert: true, badge: true, sound: true);
     }
     if (Platform.isAndroid) {

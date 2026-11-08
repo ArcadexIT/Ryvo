@@ -18,7 +18,8 @@ class PushNotificationListener extends ConsumerStatefulWidget {
       _PushNotificationListenerState();
 }
 
-class _PushNotificationListenerState extends ConsumerState<PushNotificationListener>
+class _PushNotificationListenerState
+    extends ConsumerState<PushNotificationListener>
     with WidgetsBindingObserver {
   ProviderContainer? _container;
 

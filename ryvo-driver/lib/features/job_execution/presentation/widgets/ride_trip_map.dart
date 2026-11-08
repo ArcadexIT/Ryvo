@@ -19,6 +19,7 @@ class RideTripMap extends StatefulWidget {
     this.dropoff,
     this.top,
     this.onRoute,
+    this.mapStyle,
   });
 
   /// Live GPS position. The route starts here when it is known.
@@ -34,6 +35,9 @@ class RideTripMap extends StatefulWidget {
 
   /// Called when a road route (or the straight-line fallback) is ready.
   final void Function(DrivingRoute route)? onRoute;
+
+  /// Basemap JSON. Defaults to the shared trip style.
+  final String? mapStyle;
 
   @override
   State<RideTripMap> createState() => _RideTripMapState();
@@ -125,7 +129,8 @@ class _RideTripMapState extends State<RideTripMap> {
     }
     controller.animateCamera(
       CameraUpdate.newLatLngBounds(
-        LatLngBounds(southwest: LatLng(south, west), northeast: LatLng(north, east)),
+        LatLngBounds(
+            southwest: LatLng(south, west), northeast: LatLng(north, east)),
         72,
       ),
     );
@@ -147,72 +152,78 @@ class _RideTripMapState extends State<RideTripMap> {
     return Stack(
       children: [
         Positioned.fill(
-          child: GoogleMap(
-            initialCameraPosition: CameraPosition(target: widget.destination, zoom: 14),
-            padding: EdgeInsets.only(top: topPad, bottom: _sheetHeight),
-            myLocationEnabled: false,
-            myLocationButtonEnabled: false,
-            zoomControlsEnabled: false,
-            mapToolbarEnabled: false,
-            compassEnabled: false,
-            polylines: {
-              if (line.length >= 2) ...[
-                Polyline(
-                  polylineId: const PolylineId('route-casing'),
-                  points: line,
-                  color: Colors.white,
-                  width: 8,
-                  geodesic: false,
-                  startCap: Cap.roundCap,
-                  endCap: Cap.roundCap,
-                  jointType: JointType.round,
-                ),
-                Polyline(
-                  polylineId: const PolylineId('route'),
-                  points: line,
-                  color: AppColors.primary,
-                  width: 5,
-                  startCap: Cap.roundCap,
-                  endCap: Cap.roundCap,
-                  jointType: JointType.round,
-                ),
-              ],
-            },
-            markers: {
-              if (widget.pickup != null)
-                Marker(
-                  markerId: const MarkerId('pickup'),
-                  position: widget.pickup!,
-                  anchor: TripMarkers.pickupAnchor,
-                  zIndexInt: 1,
-                  icon: _markers?.pickup ??
-                      BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueGreen),
-                ),
-              if (widget.dropoff != null)
-                Marker(
-                  markerId: const MarkerId('dropoff'),
-                  position: widget.dropoff!,
-                  anchor: TripMarkers.dropoffAnchor,
-                  zIndexInt: 1,
-                  icon: _markers?.dropoff ??
-                      BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed),
-                ),
-              if (widget.driver != null)
-                Marker(
-                  markerId: const MarkerId('driver'),
-                  position: widget.driver!,
-                  anchor: TripMarkers.carAnchor,
-                  zIndexInt: 2,
-                  flat: true,
-                  icon: _markers?.car ??
-                      BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueOrange),
-                ),
-            },
-            style: MockData.mapStyle,
-            onMapCreated: (controller) {
-              _mapController = controller;
-              _fit(line);
-            },
+          child: RepaintBoundary(
+            child: GoogleMap(
+              initialCameraPosition:
+                  CameraPosition(target: widget.destination, zoom: 14),
+              padding: EdgeInsets.only(top: topPad, bottom: _sheetHeight),
+              myLocationEnabled: false,
+              myLocationButtonEnabled: false,
+              zoomControlsEnabled: false,
+              mapToolbarEnabled: false,
+              compassEnabled: false,
+              polylines: {
+                if (line.length >= 2) ...[
+                  Polyline(
+                    polylineId: const PolylineId('route-casing'),
+                    points: line,
+                    color: Colors.white,
+                    width: 8,
+                    geodesic: false,
+                    startCap: Cap.roundCap,
+                    endCap: Cap.roundCap,
+                    jointType: JointType.round,
+                  ),
+                  Polyline(
+                    polylineId: const PolylineId('route'),
+                    points: line,
+                    color: AppColors.primary,
+                    width: 5,
+                    startCap: Cap.roundCap,
+                    endCap: Cap.roundCap,
+                    jointType: JointType.round,
+                  ),
+                ],
+              },
+              markers: {
+                if (widget.pickup != null)
+                  Marker(
+                    markerId: const MarkerId('pickup'),
+                    position: widget.pickup!,
+                    anchor: TripMarkers.pickupAnchor,
+                    zIndexInt: 1,
+                    icon: _markers?.pickup ??
+                        BitmapDescriptor.defaultMarkerWithHue(
+                            BitmapDescriptor.hueGreen),
+                  ),
+                if (widget.dropoff != null)
+                  Marker(
+                    markerId: const MarkerId('dropoff'),
+                    position: widget.dropoff!,
+                    anchor: TripMarkers.dropoffAnchor,
+                    zIndexInt: 1,
+                    icon: _markers?.dropoff ??
+                        BitmapDescriptor.defaultMarkerWithHue(
+                            BitmapDescriptor.hueRed),
+                  ),
+                if (widget.driver != null)
+                  Marker(
+                    markerId: const MarkerId('driver'),
+                    position: widget.driver!,
+                    anchor: TripMarkers.carAnchor,
+                    zIndexInt: 2,
+                    flat: true,
+                    icon: _markers?.car ??
+                        BitmapDescriptor.defaultMarkerWithHue(
+                            BitmapDescriptor.hueOrange),
+                  ),
+              },
+              style: widget.mapStyle ?? MockData.mapStyle,
+              onMapCreated: (controller) {
+                _mapController = controller;
+                _fit(line);
+              },
+            ),
           ),
         ),
         if (widget.top != null)
@@ -227,15 +238,17 @@ class _RideTripMapState extends State<RideTripMap> {
           bottom: _sheetHeight + 12,
           child: Material(
             color: AppColors.surface,
-            shape: const CircleBorder(),
-            elevation: 2,
+            shape:
+                const CircleBorder(side: BorderSide(color: AppColors.divider)),
+            clipBehavior: Clip.antiAlias,
             child: InkWell(
               customBorder: const CircleBorder(),
               onTap: () => _fit(line),
               child: const SizedBox(
                 width: 44,
                 height: 44,
-                child: Icon(Icons.center_focus_strong, size: 22),
+                child: Icon(Icons.center_focus_strong,
+                    size: 22, color: AppColors.textPrimary),
               ),
             ),
           ),

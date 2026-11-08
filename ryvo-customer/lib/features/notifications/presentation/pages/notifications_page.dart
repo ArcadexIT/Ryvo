@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../../shared/widgets/ryvo_close_button.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../../core/theme/app_colors.dart';
@@ -36,6 +37,8 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
       backgroundColor: AppColors.background,
       appBar: AppBar(
         backgroundColor: AppColors.background,
+        automaticallyImplyLeading: false,
+        leading: const RyvoCloseButton(),
         title: Text(AppLocalizations.of(context).notifications,
             style: GoogleFonts.poppins(fontSize: 18, fontWeight: FontWeight.w600)),
         actions: [
@@ -117,10 +120,10 @@ class _NotificationTile extends StatelessWidget {
       child: Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: item.isRead ? AppColors.surface : AppColors.primary.withOpacity(0.08),
+        color: item.isRead ? AppColors.surface : AppColors.primary.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(14),
         border: Border.all(
-          color: item.isRead ? AppColors.divider : AppColors.primary.withOpacity(0.3),
+          color: item.isRead ? AppColors.divider : AppColors.primary.withValues(alpha: 0.3),
         ),
       ),
       child: Row(
@@ -130,7 +133,7 @@ class _NotificationTile extends StatelessWidget {
             width: 40,
             height: 40,
             decoration: BoxDecoration(
-              color: AppColors.primary.withOpacity(0.15),
+              color: AppColors.primary.withValues(alpha: 0.15),
               borderRadius: BorderRadius.circular(10),
             ),
             child: const Icon(Icons.notifications, color: AppColors.primary, size: 20),

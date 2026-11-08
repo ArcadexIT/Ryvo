@@ -15,12 +15,12 @@
   "noCountriesAreAvailableForRegistrationYetPleaseC": "No countries are available for registration yet. Please contact support.",
   "searchCountryOrCode": "Search country or code",
   "noCountriesFound": "No countries found",
-  "instantJumpStart": "Request a ride",
-  "strandedWithADeadBatteryGetAVerifiedProviderToYo": "Set a pickup and dropoff. A nearby driver accepts, and you pay when you arrive.",
-  "verifiedTrusted": "Verified & Trusted",
-  "everyProviderIsBackgroundCheckedCertifiedAndRate": "Every driver is licence-checked, insured, and rated by riders.",
-  "liveTracking": "Live Tracking",
-  "watchYourProviderNavigateToYouInRealTimeKnowExac": "Watch your driver on the map, from pickup through to dropoff.",
+  "instantJumpStart": "Move Smarter",
+  "strandedWithADeadBatteryGetAVerifiedProviderToYo": "A live route from pickup to dropoff,\nwith an ETA you can trust.",
+  "verifiedTrusted": "Ride, Bid, or Send Parcels",
+  "everyProviderIsBackgroundCheckedCertifiedAndRate": "Three ways to move. The fare ticks\nlive before you confirm.",
+  "liveTracking": "Real-Time Tracking & Safety",
+  "watchYourProviderNavigateToYouInRealTimeKnowExac": "Follow your driver in real time,\nwith a verified badge on every trip.",
   "skip": "Skip",
   "emergencyJumpStartInstantly": "Your ride, when you need it",
   "notifications": "Notifications",
@@ -339,5 +339,28 @@
   "stopSharing": "Stop sharing",
   "sharingStopped": "Family can no longer follow this trip",
   "couldNotShareTrip": "Could not create a trip link",
-  "tripShareHint": "Anyone with this link can follow the car until the trip ends."
+  "tripShareHint": "Anyone with this link can follow the car until the trip ends.",
+  "activity": "Activity",
+  "upcoming": "Upcoming",
+  "past": "Past",
+  "noUpcomingRides": "No upcoming rides",
+  "noPastRides": "No past rides",
+  "bookARide": "Book a Ride",
+  "couldNotLoadRides": "Couldn't load your rides",
+  "todayAt": "Today, {time}",
+  "@todayAt": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "yesterdayAt": "Yesterday, {time}",
+  "@yesterdayAt": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  }
 }

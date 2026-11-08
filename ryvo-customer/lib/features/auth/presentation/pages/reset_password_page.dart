@@ -1,13 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:google_fonts/google_fonts.dart';
-import '../../../../core/theme/app_colors.dart';
-import '../../../../data/models/models.dart';
+import 'package:ryvo_customer/l10n/app_localizations.dart';
+
+import '../../../../core/theme/app_spacing.dart';
 import '../../../../core/utils/phone_utils.dart';
+import '../../../../data/models/models.dart';
 import '../../../../shared/providers/app_providers.dart';
 import '../../../../shared/widgets/widgets.dart';
-import 'package:ryvo_customer/l10n/app_localizations.dart';
+import '../widgets/auth_scaffold.dart';
 
 class ResetPasswordPage extends ConsumerStatefulWidget {
   const ResetPasswordPage({super.key});
@@ -29,9 +30,11 @@ class _ResetPasswordPageState extends ConsumerState<ResetPasswordPage> {
   }
 
   Future<void> _sendCode() async {
+    if (_loading) return;
     if (!(_formKey.currentState?.validate() ?? false)) return;
     if (_selectedCountry == null) {
-      showApiError(context, AppLocalizations.of(context).pleaseSelectYourCountry);
+      showApiError(
+          context, AppLocalizations.of(context).pleaseSelectYourCountry);
       return;
     }
     final phone = composeE164(
@@ -54,66 +57,41 @@ class _ResetPasswordPageState extends ConsumerState<ResetPasswordPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.background,
-      appBar: AppBar(
-        backgroundColor: AppColors.background,
-        leading: IconButton(
-          onPressed: () => context.pop(),
-          icon: Icon(Icons.arrow_back_ios_new, size: 20, color: AppColors.textPrimary),
-        ),
-      ),
-      body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 24),
-          child: Form(
-            key: _formKey,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const SizedBox(height: 8),
-                Container(
-                  width: 56,
-                  height: 56,
-                  decoration: BoxDecoration(
-                    color: AppColors.primary.withOpacity(0.15),
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: const Icon(Icons.lock_reset, color: AppColors.primary, size: 28),
-                ),
-                const SizedBox(height: 24),
-                Text(
-                  AppLocalizations.of(context).resetPassword,
-                  style: GoogleFonts.poppins(
-                    fontSize: 28,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.textPrimary,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  AppLocalizations.of(context).enterYourPhoneNumberAndWeLlSendAVerificationCode,
-                  style: GoogleFonts.poppins(
-                    fontSize: 15,
-                    color: AppColors.textSecondary,
-                    height: 1.6,
-                  ),
-                ),
-                const SizedBox(height: 36),
-                PhoneCountryField(
-                  hint: '2345678900',
-                  controller: _phoneController,
-                  selectedCountry: _selectedCountry,
-                  onCountryChanged: (c) => setState(() => _selectedCountry = c),
-                  validator: (v) => (v?.isEmpty ?? true) ? AppLocalizations.of(context).enterYourPhoneNumber : null,
-                ),
-                const SizedBox(height: 32),
-                RyvoButton(
-                  label: _loading ? AppLocalizations.of(context).sending : AppLocalizations.of(context).sendResetCode,
-                  onPressed: _loading ? null : _sendCode,
-                ),
-              ],
-            ),
+    final l10n = AppLocalizations.of(context);
+    return AuthScaffold(
+      onBack: () => context.pop(),
+      child: Form(
+        key: _formKey,
+        child: AutofillGroup(
+          child: ListView(
+            keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+            padding: const EdgeInsets.fromLTRB(24, 8, 24, 32),
+            children: [
+              Text(l10n.resetPassword, style: authTitleStyle()),
+              AppSpacing.h8,
+              Text(
+                l10n.enterYourPhoneNumberAndWeLlSendAVerificationCode,
+                style: authBodyStyle(),
+              ),
+              AppSpacing.h32,
+              PhoneCountryField(
+                hint: '2345678900',
+                controller: _phoneController,
+                selectedCountry: _selectedCountry,
+                onCountryChanged: (country) {
+                  setState(() => _selectedCountry = country);
+                },
+                validator: (value) =>
+                    (value?.isEmpty ?? true) ? l10n.enterYourPhoneNumber : null,
+                textInputAction: TextInputAction.done,
+              ),
+              AppSpacing.h24,
+              RyvoButton(
+                label: l10n.sendResetCode,
+                isLoading: _loading,
+                onPressed: _sendCode,
+              ),
+            ],
           ),
         ),
       ),

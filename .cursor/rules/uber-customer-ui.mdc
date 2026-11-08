@@ -1,0 +1,28 @@
+---
+globs: ["ryvo-customer/lib/presentation/**/*.dart", "ryvo-customer/lib/features/**/widgets/**/*.dart", "ryvo-customer/lib/core/theme/**/*.dart"]
+alwaysApply: false
+---
+# RYVO Customer App — Tier-1 Ride-Sharing Design System (Uber Base Standard)
+
+## 1. BANNED "AI Slop" Patterns (Zero Tolerance)
+- **NO** purple/indigo/cyan linear gradients on buttons, cards, or backgrounds.
+- **NO** heavy drop shadows (`BoxShadow` with blurRadius > 12 or opacity > 0.08).
+- **NO** boxy card grids on the home screen. Ride-sharing is **Map-First**.
+- **NO** standard `AppBar` on the main map screen. Use floating circular/pill glassmorphic or solid high-contrast action pills with `SafeArea`.
+- **NO** raw `CircularProgressIndicator`. Always use structured skeleton shimmer loaders or smooth linear top-edge progress bars (like Uber's "Finding your ride" pulsing bar).
+
+## 2. Spatial Architecture (Map + Sheet Paradigm)
+- The primary canvas is ALWAYS the full-screen interactive Map (`Stack` root).
+- All booking flows ("Where to?", Vehicle Selection, Confirm Pickup, Driver En Route) MUST live inside anchored, physics-based `DraggableScrollableSheet` components with smooth snap points (`snap: true`, `snapSizes: [0.35, 0.65, 0.92]`).
+- Include a subtle drag handle (`Container`: 36px wide, 4px tall, `#E2E2E2`, `BorderRadius.circular(2)`) centered 8px from the top of every bottom sheet.
+
+## 3. Color & Surface Hierarchy (High-Contrast Monochrome + Brand Accent)
+- **Primary Action / Text:** Deep Obsidian (`#000000` or `#0F0F0F`) in light mode; Pure Crisp White (`#FFFFFF`) in dark mode.
+- **Surfaces:** Layered elevation using pure white (`#FFFFFF`) for sheets and cool alabaster (`#F3F3F7`) for input pills ("Where to?" search bar) and unselected vehicle rows.
+- **Borders:** Selected ride tier (e.g., RyvoX, Ryvo Premier) uses a crisp `2.0px` solid primary border with subtle background tint—never a drop shadow.
+- **Semantic Accents:** Use vibrant emerald (`#05944F`) strictly for ETA badges/promotions, and crimson (`#E11900`) strictly for cancellations/alerts.
+
+## 4. Typography & Strict 8pt Grid
+- Tight negative letter-spacing (`-0.4` to `-0.8`) on headings, prices, and ETA countdowns (`FontWeight.w700`).
+- Tabular figures (`FontFeature.tabularFigures()`) MUST be enabled on all fare prices, countdown timers, and distance metrics so numbers never jitter when updating.
+- Spacing strictly follows `4, 8, 12, 16, 20, 24, 32`. List items (like saved places or vehicle tiers) use `16px` horizontal padding and `12px` vertical padding.

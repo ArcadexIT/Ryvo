@@ -23,6 +23,7 @@ import { SubscriptionsService } from '../subscriptions/subscriptions.service';
 export class PaymentsService implements OnModuleInit {
   private readonly logger = new Logger(PaymentsService.name);
   private stripe: Stripe | null = null;
+  private stripeKey: string | null = null;
 
   constructor(
     private prisma: PrismaService,
@@ -36,14 +37,68 @@ export class PaymentsService implements OnModuleInit {
     private subscriptions: SubscriptionsService,
   ) {}
 
-  onModuleInit() {
-    const key = this.config.get<string>('STRIPE_SECRET_KEY')?.trim();
-    if (key) {
-      this.stripe = new Stripe(key);
-      this.logger.log('Stripe payments enabled');
-    } else {
+  async onModuleInit() {
+    this.installEnvStripe();
+    await this.applyMatchingStripe();
+  }
+
+  private installEnvStripe() {
+    const key = this.config.get<string>('STRIPE_SECRET_KEY')?.trim() ?? '';
+    if (!key) {
       this.logger.warn('STRIPE_SECRET_KEY not set — Stripe card payments disabled');
+      return;
     }
+    this.rememberStripe(key);
+    this.logger.log('Stripe payments enabled');
+  }
+
+  private rememberStripe(key: string) {
+    if (this.stripe && this.stripeKey === key) return;
+    this.stripe = new Stripe(key);
+    this.stripeKey = key;
+  }
+
+  /** Dashboard secret wins when it is set. Otherwise the API environment key. */
+  private async resolveStripeSecret(): Promise<string> {
+    const stored = await this.settings.get('stripe_secret_key');
+    if (typeof stored === 'string' && stored.trim().startsWith('sk_')) {
+      return stored.trim();
+    }
+    return this.config.get<string>('STRIPE_SECRET_KEY')?.trim() ?? '';
+  }
+
+  private async publishableKey(): Promise<string> {
+    const value = await this.settings.get('stripe_publishable_key');
+    return typeof value === 'string' ? value.trim() : '';
+  }
+
+  /** Point the shared client at the secret that belongs to the saved publishable key. */
+  private async applyMatchingStripe() {
+    const secret = await this.resolveStripeSecret();
+    const publishable = await this.publishableKey();
+    if (!secret || !publishable || !sameStripeAccount(publishable, secret)) return;
+    this.rememberStripe(secret);
+  }
+
+  /**
+   * Client used for the mobile card sheet. Refuses to create a SetupIntent
+   * when the secret key is a different Stripe account than the publishable key.
+   */
+  private async stripeForCardSheet(): Promise<Stripe> {
+    const secret = await this.resolveStripeSecret();
+    const publishable = await this.publishableKey();
+    if (!secret) {
+      throw new BadRequestException(
+        'Stripe is not configured on the server. Save the secret key in Settings → Billing, or set STRIPE_SECRET_KEY and restart the API.',
+      );
+    }
+    if (publishable && !sameStripeAccount(publishable, secret)) {
+      throw new BadRequestException(
+        'The Stripe secret key does not match the publishable key in Settings. Open Stripe → Developers → API keys and copy the secret key from the same account and mode as the publishable key (sk_test_ with pk_test_, sk_live_ with pk_live_). Save it as the Stripe secret key in Settings → Billing.',
+      );
+    }
+    this.rememberStripe(secret);
+    return this.stripe!;
   }
 
   private requireStripe(): Stripe {
@@ -213,7 +268,7 @@ export class PaymentsService implements OnModuleInit {
   }
 
   private async getOrCreateStripeCustomer(userId: string) {
-    const stripe = this.requireStripe();
+    const stripe = await this.stripeForCardSheet();
     const customer = await this.prisma.customer.findUnique({
       where: { userId },
       include: { user: { select: { email: true, phone: true, fullName: true } } },
@@ -252,7 +307,7 @@ export class PaymentsService implements OnModuleInit {
 
   async createPaymentIntent(jobId: string, amount: number, userId?: string) {
     await this.assertPaymentMethodEnabled('stripe');
-    const stripe = this.requireStripe();
+    const stripe = await this.stripeForCardSheet();
 
     const job = await this.prisma.job.findUnique({ where: { id: jobId } });
     if (!job) throw new NotFoundException('Job not found');
@@ -439,11 +494,12 @@ export class PaymentsService implements OnModuleInit {
       if (!stripePaymentMethodId) {
         throw new BadRequestException('Save a card before requesting a ride');
       }
-      if (this.stripe) {
+      const stripe = await this.stripeForCardSheet();
+      {
         const stripeCustomerId = await this.getOrCreateStripeCustomer(input.userId);
         let paymentMethod;
         try {
-          paymentMethod = await this.stripe.paymentMethods.retrieve(stripePaymentMethodId);
+          paymentMethod = await stripe.paymentMethods.retrieve(stripePaymentMethodId);
         } catch (err) {
           if (this.isMissingStripeResource(err)) {
             throw new BadRequestException('That card is no longer valid. Add your card again.');
@@ -458,7 +514,7 @@ export class PaymentsService implements OnModuleInit {
           throw new BadRequestException('That card does not belong to this account');
         }
         if (!owner) {
-          await this.stripe.paymentMethods.attach(stripePaymentMethodId, {
+          await stripe.paymentMethods.attach(stripePaymentMethodId, {
             customer: stripeCustomerId,
           });
         }
@@ -494,7 +550,7 @@ export class PaymentsService implements OnModuleInit {
   /** Create a SetupIntent so the rider can save a card for the end-of-trip charge. */
   async createSetupIntent(userId: string) {
     await this.assertPaymentMethodEnabled('stripe');
-    const stripe = this.requireStripe();
+    const stripe = await this.stripeForCardSheet();
     const customerId = await this.getOrCreateStripeCustomer(userId);
     const intent = await stripe.setupIntents.create({
       customer: customerId,
@@ -556,7 +612,7 @@ export class PaymentsService implements OnModuleInit {
         if (!job.payment.stripePaymentMethodId) {
           throw new BadRequestException('No saved card for this ride');
         }
-        const stripe = this.requireStripe();
+        const stripe = await this.stripeForCardSheet();
         const stripeCustomerId = await this.getOrCreateStripeCustomer(job.customer.userId);
         const currency = (await this.settings.getPlatformCurrency()).code.toLowerCase();
         const intent = await stripe.paymentIntents.create({
@@ -837,4 +893,17 @@ export class PaymentsService implements OnModuleInit {
 
     return { received: true };
   }
+}
+
+function sameStripeAccount(publishable: string, secret: string): boolean {
+  const left = stripeAccountKey(publishable);
+  const right = stripeAccountKey(secret);
+  return !!left && left === right;
+}
+
+/** Test/live mode plus the account fragment shared by pk_ and sk_ keys. */
+function stripeAccountKey(key: string): string | null {
+  const match = key.trim().match(/^(?:pk|sk|rk)_(test|live)_([A-Za-z0-9]{8,})/);
+  if (!match) return null;
+  return `${match[1]}:${match[2].slice(0, 16)}`;
 }

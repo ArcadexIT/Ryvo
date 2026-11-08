@@ -34,6 +34,7 @@ class DrivingRouteService {
     required double originLng,
     required double destinationLat,
     required double destinationLng,
+    List<LatLng> via = const [],
   }) async {
     try {
       final response = await _dio.get<Map<String, dynamic>>(
@@ -43,42 +44,65 @@ class DrivingRouteService {
           'destination': '$destinationLat,$destinationLng',
           'mode': 'driving',
           'key': _apiKey,
+          if (via.isNotEmpty)
+            'waypoints': via.map((stop) => '${stop.latitude},${stop.longitude}').join('|'),
         },
       );
       final data = response.data;
       if (data == null || data['status'] != 'OK') {
-        return _fetchOsrm(
+        return await _fetchOsrm(
           originLat: originLat,
           originLng: originLng,
           destinationLat: destinationLat,
           destinationLng: destinationLng,
+          via: via,
         );
       }
       final routes = data['routes'];
-      if (routes is! List || routes.isEmpty) return null;
-      final route = routes.first;
-      if (route is! Map) return null;
-      final encoded = route['overview_polyline']?['points'];
-      if (encoded is! String || encoded.isEmpty) return null;
-      final legs = route['legs'];
-      var durationMin = 0;
-      var distanceKm = 0.0;
-      if (legs is List && legs.isNotEmpty && legs.first is Map) {
-        final leg = legs.first as Map;
-        final seconds = leg['duration']?['value'];
-        final meters = leg['distance']?['value'];
-        if (seconds is num) durationMin = (seconds / 60).ceil();
-        if (meters is num) distanceKm = meters / 1000;
+      if (routes is! List || routes.isEmpty || routes.first is! Map) {
+        return await _fetchOsrm(
+          originLat: originLat,
+          originLng: originLng,
+          destinationLat: destinationLat,
+          destinationLng: destinationLng,
+          via: via,
+        );
       }
-      final points = decodePolyline(encoded);
-      if (points.length < 2) return null;
-      return DrivingRoute(points: points, durationMin: durationMin, distanceKm: distanceKm);
+      final route = routes.first as Map;
+      final points = _pointsFromGoogleRoute(route);
+      if (points.length < 2) {
+        return await _fetchOsrm(
+          originLat: originLat,
+          originLng: originLng,
+          destinationLat: destinationLat,
+          destinationLng: destinationLng,
+          via: via,
+        );
+      }
+      final legs = route['legs'];
+      var secondsTotal = 0.0;
+      var metersTotal = 0.0;
+      if (legs is List) {
+        for (final leg in legs) {
+          if (leg is! Map) continue;
+          final seconds = leg['duration']?['value'];
+          final meters = leg['distance']?['value'];
+          if (seconds is num) secondsTotal += seconds;
+          if (meters is num) metersTotal += meters;
+        }
+      }
+      return DrivingRoute(
+        points: points,
+        durationMin: secondsTotal <= 0 ? 0 : (secondsTotal / 60).ceil(),
+        distanceKm: metersTotal / 1000,
+      );
     } catch (_) {
-      return _fetchOsrm(
+      return await _fetchOsrm(
         originLat: originLat,
         originLng: originLng,
         destinationLat: destinationLat,
         destinationLng: destinationLng,
+        via: via,
       );
     }
   }
@@ -89,11 +113,16 @@ class DrivingRouteService {
     required double originLng,
     required double destinationLat,
     required double destinationLng,
+    List<LatLng> via = const [],
   }) async {
     try {
+      final stops = [
+        '$originLng,$originLat',
+        for (final stop in via) '${stop.longitude},${stop.latitude}',
+        '$destinationLng,$destinationLat',
+      ].join(';');
       final response = await _dio.get<Map<String, dynamic>>(
-        'https://router.project-osrm.org/route/v1/driving/'
-        '$originLng,$originLat;$destinationLng,$destinationLat',
+        'https://router.project-osrm.org/route/v1/driving/$stops',
         queryParameters: const {
           'overview': 'full',
           'geometries': 'polyline',
@@ -119,6 +148,40 @@ class DrivingRouteService {
       return null;
     }
   }
+}
+
+/// Step polylines follow the carriageway. The overview is only a fallback.
+List<LatLng> _pointsFromGoogleRoute(Map route) {
+  final points = <LatLng>[];
+  final legs = route['legs'];
+  if (legs is List) {
+    for (final leg in legs) {
+      if (leg is! Map) continue;
+      final steps = leg['steps'];
+      if (steps is! List) continue;
+      for (final step in steps) {
+        if (step is! Map) continue;
+        final encoded = step['polyline']?['points'];
+        if (encoded is! String || encoded.isEmpty) continue;
+        _appendDecoded(points, decodePolyline(encoded));
+      }
+    }
+  }
+  if (points.length >= 2) return points;
+  final encoded = route['overview_polyline']?['points'];
+  if (encoded is String && encoded.isNotEmpty) return decodePolyline(encoded);
+  return points;
+}
+
+void _appendDecoded(List<LatLng> into, List<LatLng> decoded) {
+  if (decoded.isEmpty) return;
+  if (into.isEmpty) {
+    into.addAll(decoded);
+    return;
+  }
+  final sameStart = into.last.latitude == decoded.first.latitude &&
+      into.last.longitude == decoded.first.longitude;
+  into.addAll(sameStart ? decoded.skip(1) : decoded);
 }
 
 List<LatLng> decodePolyline(String encoded) {

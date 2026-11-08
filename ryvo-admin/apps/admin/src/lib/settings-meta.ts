@@ -1,5 +1,6 @@
 export const MAP_API_KEY_SETTING = 'map_api_key';
 export const STRIPE_PK_SETTING = 'stripe_publishable_key';
+export const STRIPE_SK_SETTING = 'stripe_secret_key';
 export const VEHICLE_LOOKUP_BASE_URL_SETTING = 'vehicle_lookup_base_url';
 export const VEHICLE_LOOKUP_API_KEY_SETTING = 'vehicle_lookup_api_key';
 export const DEFAULT_VEHICLE_LOOKUP_BASE_URL =
@@ -105,6 +106,11 @@ export const SETTING_LABELS: Record<string, { label: string; description: string
   [STRIPE_PK_SETTING]: {
     label: 'Stripe publishable key',
     description: 'The pk_live_... or pk_test_... key from your Stripe dashboard. Sent to the mobile app so it can present the Stripe Payment Sheet — this key is safe to expose publicly.',
+    type: 'secret',
+  },
+  [STRIPE_SK_SETTING]: {
+    label: 'Stripe secret key',
+    description: 'The sk_test_... or sk_live_ key from the same Stripe account and mode as the publishable key. The API uses this to create the card setup. It is never sent to the mobile app.',
     type: 'secret',
   },
   provider_otp_enabled: {

@@ -43,7 +43,10 @@ class VpicVehicleCatalogService {
 
     final names = <String>{};
     for (final entry in results.whereType<Map>()) {
-      final typeName = (entry['VehicleTypeName'] ?? entry['vehicleTypeName'])?.toString().toLowerCase() ?? '';
+      final typeName = (entry['VehicleTypeName'] ?? entry['vehicleTypeName'])
+              ?.toString()
+              .toLowerCase() ??
+          '';
       if (typeName.isNotEmpty) {
         final isMotorcycle = typeName.contains('motorcycle');
         if (type == 'motorcycle' && !isMotorcycle) continue;
@@ -58,11 +61,13 @@ class VpicVehicleCatalogService {
       }
     }
 
-    final sorted = names.toList()..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+    final sorted = names.toList()
+      ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
     return sorted;
   }
 
-  List<String> _extractUniqueSorted(dynamic results, {required List<String> keys}) {
+  List<String> _extractUniqueSorted(dynamic results,
+      {required List<String> keys}) {
     if (results is! List) return const [];
 
     final names = <String>{};
@@ -76,7 +81,8 @@ class VpicVehicleCatalogService {
       }
     }
 
-    final sorted = names.toList()..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+    final sorted = names.toList()
+      ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
     return sorted;
   }
 

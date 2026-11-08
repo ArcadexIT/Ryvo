@@ -1,0 +1,22 @@
+---
+description: Enforces 60-120Hz Impeller rendering optimization, widget isolation, and zero-jank animations in ryvo-customer.
+globs: ["ryvo-customer/lib/**/*.dart"]
+alwaysApply: false
+---
+
+# 60-120 FPS High-Refresh Performance Rules
+
+## 1. Map & Sheet Re-render Isolation (Critical)
+- **NEVER** wrap the Map widget inside the same `BlocBuilder` or state listener that animates the bottom sheet or updates fare prices.
+- Rebuilding the Map widget during sheet drag causes severe frame drops. Isolate the Map in a `RepaintBoundary` and communicate camera padding/marker updates solely via the MapController stream.
+
+## 2. 120Hz Gesture & Animation Physics
+- Tie bottom sheet transitions and floating action button fades directly to the sheet's scroll notification/controller offset using `ValueListenableBuilder`, NEVER `setState()`.
+- Use `Curves.fastOutSlowIn` or custom spring physics (`SpringSimulation`) with durations between `220ms` and `320ms`.
+- Trigger `HapticFeedback.selectionClick()` when switching vehicle tiers and `HapticFeedback.mediumImpact()` when confirming pickup.
+
+## 3. Render Tree & Memory Discipline
+- Every static icon, spacing box, and theme-independent widget MUST use `const` constructors.
+- Never use `Opacity` widget in animations (triggers expensive offscreen buffer saves); use `AnimatedOpacity`, `FadeTransition`, or alpha-blended colors directly.
+- Never use `ClipRRect` inside scrolling lists (`ListView.builder`) unless strictly necessary; apply border radius via `BoxDecoration` instead.
+- Custom route ripples, radar pulses ("Searching for nearby drivers"), and animated polylines must use `CustomPainter` wrapped in a `RepaintBoundary` with `shouldRepaint` strictly checking value changes.

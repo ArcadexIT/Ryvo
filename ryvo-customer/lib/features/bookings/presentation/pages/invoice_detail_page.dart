@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:printing/printing.dart';
 
 import '../../../../core/theme/app_colors.dart';
+import '../../../../shared/widgets/ryvo_close_button.dart';
 import '../../../../shared/providers/app_providers.dart';
 import '../../../../shared/widgets/ryvo_button.dart';
 import '../../domain/customer_invoice.dart';
@@ -73,6 +74,8 @@ class _InvoiceDetailPageState extends ConsumerState<InvoiceDetailPage> {
       backgroundColor: AppColors.background,
       appBar: AppBar(
         backgroundColor: AppColors.background,
+        automaticallyImplyLeading: false,
+        leading: const RyvoCloseButton(),
         title: Text('Invoice', style: GoogleFonts.poppins(fontWeight: FontWeight.w600)),
         actions: [
           if (invoice != null)
@@ -161,7 +164,7 @@ class _InvoiceSheet extends StatelessWidget {
         border: Border.all(color: AppColors.divider),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(AppColors.isDark ? 0.35 : 0.06),
+            color: Colors.black.withValues(alpha: AppColors.isDark ? 0.35 : 0.06),
             blurRadius: 28,
             offset: const Offset(0, 12),
           ),
@@ -242,7 +245,7 @@ class _InvoiceSheet extends StatelessWidget {
                   width: 40,
                   height: 40,
                   decoration: BoxDecoration(
-                    color: AppColors.primary.withOpacity(0.14),
+                    color: AppColors.primary.withValues(alpha: 0.14),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Icon(serviceIcon(invoice.serviceSlug, invoice.serviceIcon), color: AppColors.primary, size: 20),
@@ -266,7 +269,7 @@ class _InvoiceSheet extends StatelessWidget {
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
               decoration: BoxDecoration(
-                color: AppColors.primary.withOpacity(AppColors.isDark ? 0.16 : 0.12),
+                color: AppColors.primary.withValues(alpha: AppColors.isDark ? 0.16 : 0.12),
                 borderRadius: BorderRadius.circular(16),
               ),
               child: Row(
@@ -378,7 +381,7 @@ class _StatusPill extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.16),
+        color: color.withValues(alpha: 0.16),
         borderRadius: BorderRadius.circular(999),
       ),
       child: Text(label, style: GoogleFonts.poppins(color: color, fontSize: 12, fontWeight: FontWeight.w600)),

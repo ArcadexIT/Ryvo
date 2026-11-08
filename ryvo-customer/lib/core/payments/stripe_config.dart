@@ -29,6 +29,9 @@ Future<void> configureStripeFromAppConfig(AppConfig config) async {
   }
 
   Stripe.publishableKey = key;
+  // SetupIntents are created on the platform account. A leftover connected
+  // account id makes Stripe reject the client secret as the wrong account.
+  Stripe.stripeAccountId = null;
   Stripe.urlScheme = stripeUrlScheme;
   final merchantId = AppConstants.appleMerchantId.trim();
   if (merchantId.isNotEmpty) {

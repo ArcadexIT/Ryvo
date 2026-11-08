@@ -16,13 +16,21 @@ const shareableTripStatuses = {
   'in_progress',
 };
 
-class ShareTripButton extends ConsumerStatefulWidget {
-  const ShareTripButton.action({super.key, required this.jobId}) : compact = false;
+enum ShareTripButtonStyle { action, icon, hud }
 
-  const ShareTripButton.icon({super.key, required this.jobId}) : compact = true;
+class ShareTripButton extends ConsumerStatefulWidget {
+  const ShareTripButton.action({super.key, required this.jobId})
+      : style = ShareTripButtonStyle.action;
+
+  const ShareTripButton.icon({super.key, required this.jobId})
+      : style = ShareTripButtonStyle.icon;
+
+  /// Square secondary control for the live-tracking communication bar.
+  const ShareTripButton.hud({super.key, required this.jobId})
+      : style = ShareTripButtonStyle.hud;
 
   final String jobId;
-  final bool compact;
+  final ShareTripButtonStyle style;
 
   @override
   ConsumerState<ShareTripButton> createState() => _ShareTripButtonState();
@@ -54,15 +62,11 @@ class _ShareTripButtonState extends ConsumerState<ShareTripButton> {
 
   Future<void> _showExisting(String url) async {
     final l10n = AppLocalizations.of(context);
-    await showModalBottomSheet<void>(
+    await showRyvoModalSheet<void>(
       context: context,
-      backgroundColor: AppColors.surface,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      builder: (sheetContext) {
-        return SafeArea(
-          child: Padding(
+      child: Builder(
+        builder: (sheetContext) {
+          return Padding(
             padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -100,9 +104,9 @@ class _ShareTripButtonState extends ConsumerState<ShareTripButton> {
                 ),
               ],
             ),
-          ),
-        );
-      },
+          );
+        },
+      ),
     );
   }
 
@@ -136,7 +140,29 @@ class _ShareTripButtonState extends ConsumerState<ShareTripButton> {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
-    if (widget.compact) {
+    if (widget.style == ShareTripButtonStyle.hud) {
+      return Tooltip(
+        message: l10n.shareTrip,
+        child: Material(
+          color: AppColors.surface,
+          shape: const CircleBorder(),
+          child: InkWell(
+            customBorder: const CircleBorder(),
+            onTap: _busy ? null : _onPressed,
+            child: SizedBox(
+              width: 44,
+              height: 44,
+              child: Icon(
+                Icons.ios_share_rounded,
+                size: 18,
+                color: _busy ? AppColors.textSecondary : AppColors.textPrimary,
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+    if (widget.style == ShareTripButtonStyle.icon) {
       return IconButton(
         tooltip: l10n.shareTrip,
         onPressed: _busy ? null : _onPressed,
@@ -152,7 +178,7 @@ class _ShareTripButtonState extends ConsumerState<ShareTripButton> {
         width: 38,
         height: 38,
         decoration: BoxDecoration(
-          color: AppColors.primary.withOpacity(0.15),
+          color: AppColors.primary.withValues(alpha: 0.15),
           shape: BoxShape.circle,
         ),
         child: Icon(

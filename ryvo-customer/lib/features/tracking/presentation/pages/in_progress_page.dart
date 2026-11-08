@@ -1,18 +1,21 @@
 import 'dart:async';
-import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import '../../../../core/job/active_job_session.dart';
+import '../../../../core/location/driver_marker_renderer.dart';
 import '../../../../core/location/driving_route.dart';
 import '../../../../core/location/trip_markers.dart';
 import '../../../../core/network/tracking_socket.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/theme/app_theme.dart';
 import '../../../../core/utils/job_elapsed.dart';
 import '../../../../core/utils/phone_call.dart';
+import '../../../../core/widgets/ryvo_map_canvas.dart';
 import '../../../../data/models/models.dart';
+import '../trip_map_providers.dart';
+import '../widgets/driver_trip_card.dart';
 import '../widgets/share_trip_button.dart';
 import '../../../../shared/providers/app_providers.dart';
 import '../../../../shared/widgets/widgets.dart';
@@ -27,7 +30,6 @@ class InProgressPage extends ConsumerStatefulWidget {
 
 class _InProgressPageState extends ConsumerState<InProgressPage> {
   final DrivingRouteService _routes = DrivingRouteService();
-  GoogleMapController? _mapController;
   Timer? _ticker;
   Timer? _pollTimer;
   StreamSubscription<Map<String, dynamic>>? _statusSub;
@@ -37,19 +39,42 @@ class _InProgressPageState extends ConsumerState<InProgressPage> {
   List<LatLng> _routePoints = const [];
   String? _routeKey;
   TripMarkerSet? _markers;
+  DriverMarkerIcon? _driverIcon;
+  String? _driverIconUrl;
   int? _routeMinutes;
+  Widget? _map;
+  int _cameraGeneration = 0;
+  late final TrackingSocket _socket;
+  ProviderContainer? _container;
+  bool _closed = false;
+  DateTime? _lastSocketEventAt;
+  static const Duration _socketStaleAfter = Duration(seconds: 12);
 
   @override
   void initState() {
     super.initState();
+    _socket = ref.read(trackingSocketProvider);
     final job = ref.read(jobDraftProvider).activeJob;
     _jobId = job?.id;
     _seedDriver(job);
+    // Provider writes are illegal during initState. The map reads the camera
+    // on the next frame, then recenters onto the trip.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _publishDriver();
+      final camera =
+          _dropoffOf(job) ?? _pickupOf(job) ?? const LatLng(52.48, -1.89);
+      ref.read(tripCameraProvider(TripMapScope.progress).notifier).state =
+          RyvoMapCamera(target: camera, zoom: 14);
+    });
     _loadMarkers();
     _ticker = Timer.periodic(const Duration(seconds: 1), (_) {
       if (mounted) setState(() {});
     });
-    _pollTimer = Timer.periodic(const Duration(seconds: 4), (_) => _refreshJob());
+    _pollTimer = Timer.periodic(const Duration(seconds: 4), (_) {
+      if (_closed || _socketHealthy) return;
+      _refreshJob();
+    });
     Future.microtask(() async {
       final status = ref.read(jobDraftProvider).activeJob?.status;
       if (status != null) _handleStatus(status);
@@ -62,7 +87,22 @@ class _InProgressPageState extends ConsumerState<InProgressPage> {
 
   Future<void> _loadMarkers() async {
     final set = await TripMarkers.load();
-    if (mounted) setState(() => _markers = set);
+    if (!mounted) return;
+    _markers = set;
+    _publishStaticMarkers();
+    await _loadDriverIcon();
+  }
+
+  /// Loads the unified driver marker once per image URL. The renderer caches
+  /// it for the session, so calling this on every job refresh is cheap.
+  Future<void> _loadDriverIcon() async {
+    final url = ref.read(jobDraftProvider).activeJob?.provider?.vehicleImageUrl;
+    if (_driverIcon != null && url == _driverIconUrl) return;
+    _driverIconUrl = url;
+    final icon = await DriverMarkerRenderer.load(imageUrl: url);
+    if (!mounted || url != _driverIconUrl) return;
+    _driverIcon = icon;
+    _publishDriver();
   }
 
   void _seedDriver(JobModel? job) {
@@ -89,32 +129,54 @@ class _InProgressPageState extends ConsumerState<InProgressPage> {
   }
 
   Future<void> _connectTracking() async {
-    if (_jobId == null) return;
-    final socket = ref.read(trackingSocketProvider);
-    await socket.connect();
-    socket.subscribeJob(_jobId!);
-    _statusSub = socket.onStatus.listen((data) {
+    if (_jobId == null || _closed) return;
+    await _socket.connect();
+    if (_closed || _jobId == null) return;
+    _socket.subscribeJob(_jobId!);
+    _statusSub = _socket.onStatus.listen((data) {
+      _lastSocketEventAt = DateTime.now();
       if (!mounted) return;
       final status = data['status'] as String?;
       if (status != null) _refreshJob();
     });
-    _locSub = socket.onLocation.listen((loc) {
+    _locSub = _socket.onLocation.listen((loc) {
+      _lastSocketEventAt = DateTime.now();
       if (!mounted) return;
-      setState(() => _driverPos = LatLng(loc.lat, loc.lng));
+      _driverPos = LatLng(loc.lat, loc.lng);
+      _publishDriver(bearing: loc.heading);
       _loadRoute();
     });
   }
 
+  bool get _alive => !_closed && mounted && context.mounted;
+
+  /// Connected is not the same as receiving trip events. A quiet socket still
+  /// needs the HTTP refresh so a missed status cannot freeze the trip.
+  bool get _socketHealthy {
+    if (!_socket.connected) return false;
+    final last = _lastSocketEventAt;
+    if (last == null) return false;
+    return DateTime.now().difference(last) < _socketStaleAfter;
+  }
+
   Future<void> _refreshJob() async {
+    if (!_alive) return;
     final jobId = _jobId ?? ref.read(jobDraftProvider).activeJob?.id;
-    if (jobId == null || !mounted) return;
+    if (jobId == null || !_alive) return;
     try {
       final updated = await ref.read(jobRepositoryProvider).getJob(jobId);
-      if (!mounted) return;
-      final container = ProviderScope.containerOf(context, listen: false);
-      container.read(jobDraftProvider.notifier).state =
-          container.read(jobDraftProvider).copyWith(activeJob: updated);
-      if (_driverPos == null) _seedDriver(updated);
+      // The element is already defunct during dispose, while State.mounted
+      // is still true. Writing here notifies a select() listener that can
+      // no longer rebuild.
+      if (!_alive) return;
+      ref.read(jobDraftProvider.notifier).state =
+          ref.read(jobDraftProvider).copyWith(activeJob: updated);
+      if (_driverPos == null) {
+        _seedDriver(updated);
+        _publishDriver();
+      }
+      _publishStaticMarkers();
+      _loadDriverIcon();
       _loadRoute();
       _handleStatus(updated.status);
     } catch (_) {}
@@ -137,39 +199,87 @@ class _InProgressPageState extends ConsumerState<InProgressPage> {
       destinationLng: dropoff.longitude,
     );
     if (!mounted || _routeKey != key) return;
-    setState(() {
-      _routePoints = route?.points ?? [origin, dropoff];
-      _routeMinutes = route?.durationMin;
-    });
-    _fitRoute(_routePoints);
+    _routePoints = route?.points ?? [origin, dropoff];
+    _routeMinutes = route?.durationMin;
+    ref.read(tripRouteMetaProvider(TripMapScope.progress).notifier).state =
+        TripRouteMeta(minutes: _routeMinutes);
+    ref.read(tripPolylinesProvider(TripMapScope.progress).notifier).state =
+        _routeLines(_routePoints);
+    _publishCamera(_routePoints);
   }
 
-  void _fitRoute(List<LatLng> points) {
-    final controller = _mapController;
-    if (controller == null || points.length < 2) return;
-    var south = points.first.latitude;
-    var north = points.first.latitude;
-    var west = points.first.longitude;
-    var east = points.first.longitude;
-    for (final point in points) {
-      south = math.min(south, point.latitude);
-      north = math.max(north, point.latitude);
-      west = math.min(west, point.longitude);
-      east = math.max(east, point.longitude);
-    }
-    if (south == north) {
-      south -= 0.002;
-      north += 0.002;
-    }
-    if (west == east) {
-      west -= 0.002;
-      east += 0.002;
-    }
-    controller.animateCamera(
-      CameraUpdate.newLatLngBounds(
-        LatLngBounds(southwest: LatLng(south, west), northeast: LatLng(north, east)),
-        96,
+  void _publishDriver({double? bearing}) {
+    final pos = _driverPos;
+    ref.read(tripDriverProvider(TripMapScope.progress).notifier).state =
+        pos == null
+            ? null
+            : DriverPose(
+                position: pos,
+                bearing: bearing,
+                icon: _driverIcon,
+              );
+  }
+
+  void _publishStaticMarkers() {
+    final dropoff = _dropoffOf(ref.read(jobDraftProvider).activeJob);
+    final icons = _markers;
+    // Added only after the bitmaps are ready, so no stock pin ever shows.
+    ref.read(tripMarkersProvider(TripMapScope.progress).notifier).state = {
+      if (dropoff != null && icons != null)
+        Marker(
+          markerId: const MarkerId('dropoff'),
+          position: dropoff,
+          anchor: TripMarkers.dropoffAnchor,
+          zIndexInt: 1,
+          icon: icons.dropoff,
+        ),
+    };
+  }
+
+  Set<Polyline> _routeLines(List<LatLng> points) {
+    if (points.length < 2) return const {};
+    return {
+      Polyline(
+        polylineId: const PolylineId('route-casing'),
+        color: AppColors.white,
+        width: 8,
+        points: points,
+        startCap: Cap.roundCap,
+        endCap: Cap.roundCap,
+        jointType: JointType.round,
       ),
+      Polyline(
+        polylineId: const PolylineId('route'),
+        color: AppColors.primary,
+        width: 5,
+        points: points,
+        startCap: Cap.roundCap,
+        endCap: Cap.roundCap,
+        jointType: JointType.round,
+      ),
+    };
+  }
+
+  void _publishCamera(List<LatLng> points) {
+    final fallback =
+        points.isNotEmpty ? points.first : const LatLng(52.48, -1.89);
+    ref.read(tripCameraProvider(TripMapScope.progress).notifier).state =
+        cameraForPoints(
+      points,
+      generation: ++_cameraGeneration,
+      zoom: 14,
+      fallback: fallback,
+    );
+  }
+
+  Widget _tripMap() {
+    return _map ??= RyvoMapCanvas(
+      markers: tripMarkersProvider(TripMapScope.progress),
+      polylines: tripPolylinesProvider(TripMapScope.progress),
+      camera: tripCameraProvider(TripMapScope.progress),
+      driver: tripDriverProvider(TripMapScope.progress),
+      padding: const EdgeInsets.only(top: 72, bottom: 280),
+      boundsPadding: 96,
     );
   }
 
@@ -200,7 +310,8 @@ class _InProgressPageState extends ConsumerState<InProgressPage> {
       case 'no_provider_found':
         _pollTimer?.cancel();
         _statusSub?.cancel();
-        final noProviderContainer = ProviderScope.containerOf(context, listen: false);
+        final noProviderContainer =
+            ProviderScope.containerOf(context, listen: false);
         context.go('/no-providers');
         Future.microtask(
           () => markJobSessionFinished(noProviderContainer, jobId: _jobId),
@@ -221,15 +332,30 @@ class _InProgressPageState extends ConsumerState<InProgressPage> {
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _container ??= ProviderScope.containerOf(context, listen: false);
+  }
+
+  @override
   void dispose() {
+    _closed = true;
     _ticker?.cancel();
     _pollTimer?.cancel();
     _statusSub?.cancel();
     _locSub?.cancel();
-    if (_jobId != null) {
-      ref.read(trackingSocketProvider).unsubscribeJob(_jobId!);
-    }
+    _releaseSocketRoom();
     super.dispose();
+  }
+
+  /// [WidgetRef.read] throws once the element is defunct. The container was
+  /// captured while this page was mounted and still sees the live job.
+  void _releaseSocketRoom() {
+    final jobId = _jobId;
+    if (jobId == null) return;
+    final activeId = _container?.read(jobDraftProvider).activeJob?.id;
+    if (activeId == jobId) return;
+    _socket.unsubscribeJob(jobId);
   }
 
   Future<void> _cancelJob() async {
@@ -251,104 +377,49 @@ class _InProgressPageState extends ConsumerState<InProgressPage> {
   }
 
   String _elapsedDisplay(JobModel? job) {
-    return formatElapsedClock(serviceElapsedDuration(startedAt: job?.startedAt));
-  }
-
-  String _initials(String name) {
-    final parts = name.trim().split(RegExp(r'\s+')).where((p) => p.isNotEmpty).toList();
-    if (parts.isEmpty) return '?';
-    if (parts.length == 1) return parts.first[0].toUpperCase();
-    return (parts.first[0] + parts.last[0]).toUpperCase();
+    return formatElapsedClock(
+        serviceElapsedDuration(startedAt: job?.startedAt));
   }
 
   @override
   Widget build(BuildContext context) {
-    final JobModel? job = ref.watch(jobDraftProvider).activeJob;
-    final providerName = job?.provider?.fullName ?? AppLocalizations.of(context).yourProvider;
+    final job = ref.watch(jobDraftProvider.select((draft) => draft.activeJob));
+    final meta = ref.watch(tripRouteMetaProvider(TripMapScope.progress));
+    final providerName =
+        job?.provider?.fullName ?? AppLocalizations.of(context).yourProvider;
     final rating = job?.provider?.ratingAvg;
     final service = job?.serviceCategory?.name ?? 'Ride';
-    final dropoff = _dropoffOf(job);
-    final pickup = _pickupOf(job);
-    final origin = _driverPos ?? pickup;
-    final routeLine = _routePoints.length >= 2
-        ? _routePoints
-        : (origin != null && dropoff != null ? [origin, dropoff] : const <LatLng>[]);
-    final camera = dropoff ?? pickup ?? const LatLng(52.48, -1.89);
+    final vehicle = job?.vehicle;
     final dropoffLabel = job?.dropoffAddress?.trim();
-    final street = (dropoffLabel ?? 'dropoff').split(',').first.trim();
+    final street = (dropoffLabel == null || dropoffLabel.isEmpty)
+        ? 'dropoff'
+        : dropoffLabel.split(',').first.trim();
+    final minutes = meta.minutes ?? _routeMinutes;
+    final vehicleLine =
+        vehicle == null ? service : '${vehicle.make} ${vehicle.model}'.trim();
 
     return Scaffold(
       body: Stack(
         children: [
-          GoogleMap(
-            initialCameraPosition: CameraPosition(target: camera, zoom: 14),
-            padding: const EdgeInsets.only(top: 72, bottom: 260),
-            onMapCreated: (c) {
-              _mapController = c;
-              _fitRoute(routeLine);
-            },
-            myLocationEnabled: false,
-            zoomControlsEnabled: false,
-            compassEnabled: false,
-            mapToolbarEnabled: false,
-            polylines: {
-              if (routeLine.length >= 2) ...[
-                Polyline(
-                  polylineId: const PolylineId('route-casing'),
-                  color: Colors.white,
-                  width: 8,
-                  points: routeLine,
-                  startCap: Cap.roundCap,
-                  endCap: Cap.roundCap,
-                  jointType: JointType.round,
-                ),
-                Polyline(
-                  polylineId: const PolylineId('route'),
-                  color: AppColors.primary,
-                  width: 5,
-                  points: routeLine,
-                  startCap: Cap.roundCap,
-                  endCap: Cap.roundCap,
-                  jointType: JointType.round,
-                ),
-              ],
-            },
-            markers: {
-              if (dropoff != null)
-                Marker(
-                  markerId: const MarkerId('dropoff'),
-                  position: dropoff,
-                  anchor: TripMarkers.dropoffAnchor,
-                  zIndexInt: 1,
-                  icon: _markers?.dropoff ??
-                      BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed),
-                ),
-              if (_driverPos != null)
-                Marker(
-                  markerId: const MarkerId('driver'),
-                  position: _driverPos!,
-                  anchor: TripMarkers.carAnchor,
-                  zIndexInt: 2,
-                  flat: true,
-                  icon: _markers?.car ??
-                      BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueOrange),
-                ),
-            },
-          ),
+          _tripMap(),
           SafeArea(
             child: Padding(
               padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
               child: Align(
                 alignment: Alignment.centerRight,
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                   decoration: BoxDecoration(
                     color: AppColors.primary,
                     borderRadius: BorderRadius.circular(50),
                   ),
                   child: Text(
-                    _routeMinutes != null ? '$_routeMinutes min' : _elapsedDisplay(job),
-                    style: GoogleFonts.poppins(fontSize: 14, fontWeight: FontWeight.w700, color: Colors.white),
+                    minutes != null ? '$minutes min' : _elapsedDisplay(job),
+                    style: RyvoTypography.eta(
+                      fontSize: 14,
+                      color: AppColors.white,
+                    ),
                   ),
                 ),
               ),
@@ -363,7 +434,7 @@ class _InProgressPageState extends ConsumerState<InProgressPage> {
               elevation: 2,
               child: InkWell(
                 customBorder: const CircleBorder(),
-                onTap: () => _fitRoute(routeLine),
+                onTap: () => _publishCamera(_routePoints),
                 child: const SizedBox(
                   width: 44,
                   height: 44,
@@ -376,101 +447,54 @@ class _InProgressPageState extends ConsumerState<InProgressPage> {
             left: 0,
             right: 0,
             bottom: 0,
-            child: Container(
-              decoration: BoxDecoration(
-                color: AppColors.surface,
-                borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-              ),
-              padding: const EdgeInsets.fromLTRB(20, 12, 20, 8),
-              child: SafeArea(
-                top: false,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Container(
-                      width: 40,
-                      height: 4,
-                      margin: const EdgeInsets.only(bottom: 16),
-                      decoration: BoxDecoration(color: AppColors.grey600, borderRadius: BorderRadius.circular(2)),
+            child: DriverTripCard(
+              name: providerName,
+              ratingLabel: rating == null || rating <= 0
+                  ? '—'
+                  : rating.toStringAsFixed(1),
+              plate: vehicle?.plateNumber,
+              vehicleLine: vehicleLine,
+              headline: 'Heading to $street',
+              subtitle: dropoffLabel,
+              onCall: () => dialPhone(context, job?.provider?.phone),
+              onChat: job?.id == null
+                  ? null
+                  : () => context.push('/chat/${job!.id}'),
+              footer: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(
+                    formatMoney(job?.displayFare ?? 0),
+                    style: RyvoTypography.price(
+                      fontSize: 22,
+                      color: AppColors.textPrimary,
                     ),
+                  ),
+                  if (job?.id != null) ...[
+                    const SizedBox(height: 12),
                     Align(
                       alignment: Alignment.centerLeft,
-                      child: Text(
-                        'Heading to $street',
-                        style: GoogleFonts.poppins(fontSize: 17, fontWeight: FontWeight.w700, color: AppColors.textPrimary),
-                      ),
-                    ),
-                    if (dropoffLabel != null && dropoffLabel.isNotEmpty) ...[
-                      const SizedBox(height: 4),
-                      Text(
-                        dropoffLabel,
-                        style: GoogleFonts.poppins(fontSize: 13, color: AppColors.textSecondary),
-                      ),
-                    ],
-                    if (job?.jobType == 'parcel' && (job?.recipientOtp ?? '').isNotEmpty) ...[
-                      const SizedBox(height: 10),
-                      Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: AppColors.primary.withOpacity(0.08),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Text(
-                          'Give this OTP to the recipient: ${job!.recipientOtp}',
-                          style: GoogleFonts.poppins(fontSize: 14, fontWeight: FontWeight.w700),
-                        ),
-                      ),
-                    ],
-                    const SizedBox(height: 14),
-                    Row(
-                      children: [
-                        CircleAvatar(
-                          radius: 22,
-                          backgroundColor: AppColors.grey700,
-                          child: Text(
-                            _initials(providerName),
-                            style: GoogleFonts.poppins(fontWeight: FontWeight.w700, color: AppColors.textPrimary),
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(providerName, style: GoogleFonts.poppins(fontSize: 15, fontWeight: FontWeight.w700, color: AppColors.textPrimary)),
-                              Text(
-                                [
-                                  if (rating != null) rating.toStringAsFixed(1),
-                                  service,
-                                  formatMoney(job?.displayFare ?? 0),
-                                ].join(' · '),
-                                style: GoogleFonts.poppins(fontSize: 12, color: AppColors.textSecondary),
-                              ),
-                            ],
-                          ),
-                        ),
-                        IconButton(
-                          tooltip: AppLocalizations.of(context).callProvider,
-                          onPressed: () => dialPhone(context, job?.provider?.phone),
-                          icon: const Icon(Icons.phone, color: AppColors.success),
-                        ),
-                        if (job?.id != null)
-                          IconButton(
-                            onPressed: () => context.push('/chat/${job!.id}'),
-                            icon: const Icon(Icons.chat_bubble_outline, color: AppColors.info),
-                          ),
-                        if (job?.id != null) ShareTripButton.icon(jobId: job!.id),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    RyvoButton(
-                      label: AppLocalizations.of(context).cancelJob,
-                      variant: RyvoButtonVariant.ghost,
-                      onPressed: _cancelJob,
+                      child: ShareTripButton.action(jobId: job!.id),
                     ),
                   ],
-                ),
+                  if (job?.jobType == 'parcel' &&
+                      (job?.recipientOtp ?? '').isNotEmpty) ...[
+                    const SizedBox(height: 12),
+                    Text(
+                      'Give this OTP to the recipient: ${job!.recipientOtp}',
+                      style: RyvoTypography.style(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.textPrimary,
+                      ),
+                    ),
+                  ],
+                  RyvoButton(
+                    label: AppLocalizations.of(context).cancelJob,
+                    variant: RyvoButtonVariant.ghost,
+                    onPressed: _cancelJob,
+                  ),
+                ],
               ),
             ),
           ),

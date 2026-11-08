@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../core/theme/app_colors.dart';
 import 'package:ryvo_customer/l10n/app_localizations.dart';
+import 'ryvo_bottom_sheet.dart';
 
 class SearchableDropdownField extends FormField<String> {
   SearchableDropdownField({
@@ -25,25 +27,20 @@ class SearchableDropdownField extends FormField<String> {
               children: [
                 Text(
                   label,
-                  style: GoogleFonts.poppins(
+                  style: GoogleFonts.plusJakartaSans(
                     fontSize: 13,
                     fontWeight: FontWeight.w500,
                     color: AppColors.textSecondary,
                   ),
                 ),
-                const SizedBox(height: 6),
+                const SizedBox(height: 8),
                 InkWell(
                   onTap: (!enabled || loading)
                       ? null
                       : () async {
-                          final picked = await showModalBottomSheet<String>(
+                          final picked = await showRyvoModalSheet<String>(
                             context: state.context,
-                            isScrollControlled: true,
-                            backgroundColor: AppColors.modal,
-                            shape: const RoundedRectangleBorder(
-                              borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-                            ),
-                            builder: (ctx) => _SearchSheet(
+                            child: _SearchSheet(
                               title: label,
                               options: options,
                               selected: selected,
@@ -60,8 +57,11 @@ class SearchableDropdownField extends FormField<String> {
                     decoration: InputDecoration(
                       filled: true,
                       fillColor: AppColors.surface,
-                      hintText: loading ? AppLocalizations.of(state.context).loading : hint,
-                      hintStyle: GoogleFonts.poppins(color: AppColors.textHint, fontSize: 14),
+                      hintText: loading
+                          ? AppLocalizations.of(state.context).loading
+                          : hint,
+                      hintStyle: GoogleFonts.plusJakartaSans(
+                          color: AppColors.textHint, fontSize: 14),
                       errorText: state.errorText,
                       suffixIcon: loading
                           ? const Padding(
@@ -69,12 +69,15 @@ class SearchableDropdownField extends FormField<String> {
                               child: SizedBox(
                                 width: 18,
                                 height: 18,
-                                child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primary),
+                                child: CircularProgressIndicator(
+                                    strokeWidth: 2, color: AppColors.primary),
                               ),
                             )
                           : Icon(
                               Icons.keyboard_arrow_down_rounded,
-                              color: enabled ? AppColors.textSecondary : AppColors.textHint,
+                              color: enabled
+                                  ? AppColors.textSecondary
+                                  : AppColors.textHint,
                             ),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
@@ -86,19 +89,24 @@ class SearchableDropdownField extends FormField<String> {
                       ),
                       focusedBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
-                        borderSide: const BorderSide(color: AppColors.primary, width: 1.5),
+                        borderSide: const BorderSide(
+                            color: AppColors.primary, width: 1.5),
                       ),
                       disabledBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
-                        borderSide: BorderSide(color: AppColors.divider.withValues(alpha: 0.5)),
+                        borderSide: BorderSide(
+                            color: AppColors.divider.withValues(alpha: 0.5)),
                       ),
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                      contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 16, vertical: 16),
                     ),
                     isEmpty: selected == null || selected.isEmpty,
                     child: Text(
                       selected ?? '',
-                      style: GoogleFonts.poppins(
-                        color: enabled ? AppColors.textPrimary : AppColors.textHint,
+                      style: GoogleFonts.plusJakartaSans(
+                        color: enabled
+                            ? AppColors.textPrimary
+                            : AppColors.textHint,
                         fontSize: 15,
                       ),
                       overflow: TextOverflow.ellipsis,
@@ -185,28 +193,20 @@ class _SearchSheetState extends State<_SearchSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final height = MediaQuery.of(context).size.height * 0.7;
-    return SafeArea(
-      child: SizedBox(
-        height: height,
-        child: Column(
-          children: [
-            const SizedBox(height: 10),
-            Container(
-              width: 40,
-              height: 4,
-              decoration: BoxDecoration(
-                color: AppColors.divider,
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-            Padding(
+    return Column(
+      children: [
+        Padding(
               padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
               child: Align(
                 alignment: Alignment.centerLeft,
                 child: Text(
                   'Select ${widget.title}',
-                  style: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.w600, color: AppColors.textPrimary),
+                  style: GoogleFonts.plusJakartaSans(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: -0.4,
+                    color: AppColors.textPrimary,
+                  ),
                 ),
               ),
             ),
@@ -216,10 +216,12 @@ class _SearchSheetState extends State<_SearchSheet> {
                 controller: _search,
                 autofocus: true,
                 onChanged: _onSearch,
-                style: GoogleFonts.poppins(color: AppColors.textPrimary, fontSize: 14),
+                style: GoogleFonts.plusJakartaSans(
+                    color: AppColors.textPrimary, fontSize: 14),
                 decoration: InputDecoration(
                   hintText: AppLocalizations.of(context).search,
-                  hintStyle: GoogleFonts.poppins(color: AppColors.textHint, fontSize: 14),
+                  hintStyle: GoogleFonts.plusJakartaSans(
+                      color: AppColors.textHint, fontSize: 14),
                   prefixIcon: Icon(Icons.search, color: AppColors.textHint),
                   filled: true,
                   fillColor: AppColors.surface,
@@ -233,9 +235,11 @@ class _SearchSheetState extends State<_SearchSheet> {
                   ),
                   focusedBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12),
-                    borderSide: const BorderSide(color: AppColors.primary, width: 1.5),
+                    borderSide:
+                        const BorderSide(color: AppColors.primary, width: 1.5),
                   ),
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                  contentPadding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
                 ),
               ),
             ),
@@ -245,7 +249,8 @@ class _SearchSheetState extends State<_SearchSheet> {
                   ? Center(
                       child: Text(
                         AppLocalizations.of(context).noMatches,
-                        style: GoogleFonts.poppins(color: AppColors.textSecondary),
+                        style: GoogleFonts.plusJakartaSans(
+                            color: AppColors.textSecondary),
                       ),
                     )
                   : ListView.builder(
@@ -256,23 +261,26 @@ class _SearchSheetState extends State<_SearchSheet> {
                         return ListTile(
                           title: Text(
                             item,
-                            style: GoogleFonts.poppins(
+                            style: GoogleFonts.plusJakartaSans(
                               fontSize: 14,
-                              fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+                              fontWeight:
+                                  selected ? FontWeight.w600 : FontWeight.w400,
                               color: AppColors.textPrimary,
                             ),
                           ),
                           trailing: selected
-                              ? const Icon(Icons.check_circle, color: AppColors.primary, size: 20)
+                              ? const Icon(Icons.check_circle,
+                                  color: AppColors.primary, size: 20)
                               : null,
-                          onTap: () => Navigator.pop(context, item),
+                          onTap: () {
+                            HapticFeedback.lightImpact();
+                            Navigator.pop(context, item);
+                          },
                         );
                       },
                     ),
             ),
           ],
-        ),
-      ),
-    );
+        );
   }
 }

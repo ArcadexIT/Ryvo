@@ -51,8 +51,10 @@ class UkPlacesSearch {
   final LocationService _geocoder;
   final String _apiKey;
 
-  static const _autocompleteUrl = 'https://maps.googleapis.com/maps/api/place/autocomplete/json';
-  static const _detailsUrl = 'https://maps.googleapis.com/maps/api/place/details/json';
+  static const _autocompleteUrl =
+      'https://maps.googleapis.com/maps/api/place/autocomplete/json';
+  static const _detailsUrl =
+      'https://maps.googleapis.com/maps/api/place/details/json';
 
   /// Empty when [query] is shorter than 2 characters or nothing in the UK matches.
   /// A failed Places call falls back to one nearby UK geocode result.
@@ -108,7 +110,8 @@ class UkPlacesSearch {
           'place_id': suggestion.placeId,
           'fields': 'geometry,formatted_address,name,address_components',
           'language': 'en-GB',
-          if (sessionToken != null && sessionToken.isNotEmpty) 'sessiontoken': sessionToken,
+          if (sessionToken != null && sessionToken.isNotEmpty)
+            'sessiontoken': sessionToken,
           'key': _apiKey,
         },
       );
@@ -120,7 +123,8 @@ class UkPlacesSearch {
     } catch (e) {
       if (e is PlacesLookupException) rethrow;
     }
-    throw PlacesLookupException('Could not find that UK address. Try a more specific one.');
+    throw PlacesLookupException(
+        'Could not find that UK address. Try a more specific one.');
   }
 
   Future<List<UkAddressSuggestion>?> _tryAutocomplete({
@@ -161,8 +165,10 @@ class UkPlacesSearch {
     double biasLng,
   ) async {
     try {
-      final resolved = await _geocoder.forwardGeocode(query, biasLat: biasLat, biasLng: biasLng);
-      final meters = distanceMetersBetween(biasLat, biasLng, resolved.lat, resolved.lng);
+      final resolved = await _geocoder.forwardGeocode(query,
+          biasLat: biasLat, biasLng: biasLng);
+      final meters =
+          distanceMetersBetween(biasLat, biasLng, resolved.lat, resolved.lng);
       return [
         UkAddressSuggestion(
           placeId: '',
@@ -179,12 +185,16 @@ class UkPlacesSearch {
   }
 }
 
-double distanceMetersBetween(double lat1, double lng1, double lat2, double lng2) {
+double distanceMetersBetween(
+    double lat1, double lng1, double lat2, double lng2) {
   const earth = 6371000.0;
   final dLat = _toRadians(lat2 - lat1);
   final dLng = _toRadians(lng2 - lng1);
   final a = math.sin(dLat / 2) * math.sin(dLat / 2) +
-      math.cos(_toRadians(lat1)) * math.cos(_toRadians(lat2)) * math.sin(dLng / 2) * math.sin(dLng / 2);
+      math.cos(_toRadians(lat1)) *
+          math.cos(_toRadians(lat2)) *
+          math.sin(dLng / 2) *
+          math.sin(dLng / 2);
   return earth * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a));
 }
 
@@ -198,7 +208,8 @@ List<UkAddressSuggestion> parsePlaceAutocomplete(Map<String, dynamic> json) {
     if (raw is! Map) continue;
     final map = Map<String, dynamic>.from(raw);
     final formatting = map['structured_formatting'];
-    final structured = formatting is Map ? Map<String, dynamic>.from(formatting) : null;
+    final structured =
+        formatting is Map ? Map<String, dynamic>.from(formatting) : null;
     final placeId = map['place_id'] as String? ?? '';
     final description = map['description'] as String? ?? '';
     final primary = (structured?['main_text'] as String?)?.trim();
@@ -238,20 +249,28 @@ ResolvedLocation? parsePlaceDetails(Map<String, dynamic> json) {
       if (raw is! Map) continue;
       final component = Map<String, dynamic>.from(raw);
       final types = component['types'];
-      final typeList = types is List ? types.map((e) => '$e').toList() : const <String>[];
+      final typeList =
+          types is List ? types.map((e) => '$e').toList() : const <String>[];
       final longName = (component['long_name'] as String?)?.trim() ?? '';
       if (longName.isEmpty) continue;
       if (typeList.contains('street_number')) streetNumber = longName;
       if (typeList.contains('route')) route = longName;
-      if (town == null && (typeList.contains('postal_town') || typeList.contains('locality'))) {
+      if (town == null &&
+          (typeList.contains('postal_town') || typeList.contains('locality'))) {
         town = longName;
       }
       if (typeList.contains('postal_code')) postcode = longName;
     }
   }
 
-  final street = [streetNumber, route].whereType<String>().where((part) => part.isNotEmpty).join(' ');
-  final region = [town, postcode].whereType<String>().where((part) => part.isNotEmpty).join(', ');
+  final street = [streetNumber, route]
+      .whereType<String>()
+      .where((part) => part.isNotEmpty)
+      .join(' ');
+  final region = [town, postcode]
+      .whereType<String>()
+      .where((part) => part.isNotEmpty)
+      .join(', ');
   final formatted = (map['formatted_address'] as String?)?.trim();
   final name = (map['name'] as String?)?.trim();
   final short = street.isNotEmpty ? street : (name ?? formatted);

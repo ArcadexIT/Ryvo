@@ -1,22 +1,29 @@
-import 'dart:math' as math;
+import 'dart:async';
 
+import 'package:flutter/cupertino.dart' show CupertinoIcons;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
-import 'package:intl/intl.dart';
 import 'package:ryvo_customer/l10n/app_localizations.dart';
 
 import '../../../../core/location/driving_route.dart';
+import '../../../../core/location/route_flow.dart';
 import '../../../../core/theme/app_colors.dart';
-import '../../../../core/utils/map_style_utils.dart';
+import '../../../../core/theme/app_theme.dart';
+import '../../../../core/widgets/ryvo_map_canvas.dart';
 import '../../../../data/models/app_config.dart';
 import '../../../../data/models/models.dart';
 import '../../../home/presentation/widgets/map_markers.dart';
-import '../../../payment/presentation/widgets/payment_sheet.dart';
+import '../../../payment/presentation/pages/payment_options_page.dart';
+import '../../../tracking/presentation/trip_map_providers.dart';
 import '../../../../shared/providers/app_providers.dart';
 import '../../../../shared/widgets/widgets.dart';
+import '../widgets/action_dock.dart';
+import '../widgets/bid_controls.dart';
+import '../widgets/parcel_fields.dart';
+import '../widgets/ride_tile.dart';
 
 class ServiceRequestSheetPage extends ConsumerStatefulWidget {
   const ServiceRequestSheetPage({super.key});
@@ -28,11 +35,23 @@ class ServiceRequestSheetPage extends ConsumerStatefulWidget {
 
 class _ServiceRequestSheetPageState
     extends ConsumerState<ServiceRequestSheetPage> {
-  GoogleMapController? _mapController;
+  static const double _snapMin = 0.38;
+  static const double _snapMid = 0.56;
+  static const double _snapMax = 0.88;
+  static const List<double> _snaps = [_snapMin, _snapMid, _snapMax];
+
+  Widget? _map;
+  ValueNotifier<EdgeInsets>? _mapPadding;
+  List<LatLng>? _flowPoints;
+  int _routeGeneration = 0;
+  Timer? _settleTimer;
+  int _snapIndex = 1;
+  int _cameraGeneration = 0;
   final Map<String, FareEstimate> _quotes = {};
   final DrivingRouteService _routes = DrivingRouteService();
   String? _quoteKey;
   String? _routeKey;
+  String? _routeLoadingKey;
   bool _quoting = false;
   bool _confirming = false;
   ServiceCategory? _selected;
@@ -46,15 +65,6 @@ class _ServiceRequestSheetPageState
   BitmapDescriptor? _pickupIcon;
   BitmapDescriptor? _dropoffIcon;
 
-  static const _mapStyle = '''[
-    {"featureType":"poi","stylers":[{"visibility":"off"}]},
-    {"featureType":"transit","stylers":[{"visibility":"simplified"}]},
-    {"featureType":"road","elementType":"geometry","stylers":[{"color":"#ffffff"}]},
-    {"featureType":"road","elementType":"labels.text.fill","stylers":[{"color":"#444444"}]},
-    {"featureType":"landscape","stylers":[{"color":"#f5f5f5"}]},
-    {"featureType":"water","stylers":[{"color":"#c9e8f5"}]}
-  ]''';
-
   @override
   void initState() {
     super.initState();
@@ -66,6 +76,8 @@ class _ServiceRequestSheetPageState
       }
       _initPayment();
       ref.invalidate(serviceCategoriesProvider);
+      // Warm the bitmaps and the route while the tiers are still quoting.
+      unawaited(_loadRoute());
       final services = ref.read(serviceCategoriesProvider).valueOrNull;
       if (services != null && services.isNotEmpty) {
         _quote(services);
@@ -75,7 +87,8 @@ class _ServiceRequestSheetPageState
 
   @override
   void dispose() {
-    _mapController?.dispose();
+    _settleTimer?.cancel();
+    _mapPadding?.dispose();
     _recipientName.dispose();
     _recipientPhone.dispose();
     super.dispose();
@@ -110,7 +123,9 @@ class _ServiceRequestSheetPageState
     final draft = ref.read(jobDraftProvider);
     if (draft.dropoffLat == null ||
         draft.dropoffLng == null ||
-        services.isEmpty) return;
+        services.isEmpty) {
+      return;
+    }
     final key = _quoteIdentity(draft, services);
     if (_quoteKey == key && _quotes.isNotEmpty) return;
     _quoteKey = key;
@@ -158,7 +173,17 @@ class _ServiceRequestSheetPageState
       _selected = selected;
     });
     await _loadRoute();
-    _fitRoute();
+    if (!mounted) return;
+    _publishMap();
+  }
+
+  Future<void> _loadPickupIcon() async {
+    final icon = await MapMarkers.buildStopNode(
+      kind: MapStopKind.pickup,
+    );
+    if (!mounted) return;
+    _pickupIcon = icon;
+    _publishMarkers();
   }
 
   Future<void> _loadRoute() async {
@@ -167,36 +192,192 @@ class _ServiceRequestSheetPageState
     final key =
         '${draft.pickupLat.toStringAsFixed(5)},${draft.pickupLng.toStringAsFixed(5)}|'
         '${draft.dropoffLat!.toStringAsFixed(5)},${draft.dropoffLng!.toStringAsFixed(5)}';
-    if (_routeKey == key && _routePoints.length > 2) return;
+    if (_routeKey == key &&
+        (_routeLoadingKey == key || _routePoints.length > 2)) {
+      return;
+    }
+    if (_routeKey != key) {
+      // The old dropoff pill describes a different trip; hide it until the
+      // new one is drawn.
+      _dropoffIcon = null;
+      _publishMarkers();
+      unawaited(_loadPickupIcon());
+    }
     _routeKey = key;
-    final route = await _routes.fetch(
-      originLat: draft.pickupLat,
-      originLng: draft.pickupLng,
-      destinationLat: draft.dropoffLat!,
-      destinationLng: draft.dropoffLng!,
+    _routeLoadingKey = key;
+    try {
+      final route = await _routes.fetch(
+        originLat: draft.pickupLat,
+        originLng: draft.pickupLng,
+        destinationLat: draft.dropoffLat!,
+        destinationLng: draft.dropoffLng!,
+      );
+      if (!mounted || _routeKey != key) return;
+      final minutes = route?.durationMin ?? 0;
+      final dropoffIcon = await MapMarkers.buildStopNode(
+        kind: MapStopKind.dropoff,
+        badge: minutes > 0 ? '$minutes min' : null,
+      );
+      if (!mounted || _routeKey != key) return;
+      setState(() {
+        _routePoints = route?.points ?? const [];
+        _routeMinutes = minutes;
+        _dropoffIcon = dropoffIcon;
+      });
+      // Clear first: while a route is loading, _publishRoute holds back the
+      // straight-line fallback so it never flashes before the real road.
+      _routeLoadingKey = null;
+      _publishMap();
+    } finally {
+      if (_routeLoadingKey == key) _routeLoadingKey = null;
+    }
+  }
+
+  void _publishMap() {
+    _publishMarkers();
+    _publishRoute();
+    _publishCamera();
+  }
+
+  LatLng get _pickupLatLng {
+    final draft = ref.read(jobDraftProvider);
+    return LatLng(draft.pickupLat, draft.pickupLng);
+  }
+
+  LatLng? get _dropoffLatLng {
+    final draft = ref.read(jobDraftProvider);
+    if (draft.dropoffLat == null || draft.dropoffLng == null) return null;
+    return LatLng(draft.dropoffLat!, draft.dropoffLng!);
+  }
+
+  List<LatLng> get _displayPoints {
+    final dropoff = _dropoffLatLng;
+    if (_routePoints.length > 1) return _routePoints;
+    return [_pickupLatLng, if (dropoff != null) dropoff];
+  }
+
+  /// Markers appear only once their bitmap exists, so no stock pin ever shows.
+  void _publishMarkers() {
+    final pickupIcon = _pickupIcon;
+    final dropoffIcon = _dropoffIcon;
+    final dropoff = _dropoffLatLng;
+    ref.read(tripMarkersProvider(TripMapScope.request).notifier).state = {
+      if (pickupIcon != null)
+        Marker(
+          markerId: const MarkerId('pickup'),
+          position: _pickupLatLng,
+          icon: pickupIcon,
+          anchor: MapMarkers.stopAnchor,
+          zIndexInt: 2,
+        ),
+      if (dropoff != null && dropoffIcon != null)
+        Marker(
+          markerId: const MarkerId('dropoff'),
+          position: dropoff,
+          icon: dropoffIcon,
+          anchor: MapMarkers.stopAnchor,
+          zIndexInt: 1,
+        ),
+    };
+  }
+
+  void _publishRoute() {
+    final points = _displayPoints;
+    if (_dropoffLatLng == null || points.length < 2) {
+      if (_flowPoints == null) return;
+      _flowPoints = null;
+      ref.read(tripRouteFlowProvider(TripMapScope.request).notifier).state =
+          null;
+      ref.read(tripPolylinesProvider(TripMapScope.request).notifier).state =
+          const {};
+      return;
+    }
+    // While the road is loading, do not draw the straight-line fallback.
+    if (_routeLoadingKey != null && _routePoints.length < 2) return;
+    // Publishing the same road again must not restart the reveal.
+    if (RouteFlow.sameRoute(points, _flowPoints)) return;
+    _flowPoints = points;
+    // The overlay reveals and pulses the route; the map only gets the two
+    // static polylines, once. No animation frame touches the platform channel.
+    ref.read(tripRouteFlowProvider(TripMapScope.request).notifier).state =
+        RouteFlow(points: points, generation: ++_routeGeneration);
+    ref.read(tripPolylinesProvider(TripMapScope.request).notifier).state =
+        RouteStyle.polylines(points);
+  }
+
+  void _publishCamera() {
+    ref.read(tripCameraProvider(TripMapScope.request).notifier).state =
+        cameraForPoints(
+      _displayPoints,
+      generation: ++_cameraGeneration,
+      zoom: 13,
+      fallback: _pickupLatLng,
     );
-    if (!mounted || _routeKey != key) return;
-    final minutes = route?.durationMin ?? 0;
-    final arrival =
-        DateTime.now().add(Duration(minutes: minutes == 0 ? 1 : minutes));
-    final pickupIcon = await MapMarkers.buildStopLabel(
-      title: 'Pickup',
-      subtitle: 'Now',
-      color: const Color(0xFF32BB78),
+  }
+
+  Widget _requestMap(BuildContext context) {
+    final padding = _mapPadding ??= ValueNotifier(_paddingFor(_snapMid));
+    return _map ??= RyvoMapCanvas(
+      markers: tripMarkersProvider(TripMapScope.request),
+      polylines: tripPolylinesProvider(TripMapScope.request),
+      routeFlow: tripRouteFlowProvider(TripMapScope.request),
+      camera: tripCameraProvider(TripMapScope.request),
+      paddingListenable: padding,
+      boundsPadding: 40,
     );
-    final dropoffIcon = await MapMarkers.buildStopLabel(
-      title: 'Dropoff',
-      subtitle: DateFormat('h:mm a').format(arrival),
-      color: const Color(0xFF1F2937),
+  }
+
+  /// Keeps the route between the compact route bar and the top of the sheet.
+  EdgeInsets _paddingFor(double sheetFraction) {
+    return EdgeInsets.only(
+      top: MediaQuery.paddingOf(context).top + _RouteBar.clearance,
+      bottom: MediaQuery.sizeOf(context).height * sheetFraction,
     );
-    if (!mounted || _routeKey != key) return;
-    setState(() {
-      _routePoints = route?.points ?? const [];
-      _routeMinutes = minutes;
-      _pickupIcon = pickupIcon;
-      _dropoffIcon = dropoffIcon;
+  }
+
+  int _nearestSnap(double extent) {
+    var best = 0;
+    var distance = double.infinity;
+    for (var i = 0; i < _snaps.length; i++) {
+      final d = (extent - _snaps[i]).abs();
+      if (d < distance) {
+        distance = d;
+        best = i;
+      }
+    }
+    return best;
+  }
+
+  /// Clicks when the drag crosses the midpoint toward another snap size, and
+  /// re-centers the route once the sheet stops moving.
+  bool _onSheetNotification(DraggableScrollableNotification notification) {
+    final index = _nearestSnap(notification.extent);
+    if (index != _snapIndex) {
+      _snapIndex = index;
+      HapticFeedback.selectionClick();
+    }
+    _settleTimer?.cancel();
+    _settleTimer = Timer(
+      const Duration(milliseconds: 160),
+      () => _settleMap(notification.extent),
+    );
+    return false;
+  }
+
+  /// The map only needs to clear the sheet up to its default height; dragging
+  /// higher covers the map instead of squeezing the route. Applying the value
+  /// once per settle keeps the camera from jittering during the drag.
+  void _settleMap(double extent) {
+    final notifier = _mapPadding;
+    if (!mounted || notifier == null) return;
+    final fraction = extent.clamp(_snapMin, _snapMid).toDouble();
+    final next = _paddingFor(fraction);
+    if ((notifier.value.bottom - next.bottom).abs() < 1) return;
+    notifier.value = next;
+    // Let the new padding reach the platform view before the camera moves.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _publishCamera();
     });
-    _fitRoute();
   }
 
   Future<void> _editPickup() async {
@@ -207,7 +388,8 @@ class _ServiceRequestSheetPageState
     final services = ref.read(serviceCategoriesProvider).valueOrNull ??
         const <ServiceCategory>[];
     await _quote(services);
-    _fitRoute();
+    if (!mounted) return;
+    _publishMap();
   }
 
   Future<void> _editDropoff() async {
@@ -226,45 +408,8 @@ class _ServiceRequestSheetPageState
     final services = ref.read(serviceCategoriesProvider).valueOrNull ??
         const <ServiceCategory>[];
     await _quote(services);
-    _fitRoute();
-  }
-
-  void _fitRoute() {
-    final draft = ref.read(jobDraftProvider);
-    final controller = _mapController;
-    if (controller == null ||
-        draft.dropoffLat == null ||
-        draft.dropoffLng == null) return;
-    final points = _routePoints.isNotEmpty
-        ? _routePoints
-        : [
-            LatLng(draft.pickupLat, draft.pickupLng),
-            LatLng(draft.dropoffLat!, draft.dropoffLng!),
-          ];
-    var south = points.first.latitude;
-    var north = points.first.latitude;
-    var west = points.first.longitude;
-    var east = points.first.longitude;
-    for (final point in points) {
-      south = math.min(south, point.latitude);
-      north = math.max(north, point.latitude);
-      west = math.min(west, point.longitude);
-      east = math.max(east, point.longitude);
-    }
-    if ((north - south).abs() < 0.0001 && (east - west).abs() < 0.0001) {
-      controller.animateCamera(CameraUpdate.newLatLngZoom(
-          LatLng(draft.pickupLat, draft.pickupLng), 15));
-      return;
-    }
-    controller.animateCamera(
-      CameraUpdate.newLatLngBounds(
-        LatLngBounds(
-          southwest: LatLng(south, west),
-          northeast: LatLng(north, east),
-        ),
-        72,
-      ),
-    );
+    if (!mounted) return;
+    _publishMap();
   }
 
   Future<void> _confirm() async {
@@ -322,7 +467,7 @@ class _ServiceRequestSheetPageState
                 parcelSize: _parcelSize,
               );
       if (!mounted) return;
-      final route = await showRyvoCheckoutSheet(context);
+      final route = await showRyvoCheckout(context);
       if (!mounted) return;
       if (route != null) context.go(route);
     } catch (error) {
@@ -341,22 +486,192 @@ class _ServiceRequestSheetPageState
     }
   }
 
+  /// "Best value" goes to the cheapest quoted tier and "Fastest" to a tier
+  /// with a strictly shorter ETA. Needs two quoted tiers to mean anything.
+  Map<String, String> _badges(List<ServiceCategory> services) {
+    final quoted =
+        services.where((service) => _quotes.containsKey(service.id)).toList();
+    if (quoted.length < 2) return const {};
+    final cheapest = quoted.reduce((a, b) =>
+        _quotes[b.id]!.estimatedFare < _quotes[a.id]!.estimatedFare ? b : a);
+    final badges = <String, String>{cheapest.id: 'Best value'};
+    final timed = quoted
+        .where((service) => _quotes[service.id]!.durationMin > 0)
+        .toList();
+    if (timed.length >= 2) {
+      final fastest = timed.reduce((a, b) =>
+          _quotes[b.id]!.durationMin < _quotes[a.id]!.durationMin ? b : a);
+      final unique = timed.every((service) =>
+          service.id == fastest.id ||
+          _quotes[service.id]!.durationMin > _quotes[fastest.id]!.durationMin);
+      if (unique && fastest.id != cheapest.id) badges[fastest.id] = 'Fastest';
+    }
+    return badges;
+  }
+
+  List<Widget> _sheetSlivers({
+    required BuildContext context,
+    required String jobType,
+    required AsyncValue<List<ServiceCategory>> servicesAsync,
+  }) {
+    final l10n = AppLocalizations.of(context);
+    return [
+      SliverPersistentHeader(
+        pinned: true,
+        delegate: _SheetHeaderDelegate(jobType: jobType),
+      ),
+      ...servicesAsync.when<List<Widget>>(
+        loading: () => [
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(8, 2, 8, 6),
+            sliver: SliverList(
+              delegate: SliverChildBuilderDelegate(
+                (context, index) => const RideTileSkeleton(),
+                childCount: 3,
+              ),
+            ),
+          ),
+        ],
+        error: (_, __) => [
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 24),
+              child: Center(
+                child: TextButton(
+                  onPressed: () => ref.invalidate(serviceCategoriesProvider),
+                  child: Text(l10n.couldNotLoadServicesTapToRetry),
+                ),
+              ),
+            ),
+          ),
+        ],
+        data: (services) {
+          if (services.isEmpty) {
+            return [
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 24),
+                  child: Center(
+                    child: Text(
+                      'No rides are available right now',
+                      style: RyvoTypography.style(
+                        fontSize: 14,
+                        color: AppColors.textSecondary,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ];
+          }
+          final badges = _badges(services);
+          return [
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(16, 2, 16, 6),
+              sliver: SliverList(
+                delegate: SliverChildBuilderDelegate(
+                  (context, index) {
+                    if (index.isOdd) return const SizedBox(height: 8);
+                    final service = services[index ~/ 2];
+                    return RideTile(
+                      key: ValueKey(service.id),
+                      service: service,
+                      estimate: _quotes[service.id],
+                      quoting: _quoting,
+                      routeMinutes: _routeMinutes,
+                      selected: service.id == _selected?.id,
+                      badge: badges[service.id],
+                      retryLabel: l10n.retry,
+                      onSelect: () => setState(() => _selected = service),
+                      onRetry: () {
+                        _quoteKey = null;
+                        _quote(services);
+                      },
+                    );
+                  },
+                  childCount: services.length * 2 - 1,
+                ),
+              ),
+            ),
+          ];
+        },
+      ),
+      if (jobType == 'parcel')
+        SliverToBoxAdapter(
+          child: ParcelFields(
+            nameController: _recipientName,
+            phoneController: _recipientPhone,
+            size: _parcelSize,
+            onSize: (size) => setState(() => _parcelSize = size),
+          ),
+        ),
+      if (jobType == 'bidding' &&
+          _selected != null &&
+          _quotes[_selected!.id] != null)
+        SliverToBoxAdapter(child: _bidControls(_quotes[_selected!.id]!)),
+      const SliverToBoxAdapter(child: SizedBox(height: 12)),
+    ];
+  }
+
+  Widget _bidControls(FareEstimate estimate) {
+    final config =
+        ref.read(appConfigProvider).valueOrNull ?? AppConfig.fallback;
+    final suggested = estimate.estimatedFare;
+    final min = suggested * config.bidMinFareRatio;
+    final max = suggested * config.bidMaxFareRatio;
+    final value = (_offerPrice ?? suggested).clamp(min, max).toDouble();
+    return BidControls(
+      suggested: suggested,
+      min: min,
+      max: max,
+      value: value,
+      onChanged: (next) => setState(() => _offerPrice = next),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    final draft = ref.watch(jobDraftProvider);
+    final jobType = ref.watch(jobDraftProvider.select((d) => d.jobType));
+    final pickupAddress =
+        ref.watch(jobDraftProvider.select((d) => d.pickupAddress));
+    final dropoffAddress =
+        ref.watch(jobDraftProvider.select((d) => d.dropoffAddress));
     final servicesAsync = ref.watch(serviceCategoriesProvider);
     final config =
         ref.watch(appConfigProvider).valueOrNull ?? AppConfig.fallback;
     final methods = _enabledMethods(config);
+    final l10n = AppLocalizations.of(context);
     ref.listen<AsyncValue<List<ServiceCategory>>>(serviceCategoriesProvider,
         (_, next) {
       next.whenData(_quote);
     });
 
-    final pickup = LatLng(draft.pickupLat, draft.pickupLng);
-    final dropoff = draft.dropoffLat == null || draft.dropoffLng == null
-        ? null
-        : LatLng(draft.dropoffLat!, draft.dropoffLng!);
+    // DraggableScrollableSheet re-runs its builder on every drag frame. The
+    // slivers and the dock are built once per state change and only handed
+    // through, so a drag reconciles identical widgets instead of rebuilding
+    // the tier list 60-120 times a second.
+    final slivers = _sheetSlivers(
+      context: context,
+      jobType: jobType,
+      servicesAsync: servicesAsync,
+    );
+    final dock = RequestActionDock(
+      paymentMethod: _payment,
+      paymentLabel: _payment == null
+          ? l10n.choosePaymentMethod
+          : _paymentLabel(context, _payment!),
+      noMethodsLabel: methods.isEmpty
+          ? l10n.noPaymentMethodsAreCurrentlyAvailablePleaseConta
+          : null,
+      onPickPayment: _confirming ? null : () => _pickPayment(methods),
+      buttonLabel: _buttonLabel(jobType),
+      buttonPrice: _buttonPrice(jobType),
+      loading: _confirming || _quoting,
+      onPressed:
+          _confirming || _quoting || _selected == null || _payment == null
+              ? null
+              : _confirm,
+    );
 
     return PopScope(
       canPop: false,
@@ -367,278 +682,65 @@ class _ServiceRequestSheetPageState
         backgroundColor: AppColors.background,
         body: Stack(
           children: [
-            GoogleMap(
-              padding: EdgeInsets.only(
-                  bottom: MediaQuery.sizeOf(context).height * 0.50),
-              initialCameraPosition: CameraPosition(target: pickup, zoom: 13),
-              onMapCreated: (controller) async {
-                _mapController = controller;
-                await applyMapStyle(controller, _mapStyle);
-                _fitRoute();
-              },
-              myLocationEnabled: false,
-              myLocationButtonEnabled: false,
-              zoomControlsEnabled: false,
-              compassEnabled: false,
-              mapToolbarEnabled: false,
-              markers: {
-                Marker(
-                  markerId: const MarkerId('pickup'),
-                  position: pickup,
-                  icon: _pickupIcon ??
-                      BitmapDescriptor.defaultMarkerWithHue(
-                          BitmapDescriptor.hueGreen),
-                  anchor: _pickupIcon == null
-                      ? const Offset(0.5, 1)
-                      : const Offset(0.5, 1),
-                ),
-                if (dropoff != null)
-                  Marker(
-                    markerId: const MarkerId('dropoff'),
-                    position: dropoff,
-                    icon: _dropoffIcon ??
-                        BitmapDescriptor.defaultMarkerWithHue(
-                            BitmapDescriptor.hueRed),
-                    anchor: const Offset(0.5, 1),
-                  ),
-              },
-              polylines: {
-                if (dropoff != null) ...{
-                  Polyline(
-                    polylineId: const PolylineId('route-casing'),
-                    points: _routePoints.length > 1
-                        ? _routePoints
-                        : [pickup, dropoff],
-                    color: Colors.white,
-                    width: 10,
-                    startCap: Cap.roundCap,
-                    endCap: Cap.roundCap,
-                    jointType: JointType.round,
-                    zIndex: 1,
-                  ),
-                  Polyline(
-                    polylineId: const PolylineId('route'),
-                    points: _routePoints.length > 1
-                        ? _routePoints
-                        : [pickup, dropoff],
-                    color: const Color(0xFF32BB78),
-                    width: 6,
-                    startCap: Cap.roundCap,
-                    endCap: Cap.roundCap,
-                    jointType: JointType.round,
-                    zIndex: 2,
-                  ),
-                },
-              },
-            ),
+            _requestMap(context),
             SafeArea(
+              bottom: false,
               child: Padding(
-                padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
-                child: _RouteBar(
-                  pickup: _shortPlace(draft.pickupAddress),
-                  dropoff: _shortPlace(draft.dropoffAddress),
-                  onClose: _confirming ? null : _handleBack,
-                  onPickup: _confirming ? null : _editPickup,
-                  onDropoff: _confirming ? null : _editDropoff,
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                child: Align(
+                  alignment: Alignment.topCenter,
+                  child: _RouteBar(
+                    pickup: _shortPlace(pickupAddress),
+                    dropoff: _shortPlace(dropoffAddress),
+                    onClose: _confirming ? null : _handleBack,
+                    onPickup: _confirming ? null : _editPickup,
+                    onDropoff: _confirming ? null : _editDropoff,
+                  ),
                 ),
               ),
             ),
-            Align(
-              alignment: Alignment.bottomCenter,
-              child: Container(
-                constraints: BoxConstraints(
-                    maxHeight: MediaQuery.sizeOf(context).height * 0.58),
-                decoration: BoxDecoration(
-                  color: AppColors.card,
-                  borderRadius:
-                      const BorderRadius.vertical(top: Radius.circular(20)),
-                  boxShadow: const [
-                    BoxShadow(
-                        color: Colors.black26,
-                        blurRadius: 18,
-                        offset: Offset(0, -4))
-                  ],
-                ),
-                child: Column(
-                  children: [
-                    const SizedBox(height: 10),
-                    Container(
-                      width: 40,
-                      height: 4,
-                      decoration: BoxDecoration(
-                        color: AppColors.grey300,
-                        borderRadius: BorderRadius.circular(2),
-                      ),
+            NotificationListener<DraggableScrollableNotification>(
+              onNotification: _onSheetNotification,
+              child: DraggableScrollableSheet(
+                initialChildSize: _snapMid,
+                minChildSize: _snapMin,
+                maxChildSize: _snapMax,
+                snap: true,
+                snapSizes: _snaps,
+                builder: (context, scrollController) {
+                  const radius = BorderRadius.vertical(
+                    top: Radius.circular(20),
+                  );
+                  return DecoratedBox(
+                    decoration: BoxDecoration(
+                      color: AppColors.modal,
+                      borderRadius: radius,
+                      boxShadow: [
+                        BoxShadow(
+                          color: AppColors.obsidian.withValues(alpha: 0.06),
+                          blurRadius: 12,
+                          offset: const Offset(0, -4),
+                        ),
+                      ],
                     ),
-                    Expanded(
-                      child: servicesAsync.when(
-                        loading: () => const Center(
-                            child: CircularProgressIndicator(
-                                color: AppColors.primary)),
-                        error: (_, __) => Center(
-                          child: TextButton(
-                            onPressed: () =>
-                                ref.invalidate(serviceCategoriesProvider),
-                            child: Text(AppLocalizations.of(context)
-                                .couldNotLoadServicesTapToRetry),
+                    child: ClipRRect(
+                      borderRadius: radius,
+                      clipBehavior: Clip.hardEdge,
+                      child: Column(
+                        children: [
+                          Expanded(
+                            child: CustomScrollView(
+                              controller: scrollController,
+                              slivers: slivers,
+                            ),
                           ),
-                        ),
-                        data: (services) {
-                          return Column(
-                            children: [
-                              _ChooseRideHeader(jobType: draft.jobType),
-                              Expanded(
-                                child: _RideList(
-                                  services: services,
-                                  quotes: _quotes,
-                                  quoting: _quoting,
-                                  routeMinutes: _routeMinutes,
-                                  selectedId: _selected?.id,
-                                  onSelect: (service) =>
-                                      setState(() => _selected = service),
-                                  onRetry: () {
-                                    _quoteKey = null;
-                                    _quote(services);
-                                  },
-                                ),
-                              ),
-                            ],
-                          );
-                        },
+                          dock,
+                        ],
                       ),
                     ),
-                    if (draft.jobType == 'parcel')
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-                        child: Column(
-                          children: [
-                            TextField(
-                              controller: _recipientName,
-                              decoration: const InputDecoration(
-                                  labelText: 'Recipient name'),
-                            ),
-                            TextField(
-                              controller: _recipientPhone,
-                              keyboardType: TextInputType.phone,
-                              decoration: const InputDecoration(
-                                  labelText: 'Recipient phone'),
-                            ),
-                            const SizedBox(height: 8),
-                            Align(
-                              alignment: Alignment.centerLeft,
-                              child: Text('Parcel size',
-                                  style: GoogleFonts.poppins(
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.w600)),
-                            ),
-                            Wrap(
-                              spacing: 8,
-                              children: [
-                                for (final size in const [
-                                  'small',
-                                  'medium',
-                                  'large'
-                                ])
-                                  ChoiceChip(
-                                    label: Text(size[0].toUpperCase() +
-                                        size.substring(1)),
-                                    selected: _parcelSize == size,
-                                    onSelected: (_) =>
-                                        setState(() => _parcelSize = size),
-                                  ),
-                              ],
-                            ),
-                          ],
-                        ),
-                      ),
-                    if (draft.jobType == 'bidding' &&
-                        _selected != null &&
-                        _quotes[_selected!.id] != null)
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-                        child: Builder(builder: (context) {
-                          final suggested =
-                              _quotes[_selected!.id]!.estimatedFare;
-                          final config =
-                              ref.read(appConfigProvider).valueOrNull ??
-                                  AppConfig.fallback;
-                          final min = suggested * config.bidMinFareRatio;
-                          final max = suggested * config.bidMaxFareRatio;
-                          final value =
-                              (_offerPrice ?? suggested).clamp(min, max);
-                          return Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text('Your offer: ${value.toStringAsFixed(2)}',
-                                  style: GoogleFonts.poppins(
-                                      fontWeight: FontWeight.w600)),
-                              Slider(
-                                min: min,
-                                max: max <= min ? min + 1 : max,
-                                value: value,
-                                onChanged: (v) =>
-                                    setState(() => _offerPrice = v),
-                              ),
-                            ],
-                          );
-                        }),
-                      ),
-                    if (methods.isEmpty)
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 16),
-                        child: Text(
-                          AppLocalizations.of(context)
-                              .noPaymentMethodsAreCurrentlyAvailablePleaseConta,
-                          style: GoogleFonts.poppins(
-                              fontSize: 12, color: AppColors.error),
-                        ),
-                      )
-                    else
-                      InkWell(
-                        onTap: _confirming ? null : () => _pickPayment(methods),
-                        child: Padding(
-                          padding: const EdgeInsets.fromLTRB(16, 2, 16, 0),
-                          child: Row(
-                            children: [
-                              _PaymentChip(method: _payment),
-                              const SizedBox(width: 8),
-                              Text(
-                                _payment == null
-                                    ? AppLocalizations.of(context)
-                                        .choosePaymentMethod
-                                    : _paymentLabel(context, _payment!),
-                                style: GoogleFonts.poppins(
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w600,
-                                  color: AppColors.textPrimary,
-                                  height: 1.1,
-                                ),
-                              ),
-                              const Icon(Icons.chevron_right_rounded,
-                                  size: 18, color: AppColors.grey500),
-                            ],
-                          ),
-                        ),
-                      ),
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-                      child: SafeArea(
-                        top: false,
-                        child: _RequestRideButton(
-                          label: _requestLabel(draft.jobType),
-                          price: _buttonPrice(draft.jobType),
-                          loading: _confirming || _quoting,
-                          onPressed: _confirming ||
-                                  _quoting ||
-                                  _selected == null ||
-                                  _payment == null
-                              ? null
-                              : _confirm,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
+                  );
+                },
               ),
             ),
           ],
@@ -655,6 +757,16 @@ class _ServiceRequestSheetPageState
     };
   }
 
+  String _buttonLabel(String jobType) {
+    final selected = _selected;
+    if (selected == null) return _requestLabel(jobType);
+    return switch (jobType) {
+      'parcel' => 'Send with ${selected.name}',
+      'bidding' => 'Bid on ${selected.name}',
+      _ => 'Choose ${selected.name}',
+    };
+  }
+
   String? _buttonPrice(String jobType) {
     final selected = _selected;
     if (selected == null) return null;
@@ -667,7 +779,7 @@ class _ServiceRequestSheetPageState
   }
 
   Future<void> _pickPayment(List<String> methods) async {
-    final picked = await showRyvoPaymentSheet(
+    final picked = await showRyvoPaymentOptions(
       context,
       selected: _payment,
       methods: methods,
@@ -677,9 +789,7 @@ class _ServiceRequestSheetPageState
 
   String _shortPlace(String address) {
     final part = address.split(',').first.trim();
-    if (part.isEmpty) return address;
-    if (part.length <= 22) return part;
-    return '${part.substring(0, 21)}…';
+    return part.isEmpty ? address : part;
   }
 
   String _paymentLabel(BuildContext context, String method) {
@@ -692,6 +802,53 @@ class _ServiceRequestSheetPageState
       _ => l10n.card,
     };
   }
+}
+
+/// Pinned drag handle and title, so the sheet can always be grabbed.
+class _SheetHeaderDelegate extends SliverPersistentHeaderDelegate {
+  const _SheetHeaderDelegate({required this.jobType});
+
+  final String jobType;
+
+  static const double _extent = 84;
+
+  @override
+  double get minExtent => _extent;
+
+  @override
+  double get maxExtent => _extent;
+
+  @override
+  Widget build(
+    BuildContext context,
+    double shrinkOffset,
+    bool overlapsContent,
+  ) {
+    return ColoredBox(
+      color: AppColors.modal,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const SizedBox(height: 8),
+          Center(
+            child: Container(
+              width: 36,
+              height: 4,
+              decoration: BoxDecoration(
+                color: AppColors.divider,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+          ),
+          _ChooseRideHeader(jobType: jobType),
+        ],
+      ),
+    );
+  }
+
+  @override
+  bool shouldRebuild(covariant _SheetHeaderDelegate oldDelegate) =>
+      oldDelegate.jobType != jobType;
 }
 
 class _ChooseRideHeader extends StatelessWidget {
@@ -722,19 +879,18 @@ class _ChooseRideHeader extends StatelessWidget {
               children: [
                 Text(
                   title,
-                  style: GoogleFonts.poppins(
+                  style: RyvoTypography.heading(
                     fontSize: 20,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.navy,
-                    height: 1.1,
+                    color: AppColors.textPrimary,
+                    letterSpacing: -0.5,
                   ),
                 ),
                 Text(
                   subtitle,
-                  style: GoogleFonts.poppins(
+                  style: RyvoTypography.style(
                     fontSize: 12,
-                    fontWeight: FontWeight.w400,
-                    color: const Color(0xFF9AA3B2),
+                    fontWeight: FontWeight.w500,
+                    color: AppColors.textSecondary,
                     height: 1.2,
                   ),
                 ),
@@ -745,21 +901,30 @@ class _ChooseRideHeader extends StatelessWidget {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
               decoration: BoxDecoration(
-                color: const Color(0xFFE7F6EE),
+                color: AppColors.isDark
+                    ? AppColors.primary.withValues(alpha: 0.16)
+                    : AppColors.primaryLight,
                 borderRadius: BorderRadius.circular(20),
               ),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Icon(Icons.workspace_premium_rounded,
-                      size: 13, color: Color(0xFF1B9A56)),
+                  Icon(
+                    Icons.workspace_premium_rounded,
+                    size: 13,
+                    color: AppColors.isDark
+                        ? AppColors.primary
+                        : AppColors.primaryDark,
+                  ),
                   const SizedBox(width: 4),
                   Text(
                     'Best rates',
-                    style: GoogleFonts.poppins(
+                    style: RyvoTypography.style(
                       fontSize: 11,
                       fontWeight: FontWeight.w600,
-                      color: const Color(0xFF1B9A56),
+                      color: AppColors.isDark
+                          ? AppColors.primary
+                          : AppColors.primaryDark,
                       height: 1.1,
                     ),
                   ),
@@ -772,351 +937,7 @@ class _ChooseRideHeader extends StatelessWidget {
   }
 }
 
-class _RideList extends StatelessWidget {
-  const _RideList({
-    required this.services,
-    required this.quotes,
-    required this.quoting,
-    required this.routeMinutes,
-    required this.selectedId,
-    required this.onSelect,
-    required this.onRetry,
-  });
-
-  final List<ServiceCategory> services;
-  final Map<String, FareEstimate> quotes;
-  final bool quoting;
-  final int routeMinutes;
-  final String? selectedId;
-  final ValueChanged<ServiceCategory> onSelect;
-  final VoidCallback onRetry;
-
-  int _seats(String? slug) => switch (slug) {
-        'van' => 8,
-        'xl' => 6,
-        _ => 4,
-      };
-
-  @override
-  Widget build(BuildContext context) {
-    if (services.isEmpty) {
-      return Center(
-        child: Text(
-          'No rides are available right now',
-          style:
-              GoogleFonts.poppins(fontSize: 14, color: AppColors.textSecondary),
-        ),
-      );
-    }
-    return ListView.separated(
-      padding: const EdgeInsets.fromLTRB(16, 2, 16, 6),
-      itemCount: services.length + (quoting ? 1 : 0),
-      separatorBuilder: (_, __) => const SizedBox(height: 8),
-      itemBuilder: (context, index) {
-        if (quoting && index == 0) {
-          return const LinearProgressIndicator(
-            minHeight: 2,
-            color: AppColors.primary,
-            backgroundColor: AppColors.primaryLight,
-          );
-        }
-        final serviceIndex = quoting ? index - 1 : index;
-        final service = services[serviceIndex];
-        final estimate = quotes[service.id];
-        final selected = service.id == selectedId;
-        final minutes =
-            routeMinutes > 0 ? routeMinutes : (estimate?.durationMin ?? 0);
-        final description = (service.description ?? '').trim();
-        return Material(
-          color: selected ? const Color(0xFFE8F8EF) : AppColors.card,
-          borderRadius: BorderRadius.circular(14),
-          child: InkWell(
-            onTap:
-                estimate == null && !quoting ? null : () => onSelect(service),
-            borderRadius: BorderRadius.circular(14),
-            child: Container(
-              padding: const EdgeInsets.fromLTRB(8, 8, 10, 8),
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(
-                  color: selected
-                      ? const Color(0xFF3CCB7A)
-                      : const Color(0xFFE6E8EC),
-                  width: selected ? 1.4 : 1,
-                ),
-              ),
-              child: Row(
-                children: [
-                  _RideCar(service: service),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Flexible(
-                              child: Text(
-                                service.name,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: GoogleFonts.poppins(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w700,
-                                  color: AppColors.navy,
-                                  height: 1.1,
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 4),
-                            const Icon(Icons.person_outline_rounded,
-                                size: 12, color: Color(0xFF8B93A7)),
-                            Text(
-                              '${_seats(service.slug)}',
-                              style: GoogleFonts.poppins(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w500,
-                                color: const Color(0xFF8B93A7),
-                                height: 1.1,
-                              ),
-                            ),
-                          ],
-                        ),
-                        if (description.isNotEmpty)
-                          Text(
-                            description,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: GoogleFonts.poppins(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w400,
-                              color: const Color(0xFF8B93A7),
-                              height: 1.15,
-                            ),
-                          ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  if (estimate != null)
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      children: [
-                        Text(
-                          formatMoney(estimate.estimatedFare),
-                          style: GoogleFonts.poppins(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w700,
-                            color: AppColors.navy,
-                            height: 1.1,
-                          ),
-                        ),
-                        if (minutes > 0)
-                          Text(
-                            '~ $minutes min',
-                            style: GoogleFonts.poppins(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w400,
-                              color: const Color(0xFF8B93A7),
-                              height: 1.1,
-                            ),
-                          ),
-                      ],
-                    )
-                  else if (quoting)
-                    const SizedBox(
-                      width: 14,
-                      height: 14,
-                      child: CircularProgressIndicator(
-                          strokeWidth: 2, color: AppColors.primary),
-                    )
-                  else
-                    TextButton(
-                      onPressed: onRetry,
-                      style: TextButton.styleFrom(
-                        visualDensity: VisualDensity.compact,
-                        padding: const EdgeInsets.symmetric(horizontal: 6),
-                        minimumSize: Size.zero,
-                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                      ),
-                      child: Text(AppLocalizations.of(context).retry,
-                          style: GoogleFonts.poppins(fontSize: 12)),
-                    ),
-                  const SizedBox(width: 8),
-                  Icon(
-                    selected
-                        ? Icons.check_circle_rounded
-                        : Icons.circle_outlined,
-                    size: 20,
-                    color: selected
-                        ? const Color(0xFF22C55E)
-                        : const Color(0xFFD1D5DB),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        );
-      },
-    );
-  }
-}
-
-class _RideCar extends StatelessWidget {
-  const _RideCar({required this.service});
-
-  final ServiceCategory service;
-
-  String? get _asset {
-    if (service.slug.startsWith('parcel') || service.businessType == 'parcel')
-      return null;
-    return switch (service.slug) {
-      'comfort' => 'assets/images/ride_comfort.png',
-      'xl' || 'van' || 'assist' || 'premium' => 'assets/images/ride_xl.png',
-      _ => 'assets/images/ride_go.png',
-    };
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final asset = _asset;
-    return SizedBox(
-      width: 72,
-      height: 40,
-      child: asset == null
-          ? Icon(serviceIcon(service.slug, service.icon),
-              color: AppColors.navy, size: 26)
-          : Image.asset(asset,
-              fit: BoxFit.contain, filterQuality: FilterQuality.medium),
-    );
-  }
-}
-
-class _PaymentChip extends StatelessWidget {
-  const _PaymentChip({required this.method});
-
-  final String? method;
-
-  @override
-  Widget build(BuildContext context) {
-    final card = method == null ||
-        method == 'stripe' ||
-        method == 'google_pay' ||
-        method == 'apple_pay';
-    return Container(
-      height: 18,
-      padding: const EdgeInsets.symmetric(horizontal: 5),
-      alignment: Alignment.center,
-      decoration: BoxDecoration(
-        color: card ? const Color(0xFF1A1F71) : const Color(0xFFF3F4F6),
-        borderRadius: BorderRadius.circular(3),
-      ),
-      child: Text(
-        switch (method) {
-          'wallet' => 'WALLET',
-          'cash' => 'CASH',
-          'apple_pay' => 'APPLE',
-          'google_pay' => 'G PAY',
-          _ => 'CARD',
-        },
-        style: GoogleFonts.poppins(
-          fontSize: 8,
-          fontWeight: FontWeight.w700,
-          color: card ? Colors.white : AppColors.navy,
-          height: 1,
-          letterSpacing: 0.2,
-        ),
-      ),
-    );
-  }
-}
-
-class _RequestRideButton extends StatelessWidget {
-  const _RequestRideButton({
-    required this.label,
-    required this.price,
-    required this.loading,
-    required this.onPressed,
-  });
-
-  final String label;
-  final String? price;
-  final bool loading;
-  final VoidCallback? onPressed;
-
-  @override
-  Widget build(BuildContext context) {
-    final enabled = onPressed != null && !loading;
-    return SizedBox(
-      height: 48,
-      width: double.infinity,
-      child: Material(
-        color: enabled
-            ? const Color(0xFF1B9A56)
-            : const Color(0xFF1B9A56).withValues(alpha: 0.45),
-        borderRadius: BorderRadius.circular(16),
-        child: InkWell(
-          onTap: enabled ? onPressed : null,
-          borderRadius: BorderRadius.circular(16),
-          child: loading
-              ? const Center(
-                  child: SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(
-                        strokeWidth: 2, color: Colors.white),
-                  ),
-                )
-              : Stack(
-                  alignment: Alignment.center,
-                  children: [
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Icon(Icons.directions_car_rounded,
-                            color: Colors.white, size: 18),
-                        const SizedBox(width: 8),
-                        Text(
-                          label,
-                          style: GoogleFonts.poppins(
-                            fontSize: 15,
-                            fontWeight: FontWeight.w600,
-                            color: Colors.white,
-                            height: 1.1,
-                          ),
-                        ),
-                      ],
-                    ),
-                    if (price != null)
-                      Positioned(
-                        right: 16,
-                        child: Row(
-                          children: [
-                            Container(
-                                width: 1,
-                                height: 16,
-                                color: Colors.white.withValues(alpha: 0.45)),
-                            const SizedBox(width: 12),
-                            Text(
-                              price!,
-                              style: GoogleFonts.poppins(
-                                fontSize: 15,
-                                fontWeight: FontWeight.w600,
-                                color: Colors.white,
-                                height: 1.1,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                  ],
-                ),
-        ),
-      ),
-    );
-  }
-}
-
+/// Compact floating header: a 40px back button beside pickup and dropoff.
 class _RouteBar extends StatelessWidget {
   const _RouteBar({
     required this.pickup,
@@ -1132,57 +953,247 @@ class _RouteBar extends StatelessWidget {
   final VoidCallback? onPickup;
   final VoidCallback? onDropoff;
 
+  static const double rowHeight = 36;
+  static const double dividerSlot = 8;
+  static const double node = 8;
+  static const double verticalPadding = 10;
+
+  /// Address rows plus the divider slot. Nodes are centered on each row.
+  static const double contentHeight = rowHeight * 2 + dividerSlot;
+
+  /// Card chrome. Stays under the map clearance used by the camera.
+  static const double height = contentHeight + verticalPadding * 2;
+
+  /// Safe-area padding around the bar, the card, and a gap before the route.
+  static const double clearance = 8 + height + 8 + 16;
+
+  /// Distance from a row edge to an 8px node so the node sits on the row center.
+  static const double nodeInset = (rowHeight - node) / 2;
+
+  /// Line starts at the bottom of the pickup node and ends at the top of the square.
+  static const double lineInset = nodeInset + node;
+
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: AppColors.card,
-      elevation: 3,
-      borderRadius: BorderRadius.circular(28),
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(6, 6, 8, 6),
-        child: Row(
-          children: [
-            IconButton(
-              onPressed: onClose,
-              icon: const Icon(Icons.close, size: 20),
-              color: AppColors.textPrimary,
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        _RouteBackButton(onTap: onClose),
+        const SizedBox(width: 10),
+        Expanded(
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              color: AppColors.modal,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: AppColors.divider, width: 1),
+              boxShadow: [
+                BoxShadow(
+                  color: AppColors.obsidian.withValues(alpha: 0.06),
+                  blurRadius: 8,
+                  offset: const Offset(0, 2),
+                ),
+              ],
             ),
-            Expanded(
-              child: Row(
-                children: [
-                  Flexible(
-                    child: GestureDetector(
-                      onTap: onPickup,
-                      child: Text(
-                        pickup,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: GoogleFonts.poppins(
-                            fontSize: 13, fontWeight: FontWeight.w600),
+            child: Material(
+              color: Colors.transparent,
+              borderRadius: BorderRadius.circular(16),
+              clipBehavior: Clip.antiAlias,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(
+                    12, verticalPadding, 10, verticalPadding),
+                child: IntrinsicHeight(
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      const SizedBox(
+                        width: 20,
+                        child: _RouteTimeline(),
                       ),
-                    ),
-                  ),
-                  const Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 6),
-                    child: Icon(Icons.arrow_forward,
-                        size: 16, color: AppColors.grey500),
-                  ),
-                  Flexible(
-                    child: GestureDetector(
-                      onTap: onDropoff,
-                      child: Text(
-                        dropoff,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: GoogleFonts.poppins(
-                            fontSize: 13, fontWeight: FontWeight.w600),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            _RouteAddressRow(
+                              semanticsLabel: 'Pickup',
+                              label: pickup,
+                              onTap: onPickup,
+                            ),
+                            SizedBox(
+                              height: dividerSlot,
+                              child: Center(
+                                child: Divider(
+                                  height: 1,
+                                  thickness: 1,
+                                  color: AppColors.divider,
+                                ),
+                              ),
+                            ),
+                            _RouteAddressRow(
+                              semanticsLabel: 'Dropoff',
+                              label: dropoff,
+                              onTap: onDropoff,
+                            ),
+                          ],
+                        ),
                       ),
-                    ),
+                    ],
                   ),
-                ],
+                ),
               ),
             ),
-          ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _RouteBackButton extends StatelessWidget {
+  const _RouteBackButton({required this.onTap});
+
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: AppColors.modal,
+        shape: BoxShape.circle,
+        border: Border.all(color: AppColors.divider, width: 1),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.obsidian.withValues(alpha: 0.06),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Material(
+        color: Colors.transparent,
+        shape: const CircleBorder(),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: onTap == null
+              ? null
+              : () {
+                  HapticFeedback.selectionClick();
+                  onTap!();
+                },
+          customBorder: const CircleBorder(),
+          child: SizedBox(
+            width: 40,
+            height: 40,
+            child: Icon(
+              CupertinoIcons.arrow_left,
+              size: 18,
+              color: AppColors.textPrimary,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _RouteAddressRow extends StatelessWidget {
+  const _RouteAddressRow({
+    required this.semanticsLabel,
+    required this.label,
+    required this.onTap,
+  });
+
+  final String semanticsLabel;
+  final String label;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      button: true,
+      label: '$semanticsLabel, $label',
+      child: InkWell(
+        onTap: onTap == null
+            ? null
+            : () {
+                HapticFeedback.selectionClick();
+                onTap!();
+              },
+        child: SizedBox(
+          height: _RouteBar.rowHeight,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Expanded(
+                child: Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: RyvoTypography.style(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    height: 1.2,
+                    letterSpacing: -0.2,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Icon(
+                CupertinoIcons.chevron_right,
+                size: 14,
+                color: AppColors.textHint,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Pickup circle, a 1.5px connector, and a dropoff square. Each node is
+/// centered on its 36px address row; the line runs only between the nodes.
+class _RouteTimeline extends StatelessWidget {
+  const _RouteTimeline();
+
+  @override
+  Widget build(BuildContext context) {
+    final square = AppColors.isDark ? AppColors.white : AppColors.obsidian;
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        const SizedBox(height: _RouteBar.nodeInset),
+        const _RouteNode(color: AppColors.primary, circle: true),
+        SizedBox(
+          height: _RouteBar.contentHeight - _RouteBar.lineInset * 2,
+          width: 1.5,
+          child: ColoredBox(color: AppColors.divider),
+        ),
+        _RouteNode(color: square, circle: false),
+        const SizedBox(height: _RouteBar.nodeInset),
+      ],
+    );
+  }
+}
+
+class _RouteNode extends StatelessWidget {
+  const _RouteNode({required this.color, required this.circle});
+
+  final Color color;
+  final bool circle;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: _RouteBar.node,
+      height: _RouteBar.node,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: color,
+          shape: circle ? BoxShape.circle : BoxShape.rectangle,
         ),
       ),
     );

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../shared/widgets/ryvo_close_button.dart';
 import '../../../../shared/providers/app_providers.dart';
 import 'package:ryvo_customer/l10n/app_localizations.dart';
 
@@ -17,6 +18,8 @@ class HelpSupportPage extends ConsumerWidget {
       backgroundColor: AppColors.background,
       appBar: AppBar(
         backgroundColor: AppColors.background,
+        automaticallyImplyLeading: false,
+        leading: const RyvoCloseButton(),
         title: Text(AppLocalizations.of(context).helpSupport, style: GoogleFonts.poppins(fontSize: 18, fontWeight: FontWeight.w600)),
       ),
       body: SingleChildScrollView(
@@ -121,9 +124,9 @@ class _ActionCard extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: AppColors.primary.withOpacity(0.08),
+          color: AppColors.primary.withValues(alpha: 0.08),
           borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: AppColors.primary.withOpacity(0.25)),
+          border: Border.all(color: AppColors.primary.withValues(alpha: 0.25)),
         ),
         child: Row(
           children: [

@@ -37,7 +37,12 @@ class LocationFailure implements Exception {
   String toString() => message;
 }
 
-enum LocationFailureKind { serviceDisabled, permissionDenied, permissionDeniedForever, unknown }
+enum LocationFailureKind {
+  serviceDisabled,
+  permissionDenied,
+  permissionDeniedForever,
+  unknown
+}
 
 /// Point used to rank address search. The app's unset pickup is a US
 /// coordinate, so that case is biased to central London instead.
@@ -54,7 +59,8 @@ class UkSearchBias {
     required double lng,
     required bool locationResolved,
   }) {
-    final isFallback = (lat - fallbackLat).abs() < 0.05 && (lng - fallbackLng).abs() < 0.05;
+    final isFallback =
+        (lat - fallbackLat).abs() < 0.05 && (lng - fallbackLng).abs() < 0.05;
     if (isFallback) return (lat: londonLat, lng: londonLng);
     if (!locationResolved) return (lat: lat, lng: lng);
     return (lat: lat, lng: lng);
@@ -76,7 +82,9 @@ bool isUnitedKingdomPlacemark(Placemark placemark) {
   final code = (placemark.isoCountryCode ?? '').toUpperCase();
   if (code == 'GB') return true;
   final country = (placemark.country ?? '').toLowerCase();
-  return country == 'united kingdom' || country == 'uk' || country == 'great britain';
+  return country == 'united kingdom' ||
+      country == 'uk' ||
+      country == 'great britain';
 }
 
 /// Keeps the address closest to [lat], [lng].
@@ -134,19 +142,21 @@ class LocationService {
     try {
       position = await Geolocator.getCurrentPosition(
         locationSettings: const LocationSettings(
-          accuracy: LocationAccuracy.high,
+          accuracy: LocationAccuracy.bestForNavigation,
           timeLimit: Duration(seconds: 12),
         ),
       );
     } on TimeoutException {
-      throw LocationFailure('Could not determine your location. Please try again.');
+      throw LocationFailure(
+          'Could not determine your location. Please try again.');
     }
 
     if (!withAddress) {
       return ResolvedLocation(lat: position.latitude, lng: position.longitude);
     }
 
-    final resolved = await reverseGeocode(position.latitude, position.longitude);
+    final resolved =
+        await reverseGeocode(position.latitude, position.longitude);
     return resolved;
   }
 
@@ -170,7 +180,11 @@ class LocationService {
         .map((e) => e!.trim())
         .toSet()
         .join(' ');
-    final locality = [placemark.locality, placemark.administrativeArea, placemark.postalCode]
+    final locality = [
+      placemark.locality,
+      placemark.administrativeArea,
+      placemark.postalCode
+    ]
         .where((e) => e != null && e.trim().isNotEmpty)
         .map((e) => e!.trim())
         .join(', ');
@@ -204,27 +218,35 @@ class LocationService {
     final nearLat = biasLat ?? UkSearchBias.londonLat;
     final nearLng = biasLng ?? UkSearchBias.londonLng;
     try {
-      final locations = await locationFromAddress(withUnitedKingdomSuffix(trimmed));
+      final locations =
+          await locationFromAddress(withUnitedKingdomSuffix(trimmed));
       if (locations.isEmpty) {
-        throw LocationFailure('Could not find that address. Try a more specific one.');
+        throw LocationFailure(
+            'Could not find that address. Try a more specific one.');
       }
       final ukMatches = <ResolvedLocation>[];
       for (final loc in locations.take(5)) {
         try {
-          final placemarks = await placemarkFromCoordinates(loc.latitude, loc.longitude);
-          if (placemarks.isEmpty || !isUnitedKingdomPlacemark(placemarks.first)) continue;
-          ukMatches.add(_fromPlacemark(loc.latitude, loc.longitude, placemarks.first));
+          final placemarks =
+              await placemarkFromCoordinates(loc.latitude, loc.longitude);
+          if (placemarks.isEmpty || !isUnitedKingdomPlacemark(placemarks.first))
+            continue;
+          ukMatches.add(
+              _fromPlacemark(loc.latitude, loc.longitude, placemarks.first));
         } catch (_) {}
       }
-      final closest = pickClosestLocation(ukMatches, lat: nearLat, lng: nearLng);
+      final closest =
+          pickClosestLocation(ukMatches, lat: nearLat, lng: nearLng);
       if (closest == null) {
-        throw LocationFailure('Could not find that UK address. Try a more specific one.');
+        throw LocationFailure(
+            'Could not find that UK address. Try a more specific one.');
       }
       return closest;
     } on LocationFailure {
       rethrow;
     } catch (_) {
-      throw LocationFailure('Could not find that address. Try a more specific one.');
+      throw LocationFailure(
+          'Could not find that address. Try a more specific one.');
     }
   }
 
@@ -232,9 +254,34 @@ class LocationService {
   Stream<Position> watchPosition({int distanceFilter = 10}) {
     return Geolocator.getPositionStream(
       locationSettings: LocationSettings(
-        accuracy: LocationAccuracy.high,
+        accuracy: LocationAccuracy.bestForNavigation,
         distanceFilter: distanceFilter,
       ),
+    );
+  }
+
+  /// Last known fix, then a fresh high-accuracy lock, then movement updates.
+  /// Coordinates stay free of map types so the location layer does not depend
+  /// on Google Maps.
+  Stream<({double lat, double lng})> watchLatLng(
+      {int distanceFilter = 8}) async* {
+    try {
+      final last = await Geolocator.getLastKnownPosition();
+      if (last != null) {
+        yield (lat: last.latitude, lng: last.longitude);
+      }
+    } catch (_) {}
+    try {
+      final current = await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.bestForNavigation,
+          timeLimit: Duration(seconds: 12),
+        ),
+      );
+      yield (lat: current.latitude, lng: current.longitude);
+    } catch (_) {}
+    yield* watchPosition(distanceFilter: distanceFilter).map(
+      (position) => (lat: position.latitude, lng: position.longitude),
     );
   }
 

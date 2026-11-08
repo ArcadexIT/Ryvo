@@ -1,14 +1,16 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:ryvo_driver/l10n/app_localizations.dart';
+
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/utils/money.dart';
 import '../../../../features/job/domain/entities/job_entity.dart';
 import '../../../../shared/providers/app_providers.dart';
 import '../../../../shared/providers/di_providers.dart';
 import '../../../../shared/widgets/widgets.dart';
-import 'package:ryvo_driver/l10n/app_localizations.dart';
 
 class JobCompletedPage extends ConsumerStatefulWidget {
   const JobCompletedPage({super.key, this.jobId});
@@ -21,6 +23,7 @@ class JobCompletedPage extends ConsumerStatefulWidget {
 
 class _JobCompletedPageState extends ConsumerState<JobCompletedPage> {
   final _commentController = TextEditingController();
+  final _selectedTags = <String>{};
   bool _submitting = false;
   bool _loading = true;
   MockJob? _job;
@@ -72,6 +75,76 @@ class _JobCompletedPageState extends ConsumerState<JobCompletedPage> {
     return '${diff.inSeconds} sec';
   }
 
+  String _distanceLabel(MockJob job) {
+    if (job.tripDistance.trim().isNotEmpty) return job.tripDistance.trim();
+    if (job.distance.trim().isNotEmpty) return job.distance.trim();
+    return '—';
+  }
+
+  int _band(int rating) {
+    if (rating >= 4) return 2;
+    if (rating == 3) return 1;
+    if (rating >= 1) return 0;
+    return -1;
+  }
+
+  List<String> _tagsFor(int rating) {
+    if (rating >= 4) {
+      return const ['Respectful', 'On time', 'Polite', 'Friendly'];
+    }
+    if (rating == 3) {
+      return const ['Quiet', 'Average', 'No issues'];
+    }
+    if (rating >= 1) {
+      return const ['Late', 'Rude', 'Messy', 'Unsafe'];
+    }
+    return const [];
+  }
+
+  String _sentiment(int rating) {
+    return switch (rating) {
+      1 => 'Terrible',
+      2 => 'Poor',
+      3 => 'Okay',
+      4 => 'Good',
+      5 => 'Excellent',
+      _ => 'Tap a star to rate',
+    };
+  }
+
+  String _tagPrompt(int rating) {
+    return switch (rating) {
+      1 || 2 => 'What went wrong?',
+      3 => 'Anything to add?',
+      4 || 5 => 'What stood out?',
+      _ => '',
+    };
+  }
+
+  void _onRate(int value) {
+    HapticFeedback.selectionClick();
+    final previous = ref.read(selectedRatingProvider);
+    if (_band(previous) != _band(value)) {
+      _selectedTags.clear();
+    }
+    ref.read(selectedRatingProvider.notifier).state = value;
+  }
+
+  void _toggleTag(String tag) {
+    HapticFeedback.selectionClick();
+    setState(() {
+      if (!_selectedTags.add(tag)) _selectedTags.remove(tag);
+    });
+  }
+
+  String _composeComment() {
+    final note = _commentController.text.trim();
+    final tags = _selectedTags.join(', ');
+    if (tags.isEmpty) return note;
+    if (note.isEmpty) return tags;
+    return '$tags. $note';
+  }
+
   Future<void> _finish() async {
     final job = _job ?? ref.read(activeJobProvider);
     final rating = ref.read(selectedRatingProvider);
@@ -80,7 +153,7 @@ class _JobCompletedPageState extends ConsumerState<JobCompletedPage> {
     if (rating > 0 && jobId != null) {
       setState(() => _submitting = true);
       try {
-        final comment = _commentController.text.trim();
+        final comment = _composeComment();
         await ref.read(dioClientProvider).dio.post('/provider/ratings', data: {
           'jobId': jobId,
           'score': rating,
@@ -90,12 +163,7 @@ class _JobCompletedPageState extends ConsumerState<JobCompletedPage> {
         if (mounted) {
           setState(() => _submitting = false);
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                e.toString().replaceFirst('Exception: ', ''),
-                style: GoogleFonts.poppins(),
-              ),
-            ),
+            SnackBar(content: Text(e.toString().replaceFirst('Exception: ', ''))),
           );
           return;
         }
@@ -119,8 +187,16 @@ class _JobCompletedPageState extends ConsumerState<JobCompletedPage> {
     context.go('/home');
   }
 
+  void _leaveHome() {
+    ref.read(activeJobProvider.notifier).state = null;
+    ref.read(selectedRatingProvider.notifier).state = 0;
+    context.go('/home');
+  }
+
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+
     if (_loading) {
       return const Scaffold(
         backgroundColor: AppColors.background,
@@ -136,31 +212,32 @@ class _JobCompletedPageState extends ConsumerState<JobCompletedPage> {
         backgroundColor: AppColors.background,
         body: SafeArea(
           child: Padding(
-            padding: const EdgeInsets.all(24),
+            padding: const EdgeInsets.fromLTRB(24, 24, 24, 16),
             child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Icon(Icons.check_circle, color: AppColors.success, size: 64),
-                const SizedBox(height: 20),
+                const Icon(Icons.check_rounded, color: AppColors.success, size: 22),
+                const SizedBox(height: 16),
                 Text(
-                  AppLocalizations.of(context).jobCompleted,
-                  style: GoogleFonts.poppins(fontSize: 24, fontWeight: FontWeight.w700, color: AppColors.textPrimary),
+                  l10n.jobCompleted,
+                  style: _type(
+                    size: 28,
+                    weight: FontWeight.w700,
+                    color: AppColors.textPrimary,
+                    letterSpacing: -0.6,
+                  ),
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  AppLocalizations.of(context).weCouldNotLoadJobDetailsYourEarningsAreInYourWal,
-                  style: GoogleFonts.poppins(fontSize: 14, color: AppColors.textSecondary),
-                  textAlign: TextAlign.center,
+                  l10n.weCouldNotLoadJobDetailsYourEarningsAreInYourWal,
+                  style: _type(
+                    size: 14,
+                    weight: FontWeight.w500,
+                    color: AppColors.textSecondary,
+                  ),
                 ),
-                const SizedBox(height: 32),
-                RyvoButton(
-                  label: AppLocalizations.of(context).backToHome,
-                  onPressed: () {
-                    ref.read(activeJobProvider.notifier).state = null;
-                    ref.read(selectedRatingProvider.notifier).state = 0;
-                    context.go('/home');
-                  },
-                ),
+                const Spacer(),
+                RyvoButton(label: l10n.backToHome, onPressed: _leaveHome),
               ],
             ),
           ),
@@ -168,182 +245,557 @@ class _JobCompletedPageState extends ConsumerState<JobCompletedPage> {
       );
     }
 
-    final payout = job.payout;
-    final distance = job.distance.isNotEmpty ? job.distance : '—';
-    final customerName = job.customerName;
-    final jobRef = job.jobRef;
-    final service = job.jobType;
-    final vehicle = job.vehicleInfo.isNotEmpty ? job.vehicleInfo : '—';
-    final duration = _formatDuration(job);
+    final name = job.customerName.trim().isEmpty ? 'Rider' : job.customerName.trim();
+    final pickup = job.address.trim();
+    final dropoff = job.dropoffAddress?.trim() ?? '';
+    final showRoute = pickup.isNotEmpty || dropoff.isNotEmpty;
+    final tags = _tagsFor(rating);
 
     return Scaffold(
       backgroundColor: AppColors.background,
+      resizeToAvoidBottomInset: true,
       body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            children: [
-              Expanded(
-                child: SingleChildScrollView(
-                  child: Column(
-                    children: [
-                      const SizedBox(height: 16),
-                      Container(
-                        width: 80,
-                        height: 80,
-                        decoration: BoxDecoration(color: AppColors.success.withOpacity(0.15), shape: BoxShape.circle),
-                        child: const Icon(Icons.check_circle, color: AppColors.success, size: 48),
-                      ),
-                      const SizedBox(height: 20),
-                      Text(AppLocalizations.of(context).jobCompleted, style: GoogleFonts.poppins(fontSize: 26, fontWeight: FontWeight.w700, color: AppColors.textPrimary)),
-                      const SizedBox(height: 8),
-                      Text(
-                        jobRef.isNotEmpty ? jobRef : AppLocalizations.of(context).greatWorkEarningsAddedToYourWallet,
-                        style: GoogleFonts.poppins(fontSize: 13, color: AppColors.textSecondary),
-                        textAlign: TextAlign.center,
-                      ),
-                      const SizedBox(height: 28),
-                      Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
-                        decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            colors: [AppColors.primary.withOpacity(0.15), AppColors.surface],
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
-                          ),
-                          borderRadius: BorderRadius.circular(16),
-                          border: Border.all(color: AppColors.primary.withOpacity(0.25)),
-                        ),
-                        child: Column(
-                          children: [
-                            Text(AppLocalizations.of(context).youEarned, style: GoogleFonts.poppins(fontSize: 13, color: AppColors.textSecondary)),
-                            const SizedBox(height: 4),
-                            Text(
-                              formatMoney(payout),
-                              style: GoogleFonts.poppins(fontSize: 36, fontWeight: FontWeight.w800, color: AppColors.primary),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      Row(
-                        children: [
-                          Expanded(child: _SummaryCard(label: AppLocalizations.of(context).distance, value: distance, icon: Icons.route)),
-                          const SizedBox(width: 10),
-                          Expanded(child: _SummaryCard(label: AppLocalizations.of(context).duration, value: duration, icon: Icons.timer_outlined)),
-                          const SizedBox(width: 10),
-                          Expanded(child: _SummaryCard(label: AppLocalizations.of(context).service, value: _shortLabel(service), icon: Icons.build_outlined)),
-                        ],
-                      ),
-                      const SizedBox(height: 16),
-                      Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(color: AppColors.surface, borderRadius: BorderRadius.circular(12)),
-                        child: Column(
-                          children: [
-                            _DetailRow(label: AppLocalizations.of(context).customer, value: customerName),
-                            const Divider(color: AppColors.divider, height: 20),
-                            _DetailRow(label: AppLocalizations.of(context).vehicle, value: vehicle),
-                            if (job.address.isNotEmpty) ...[
-                              const Divider(color: AppColors.divider, height: 20),
-                              _DetailRow(label: AppLocalizations.of(context).location, value: job.address),
-                            ],
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 24),
-                      Text('Rate your experience with $customerName', style: GoogleFonts.poppins(fontSize: 14, color: AppColors.textSecondary)),
-                      const SizedBox(height: 12),
-                      RatingStars(
-                        rating: rating.toDouble(),
-                        size: 36,
-                        interactive: true,
-                        onRatingChanged: (r) => ref.read(selectedRatingProvider.notifier).state = r,
-                      ),
-                      const SizedBox(height: 12),
-                      RyvoTextField(
-                        controller: _commentController,
-                        hint: AppLocalizations.of(context).writeAReviewOptional,
-                        maxLines: 3,
-                        keyboardType: TextInputType.multiline,
-                      ),
-                      const SizedBox(height: 16),
-                    ],
+        child: Column(
+          children: [
+            Expanded(
+              child: ListView(
+                keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+                padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
+                children: [
+                  _StatusLine(
+                    title: l10n.jobCompleted,
+                    reference: job.jobRef,
                   ),
-                ),
+                  const SizedBox(height: 22),
+                  Text(
+                    l10n.youEarned,
+                    style: _type(
+                      size: 13,
+                      weight: FontWeight.w500,
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    formatMoney(job.payout),
+                    style: _type(
+                      size: 36,
+                      weight: FontWeight.w700,
+                      color: AppColors.textPrimary,
+                      letterSpacing: -0.8,
+                      tabular: true,
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  _StatRow(
+                    distance: _distanceLabel(job),
+                    distanceLabel: l10n.distance,
+                    duration: _formatDuration(job),
+                    durationLabel: l10n.duration,
+                    service: job.jobType.trim().isEmpty ? '—' : job.jobType.trim(),
+                    serviceLabel: l10n.service,
+                  ),
+                  if (showRoute) ...[
+                    const SizedBox(height: 22),
+                    _RouteTimeline(
+                      pickup: pickup.isEmpty ? _compactStop(dropoff) : _compactStop(pickup),
+                      dropoff: pickup.isEmpty || dropoff.isEmpty ? null : _compactStop(dropoff),
+                    ),
+                  ],
+                  const SizedBox(height: 24),
+                  const Divider(height: 1, thickness: 1, color: AppColors.divider),
+                  const SizedBox(height: 22),
+                  _RiderHeader(name: name),
+                  const SizedBox(height: 16),
+                  _StarRow(rating: rating, onChanged: _onRate),
+                  const SizedBox(height: 6),
+                  Text(
+                    _sentiment(rating),
+                    style: _type(
+                      size: 13,
+                      weight: FontWeight.w600,
+                      color: rating == 0 ? AppColors.textHint : AppColors.textPrimary,
+                      letterSpacing: -0.1,
+                    ),
+                  ),
+                  AnimatedSize(
+                    duration: const Duration(milliseconds: 220),
+                    curve: Curves.fastOutSlowIn,
+                    alignment: Alignment.topCenter,
+                    child: rating == 0
+                        ? const SizedBox(width: double.infinity)
+                        : Padding(
+                            padding: const EdgeInsets.only(top: 18),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  _tagPrompt(rating),
+                                  style: _type(
+                                    size: 13,
+                                    weight: FontWeight.w600,
+                                    color: AppColors.textSecondary,
+                                  ),
+                                ),
+                                const SizedBox(height: 10),
+                                Wrap(
+                                  spacing: 8,
+                                  runSpacing: 8,
+                                  children: [
+                                    for (final tag in tags)
+                                      _TagChip(
+                                        label: tag,
+                                        selected: _selectedTags.contains(tag),
+                                        onTap: () => _toggleTag(tag),
+                                      ),
+                                  ],
+                                ),
+                                const SizedBox(height: 16),
+                                TextField(
+                                  controller: _commentController,
+                                  minLines: 2,
+                                  maxLines: 4,
+                                  textCapitalization: TextCapitalization.sentences,
+                                  keyboardType: TextInputType.multiline,
+                                  cursorColor: AppColors.lime,
+                                  style: _type(
+                                    size: 14,
+                                    weight: FontWeight.w500,
+                                    color: AppColors.textPrimary,
+                                  ),
+                                  decoration: InputDecoration(
+                                    hintText: l10n.writeAReviewOptional,
+                                    hintStyle: _type(
+                                      size: 14,
+                                      weight: FontWeight.w500,
+                                      color: AppColors.textHint,
+                                    ),
+                                    filled: true,
+                                    fillColor: AppColors.surface,
+                                    contentPadding: const EdgeInsets.all(14),
+                                    border: _noteBorder(AppColors.divider),
+                                    enabledBorder: _noteBorder(AppColors.divider),
+                                    focusedBorder: _noteBorder(AppColors.lime, width: 1.5),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                  ),
+                ],
               ),
-              RyvoButton(
-                label: _submitting ? AppLocalizations.of(context).submitting : AppLocalizations.of(context).backToHome,
+            ),
+            const Divider(height: 1, thickness: 1, color: AppColors.divider),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 12, 20, 12),
+              child: RyvoButton(
+                label: l10n.done,
+                isLoading: _submitting,
                 onPressed: _submitting ? null : _finish,
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
   }
-
-  String _shortLabel(String value) {
-    if (value.length <= 10) return value;
-    return '${value.substring(0, 9)}…';
-  }
 }
 
-class _SummaryCard extends StatelessWidget {
-  final String label;
-  final String value;
-  final IconData icon;
+OutlineInputBorder _noteBorder(Color color, {double width = 1}) {
+  return OutlineInputBorder(
+    borderRadius: BorderRadius.circular(14),
+    borderSide: BorderSide(color: color, width: width),
+  );
+}
 
-  const _SummaryCard({required this.label, required this.value, required this.icon});
+String _compactStop(String raw) {
+  final parts = raw
+      .split(',')
+      .map((part) => part.trim())
+      .where((part) => part.isNotEmpty)
+      .toList();
+  if (parts.isEmpty) return raw;
+  return parts.length == 1 ? parts.first : parts.take(2).join(', ');
+}
+
+String _initials(String name) {
+  final parts = name.split(RegExp(r'\s+')).where((part) => part.isNotEmpty).toList();
+  if (parts.isEmpty) return 'R';
+  String glyph(String value) => value.isEmpty ? '' : value[0].toUpperCase();
+  if (parts.length == 1) return glyph(parts.first);
+  return '${glyph(parts.first)}${glyph(parts.last)}';
+}
+
+TextStyle _type({
+  required double size,
+  required FontWeight weight,
+  required Color color,
+  double letterSpacing = 0,
+  bool tabular = false,
+}) {
+  return GoogleFonts.plusJakartaSans(
+    fontSize: size,
+    fontWeight: weight,
+    color: color,
+    letterSpacing: letterSpacing,
+    height: 1.2,
+    fontFeatures: tabular ? const [FontFeature.tabularFigures()] : null,
+  );
+}
+
+class _StatusLine extends StatelessWidget {
+  const _StatusLine({required this.title, required this.reference});
+
+  final String title;
+  final String reference;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(color: AppColors.surface, borderRadius: BorderRadius.circular(12)),
-      child: Column(
-        children: [
-          Icon(icon, color: AppColors.textSecondary, size: 20),
-          const SizedBox(height: 6),
-          Text(
-            value,
-            style: GoogleFonts.poppins(fontSize: 13, fontWeight: FontWeight.w700, color: AppColors.textPrimary),
-            textAlign: TextAlign.center,
-            maxLines: 2,
+    return Row(
+      children: [
+        const Icon(Icons.check_rounded, color: AppColors.success, size: 18),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(
+            title,
+            maxLines: 1,
             overflow: TextOverflow.ellipsis,
+            style: _type(
+              size: 15,
+              weight: FontWeight.w700,
+              color: AppColors.textPrimary,
+              letterSpacing: -0.2,
+            ),
           ),
-          Text(label, style: GoogleFonts.poppins(fontSize: 10, color: AppColors.textSecondary)),
+        ),
+        if (reference.trim().isNotEmpty) ...[
+          const SizedBox(width: 12),
+          Text(
+            reference.trim(),
+            style: _type(
+              size: 12,
+              weight: FontWeight.w600,
+              color: AppColors.textSecondary,
+              tabular: true,
+            ),
+          ),
         ],
-      ),
+      ],
     );
   }
 }
 
-class _DetailRow extends StatelessWidget {
-  final String label;
-  final String value;
+class _StatRow extends StatelessWidget {
+  const _StatRow({
+    required this.distance,
+    required this.distanceLabel,
+    required this.duration,
+    required this.durationLabel,
+    required this.service,
+    required this.serviceLabel,
+  });
 
-  const _DetailRow({required this.label, required this.value});
+  final String distance;
+  final String distanceLabel;
+  final String duration;
+  final String durationLabel;
+  final String service;
+  final String serviceLabel;
 
   @override
   Widget build(BuildContext context) {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        SizedBox(
-          width: 72,
-          child: Text(label, style: GoogleFonts.poppins(fontSize: 12, color: AppColors.textSecondary)),
+        Expanded(child: _Stat(value: distance, label: distanceLabel, tabular: true)),
+        const _StatDivider(),
+        Expanded(child: _Stat(value: duration, label: durationLabel, tabular: true)),
+        const _StatDivider(),
+        Expanded(child: _Stat(value: service, label: serviceLabel)),
+      ],
+    );
+  }
+}
+
+class _StatDivider extends StatelessWidget {
+  const _StatDivider();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Padding(
+      padding: EdgeInsets.symmetric(horizontal: 10),
+      child: SizedBox(
+        width: 1,
+        height: 36,
+        child: ColoredBox(color: AppColors.divider),
+      ),
+    );
+  }
+}
+
+class _Stat extends StatelessWidget {
+  const _Stat({required this.value, required this.label, this.tabular = false});
+
+  final String value;
+  final String label;
+  final bool tabular;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          value,
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+          style: _type(
+            size: 15,
+            weight: FontWeight.w700,
+            color: AppColors.textPrimary,
+            letterSpacing: -0.3,
+            tabular: tabular,
+          ),
         ),
-        Expanded(
-          child: Text(
-            value,
-            style: GoogleFonts.poppins(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.textPrimary),
-            textAlign: TextAlign.right,
+        const SizedBox(height: 2),
+        Text(
+          label,
+          style: _type(
+            size: 12,
+            weight: FontWeight.w500,
+            color: AppColors.textSecondary,
           ),
         ),
       ],
+    );
+  }
+}
+
+class _RouteTimeline extends StatelessWidget {
+  const _RouteTimeline({required this.pickup, required this.dropoff});
+
+  final String pickup;
+  final String? dropoff;
+
+  static const double _node = 8;
+
+  @override
+  Widget build(BuildContext context) {
+    final hasDropoff = dropoff != null && dropoff!.isNotEmpty;
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(
+          width: 16,
+          child: Column(
+            children: [
+              const SizedBox(height: 5),
+              const _RouteNode(filled: true),
+              if (hasDropoff) ...[
+                const SizedBox(
+                  height: 22,
+                  child: Center(
+                    child: SizedBox(
+                      width: 1.5,
+                      height: 22,
+                      child: ColoredBox(color: AppColors.divider),
+                    ),
+                  ),
+                ),
+                const _RouteNode(filled: false),
+              ],
+            ],
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                pickup,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: _type(
+                  size: 14,
+                  weight: FontWeight.w600,
+                  color: AppColors.textPrimary,
+                  letterSpacing: -0.2,
+                ),
+              ),
+              if (hasDropoff) ...[
+                const SizedBox(height: 14),
+                Text(
+                  dropoff!,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: _type(
+                    size: 14,
+                    weight: FontWeight.w600,
+                    color: AppColors.textPrimary,
+                    letterSpacing: -0.2,
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _RouteNode extends StatelessWidget {
+  const _RouteNode({required this.filled});
+
+  final bool filled;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: _RouteTimeline._node,
+      height: _RouteTimeline._node,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: filled ? AppColors.lime : Colors.transparent,
+          borderRadius: filled ? null : BorderRadius.circular(1),
+          shape: filled ? BoxShape.circle : BoxShape.rectangle,
+          border: filled
+              ? null
+              : Border.all(color: AppColors.white, width: 1.5),
+        ),
+      ),
+    );
+  }
+}
+
+class _RiderHeader extends StatelessWidget {
+  const _RiderHeader({required this.name});
+
+  final String name;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        CircleAvatar(
+          radius: 22,
+          backgroundColor: AppColors.surface,
+          child: Text(
+            _initials(name),
+            style: _type(
+              size: 14,
+              weight: FontWeight.w700,
+              color: AppColors.textPrimary,
+              letterSpacing: -0.2,
+            ),
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                name,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: _type(
+                  size: 18,
+                  weight: FontWeight.w700,
+                  color: AppColors.textPrimary,
+                  letterSpacing: -0.4,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                'How was this trip?',
+                style: _type(
+                  size: 13,
+                  weight: FontWeight.w500,
+                  color: AppColors.textSecondary,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _StarRow extends StatelessWidget {
+  const _StarRow({required this.rating, required this.onChanged});
+
+  final int rating;
+  final ValueChanged<int> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: List.generate(5, (index) {
+        final value = index + 1;
+        final filled = rating >= value;
+        return Semantics(
+          button: true,
+          selected: filled,
+          label: '$value star${value == 1 ? '' : 's'}',
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: () => onChanged(value),
+            child: Padding(
+              padding: EdgeInsets.only(right: index == 4 ? 0 : 6, top: 2, bottom: 2),
+              child: Icon(
+                Icons.star_rounded,
+                size: 36,
+                color: filled ? AppColors.primary : AppColors.grey300,
+              ),
+            ),
+          ),
+        );
+      }),
+    );
+  }
+}
+
+class _TagChip extends StatelessWidget {
+  const _TagChip({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: selected ? AppColors.surface : Colors.transparent,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(20),
+        side: BorderSide(
+          color: selected ? AppColors.white : AppColors.divider,
+          width: selected ? 2 : 1,
+        ),
+      ),
+      child: InkWell(
+        onTap: onTap,
+        customBorder: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+          child: Text(
+            label,
+            style: _type(
+              size: 13,
+              weight: FontWeight.w600,
+              color: AppColors.textPrimary,
+              letterSpacing: -0.1,
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

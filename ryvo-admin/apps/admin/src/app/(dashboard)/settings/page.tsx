@@ -15,6 +15,7 @@ import {
   MAP_API_KEY_SETTING,
   SETTING_LABELS,
   STRIPE_PK_SETTING,
+  STRIPE_SK_SETTING,
   BILLING_TOGGLE_SETTINGS,
   CURRENCY_SETTING,
   SEARCH_TIMEOUT_SEC_SETTING,
@@ -62,6 +63,7 @@ const FEATURE_KEYS = [
 const HIDDEN_KEYS = new Set<string>([
   MAP_API_KEY_SETTING,
   STRIPE_PK_SETTING,
+  STRIPE_SK_SETTING,
   VEHICLE_LOOKUP_BASE_URL_SETTING,
   VEHICLE_LOOKUP_API_KEY_SETTING,
   'provider_otp_enabled',
@@ -367,6 +369,8 @@ export default function SettingsPage() {
   const [showMapKey, setShowMapKey] = useState(false);
   const [stripeKeyDraft, setStripeKeyDraft] = useState<string | null>(null);
   const [showStripeKey, setShowStripeKey] = useState(false);
+  const [stripeSecretDraft, setStripeSecretDraft] = useState<string | null>(null);
+  const [showStripeSecret, setShowStripeSecret] = useState(false);
 
   const { data, isLoading, error } = useQuery({
     queryKey: ['settings'],
@@ -392,6 +396,7 @@ export default function SettingsPage() {
         setMapKeyDraft(null);
       }
       if (variables.key === STRIPE_PK_SETTING) setStripeKeyDraft(null);
+      if (variables.key === STRIPE_SK_SETTING) setStripeSecretDraft(null);
       sonnerToast.success('Setting saved');
     },
     onError: (err: Error) => sonnerToast.error(err.message),
@@ -437,6 +442,14 @@ export default function SettingsPage() {
   const stripeSetting = findSetting(STRIPE_PK_SETTING);
   const stripeKey =
     stripeKeyDraft ?? (typeof stripeSetting?.value === 'string' ? stripeSetting.value : '');
+  const stripeSecretSetting = findSetting(STRIPE_SK_SETTING);
+  const stripeSecret =
+    stripeSecretDraft ??
+    (typeof stripeSecretSetting?.value === 'string' ? stripeSecretSetting.value : '');
+  const stripeAccountsMatch =
+    !stripeKey.trim() ||
+    !stripeSecret.trim() ||
+    sameStripeAccount(stripeKey, stripeSecret);
 
   const groupedKeys = new Set<string>([
     CURRENCY_SETTING,
@@ -757,7 +770,7 @@ export default function SettingsPage() {
                 <Panel
                   icon={CreditCard}
                   title="Stripe"
-                  description="Publishable key for the card payment sheet. The secret key stays in the API environment."
+                  description="Both keys must come from the same Stripe account. The publishable key opens the card sheet. The secret key creates the setup on the server."
                 >
                   <div className="space-y-3 px-5 py-4">
                     <Badge
@@ -794,6 +807,38 @@ export default function SettingsPage() {
                         Save key
                       </Button>
                     </div>
+                    <div className="flex flex-col gap-2 sm:flex-row">
+                      <SecretField
+                        label="Stripe secret key"
+                        value={stripeSecret}
+                        shown={showStripeSecret}
+                        onToggle={() => setShowStripeSecret((value) => !value)}
+                        onChange={setStripeSecretDraft}
+                        placeholder="sk_test_... or sk_live_..."
+                      />
+                      <Button
+                        loading={savingKey === STRIPE_SK_SETTING}
+                        onClick={() => {
+                          const secret = stripeSecret.trim();
+                          if (secret && stripeKey.trim() && !sameStripeAccount(stripeKey, secret)) {
+                            sonnerToast.error(
+                              'That secret key is from a different Stripe account or mode than the publishable key.',
+                            );
+                            return;
+                          }
+                          saveMutation.mutate({ key: STRIPE_SK_SETTING, value: secret });
+                        }}
+                      >
+                        Save secret
+                      </Button>
+                    </div>
+                    <p className="text-sm text-secondary">
+                      {stripeSecret.trim()
+                        ? stripeAccountsMatch
+                          ? 'Secret key matches this publishable key.'
+                          : 'These keys are from different Stripe accounts. Card setup will fail until they match.'
+                        : 'Paste the secret key shown next to this publishable key in the Stripe Dashboard. The publishable key alone cannot create a card setup.'}
+                    </p>
                   </div>
                 </Panel>
 
@@ -881,3 +926,15 @@ function FeeGroup({
     </div>
   );
 }
+
+function sameStripeAccount(publishable: string, secret: string) {
+  const accountKey = (key: string) => {
+    const match = key.trim().match(/^(?:pk|sk|rk)_(test|live)_([A-Za-z0-9]{8,})/);
+    if (!match) return null;
+    return `${match[1]}:${match[2].slice(0, 16)}`;
+  };
+  const left = accountKey(publishable);
+  const right = accountKey(secret);
+  return !!left && left === right;
+}
+

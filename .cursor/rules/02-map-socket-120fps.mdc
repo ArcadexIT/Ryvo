@@ -1,0 +1,20 @@
+---
+globs: ["ryvo-customer/lib/features/home/**/*.dart", "ryvo-customer/lib/features/service_request/**/*.dart", "ryvo-customer/lib/features/tracking/**/*.dart", "ryvo-customer/lib/shared/providers/**/*.dart"]
+alwaysApply: false
+---
+# 120 FPS Map, Riverpod & Socket Architecture
+
+## 1. Isolate `GoogleMap` from Parent Rebuilds
+- NEVER instantiate `GoogleMap` directly inside `HomeMapPage.build`, `ServiceRequestPage.build`, or `LiveTrackingPage.build` alongside UI overlays.
+- Extract the map into a dedicated `RepaintBoundary` + `ConsumerStatefulWidget` (`RyvoMapCanvas`) that ONLY listens to marker sets, polylines, and camera target bounds via `.select()`.
+- UI overlays (headers, bottom sheets, bid lists, profile/notification badges) must live in separate sibling `ConsumerWidget` classes inside the `Stack` so state changes never trigger `GoogleMap` rebuilds.
+
+## 2. Granular Riverpod `.select()` Mandate
+- NEVER write `ref.watch(jobDraftProvider)` at the root of a screen.
+- Always select the exact field required:
+  `final pickup = ref.watch(jobDraftProvider.select((s) => s.pickupLocation));`
+- Split bloated providers out of `lib/shared/providers/app_providers.dart` into domain-scoped providers when refactoring a feature.
+
+## 3. Smooth 60-120Hz Driver Marker Interpolation
+- When `trackingSocketProvider` emits `job:location`, do NOT just jump the marker with raw `setState` on the page.
+- Interpolate driver marker `LatLng` and `rotation` (bearing) smoothly over `800ms` using an `AnimationController` inside the isolated Map widget, and eliminate redundant 4-second REST polling whenever the socket connection is active and healthy.

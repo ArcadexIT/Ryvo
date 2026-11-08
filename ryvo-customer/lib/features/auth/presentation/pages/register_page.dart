@@ -1,13 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:google_fonts/google_fonts.dart';
+import 'package:ryvo_customer/l10n/app_localizations.dart';
+
 import '../../../../core/theme/app_colors.dart';
-import '../../../../data/models/models.dart';
+import '../../../../core/theme/app_spacing.dart';
+import '../../../../core/theme/app_theme.dart';
 import '../../../../core/utils/phone_utils.dart';
+import '../../../../data/models/models.dart';
 import '../../../../shared/providers/app_providers.dart';
 import '../../../../shared/widgets/widgets.dart';
-import 'package:ryvo_customer/l10n/app_localizations.dart';
+import '../widgets/auth_scaffold.dart';
 
 class RegisterPage extends ConsumerStatefulWidget {
   const RegisterPage({super.key});
@@ -36,20 +39,26 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
   }
 
   Future<void> _submit() async {
+    if (_loading) return;
     if (!(_formKey.currentState?.validate() ?? false)) return;
     if (_selectedCountry == null) {
-      showApiError(context, AppLocalizations.of(context).pleaseSelectYourCountry);
+      showApiError(
+          context, AppLocalizations.of(context).pleaseSelectYourCountry);
       return;
     }
     if (!_acceptedTerms) {
-      showApiError(context, AppLocalizations.of(context).pleaseAcceptTheTermsAndPrivacyPolicy);
+      showApiError(context,
+          AppLocalizations.of(context).pleaseAcceptTheTermsAndPrivacyPolicy);
       return;
     }
     final phone = composeE164(
       _selectedCountry!.dialCode,
       _phoneController.text.trim(),
     );
+    final router = GoRouter.of(context);
     setState(() => _loading = true);
+    await dismissKeyboard();
+    if (!isContextActive(context)) return;
     try {
       final result = await ref.read(authRepositoryProvider).register(
             phone: phone,
@@ -62,144 +71,133 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
         ref.read(pendingPhoneProvider.notifier).state = phone;
         ref.read(otpPurposeProvider.notifier).state = 'register';
         await ref.read(authRepositoryProvider).sendOtp(phone, 'register');
-        if (!mounted) return;
+        if (!isContextActive(context)) return;
         context.push('/otp');
         return;
       }
       ref.read(needsPhoneVerificationProvider.notifier).state = false;
       ref.read(isAuthenticatedProvider.notifier).state = true;
-      if (!mounted) return;
-      context.go('/home');
+      if (router.routerDelegate.currentConfiguration.uri.path != '/home') {
+        router.go('/home');
+      }
     } catch (e) {
-      if (mounted) showApiError(context, e);
+      if (isContextActive(context)) showApiError(context, e);
     } finally {
-      if (mounted) setState(() => _loading = false);
+      if (isContextActive(context)) setState(() => _loading = false);
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.background,
-      appBar: AppBar(
-        backgroundColor: AppColors.background,
-        leading: IconButton(
-          onPressed: () => context.pop(),
-          icon: Icon(Icons.arrow_back_ios_new,
-              size: 20, color: AppColors.textPrimary),
-        ),
-      ),
-      body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: 24),
-          child: Form(
-            key: _formKey,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const SizedBox(height: 8),
-                Text(
-                  AppLocalizations.of(context).createAccount,
-                  style: GoogleFonts.poppins(
-                    fontSize: 28,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.textPrimary,
+    final l10n = AppLocalizations.of(context);
+    return AuthScaffold(
+      onBack: () => context.pop(),
+      child: Form(
+        key: _formKey,
+        child: AutofillGroup(
+          child: ListView(
+            keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+            padding: const EdgeInsets.fromLTRB(24, 8, 24, 32),
+            children: [
+              Text(l10n.createAccount, style: authTitleStyle()),
+              AppSpacing.h8,
+              Text(l10n.joinRyvoAndGetHelpInMinutes, style: authBodyStyle()),
+              AppSpacing.h32,
+              RyvoTextField(
+                hint: l10n.johnDoe,
+                label: l10n.fullName,
+                controller: _nameController,
+                keyboardType: TextInputType.name,
+                textCapitalization: TextCapitalization.words,
+                validator: (value) => (value?.trim().isEmpty ?? true)
+                    ? l10n.enterYourFullName
+                    : null,
+                textInputAction: TextInputAction.next,
+              ),
+              AppSpacing.h16,
+              RyvoTextField(
+                hint: 'you@email.com',
+                label: 'Email',
+                controller: _emailController,
+                keyboardType: TextInputType.emailAddress,
+                autofillHints: const [AutofillHints.email],
+                validator: (value) {
+                  final email = value?.trim() ?? '';
+                  if (email.isEmpty) return null;
+                  if (!email.contains('@')) return 'Enter a valid email';
+                  return null;
+                },
+                textInputAction: TextInputAction.next,
+              ),
+              AppSpacing.h16,
+              PhoneCountryField(
+                hint: '2345678900',
+                controller: _phoneController,
+                selectedCountry: _selectedCountry,
+                onCountryChanged: (country) {
+                  setState(() => _selectedCountry = country);
+                },
+                validator: (value) => (value?.length ?? 0) < 7
+                    ? l10n.enterAValidPhoneNumber
+                    : null,
+                textInputAction: TextInputAction.next,
+              ),
+              AppSpacing.h16,
+              RyvoTextField(
+                hint: l10n.min8Characters,
+                label: l10n.password,
+                controller: _passwordController,
+                isPassword: true,
+                autofillHints: const [AutofillHints.newPassword],
+                validator: (value) => (value?.length ?? 0) < 8
+                    ? l10n.passwordMustBeAtLeast8Characters
+                    : null,
+                textInputAction: TextInputAction.done,
+                onFieldSubmitted: (_) => _submit(),
+              ),
+              AppSpacing.h20,
+              _TermsAcceptance(
+                accepted: _acceptedTerms,
+                onChanged: (value) => setState(() => _acceptedTerms = value),
+              ),
+              AppSpacing.h24,
+              RyvoButton(
+                label: l10n.createAccount,
+                isLoading: _loading,
+                onPressed: _submit,
+              ),
+              AppSpacing.h24,
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(
+                    l10n.alreadyHaveAnAccount,
+                    style: RyvoTypography.style(
+                      color: AppColors.textSecondary,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                    ),
                   ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  AppLocalizations.of(context).joinRyvoAndGetHelpInMinutes,
-                  style: GoogleFonts.poppins(
-                    fontSize: 15,
-                    color: AppColors.textSecondary,
-                  ),
-                ),
-                const SizedBox(height: 36),
-                RyvoTextField(
-                  hint: AppLocalizations.of(context).johnDoe,
-                  label: AppLocalizations.of(context).fullName,
-                  controller: _nameController,
-                  keyboardType: TextInputType.name,
-                  prefixIcon: const Icon(Icons.person_outline, size: 20),
-                  validator: (v) =>
-                      (v?.isEmpty ?? true) ? AppLocalizations.of(context).enterYourFullName : null,
-                  textInputAction: TextInputAction.next,
-                ),
-                const SizedBox(height: 16),
-                RyvoTextField(
-                  hint: 'you@email.com',
-                  label: 'Email',
-                  controller: _emailController,
-                  keyboardType: TextInputType.emailAddress,
-                  prefixIcon: const Icon(Icons.email_outlined, size: 20),
-                  validator: (v) {
-                    final value = v?.trim() ?? '';
-                    if (value.isEmpty) return null;
-                    if (!value.contains('@')) return 'Enter a valid email';
-                    return null;
-                  },
-                  textInputAction: TextInputAction.next,
-                ),
-                const SizedBox(height: 16),
-                PhoneCountryField(
-                  hint: '2345678900',
-                  controller: _phoneController,
-                  selectedCountry: _selectedCountry,
-                  onCountryChanged: (c) => setState(() => _selectedCountry = c),
-                  validator: (v) => (v?.length ?? 0) < 7
-                      ? AppLocalizations.of(context).enterAValidPhoneNumber
-                      : null,
-                  textInputAction: TextInputAction.next,
-                ),
-                const SizedBox(height: 16),
-                RyvoTextField(
-                  hint: AppLocalizations.of(context).min8Characters,
-                  label: AppLocalizations.of(context).password,
-                  controller: _passwordController,
-                  isPassword: true,
-                  prefixIcon: const Icon(Icons.lock_outline, size: 20),
-                  validator: (v) => (v?.length ?? 0) < 8
-                      ? AppLocalizations.of(context).passwordMustBeAtLeast8Characters
-                      : null,
-                  textInputAction: TextInputAction.done,
-                ),
-                const SizedBox(height: 20),
-                _TermsAcceptance(
-                  accepted: _acceptedTerms,
-                  onChanged: (value) => setState(() => _acceptedTerms = value),
-                ),
-                const SizedBox(height: 24),
-                RyvoButton(
-                  label: _loading ? AppLocalizations.of(context).creatingAccount : AppLocalizations.of(context).createAccount,
-                  onPressed: _loading ? null : _submit,
-                ),
-                const SizedBox(height: 24),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Text(
-                      AppLocalizations.of(context).alreadyHaveAnAccount,
-                      style: GoogleFonts.poppins(
-                        color: AppColors.textSecondary,
+                  TextButton(
+                    onPressed: () => context.pop(),
+                    style: TextButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 6),
+                      minimumSize: Size.zero,
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                    child: Text(
+                      l10n.signIn,
+                      style: RyvoTypography.style(
+                        color: AppColors.textPrimary,
                         fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: -0.2,
                       ),
                     ),
-                    GestureDetector(
-                      onTap: () => context.pop(),
-                      child: Text(
-                        AppLocalizations.of(context).signIn,
-                        style: GoogleFonts.poppins(
-                          color: AppColors.primary,
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 32),
-              ],
-            ),
+                  ),
+                ],
+              ),
+            ],
           ),
         ),
       ),
@@ -216,8 +214,19 @@ class _TermsAcceptance extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
-    final base = GoogleFonts.poppins(fontSize: 13, height: 1.45, color: AppColors.textSecondary);
-    final link = base.copyWith(color: AppColors.primary, fontWeight: FontWeight.w600);
+    final base = RyvoTypography.style(
+      fontSize: 13,
+      fontWeight: FontWeight.w500,
+      height: 1.45,
+      color: AppColors.textSecondary,
+    );
+    final link = RyvoTypography.style(
+      fontSize: 13,
+      fontWeight: FontWeight.w700,
+      height: 1.45,
+      color: AppColors.textPrimary,
+      letterSpacing: -0.2,
+    );
 
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -227,14 +236,18 @@ class _TermsAcceptance extends StatelessWidget {
           height: 24,
           child: Checkbox(
             value: accepted,
-            activeColor: AppColors.primary,
-            side: BorderSide(color: AppColors.textHint),
+            activeColor: AppColors.focusBorder,
+            checkColor: AppColors.isDark ? AppColors.obsidian : AppColors.white,
+            side: BorderSide(color: AppColors.textHint, width: 1.5),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(4),
+            ),
             materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
             visualDensity: VisualDensity.compact,
             onChanged: (value) => onChanged(value ?? false),
           ),
         ),
-        const SizedBox(width: 10),
+        const SizedBox(width: 12),
         Expanded(
           child: Padding(
             padding: const EdgeInsets.only(top: 2),

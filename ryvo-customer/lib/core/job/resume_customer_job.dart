@@ -2,7 +2,7 @@ import 'package:flutter/widgets.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../data/models/models.dart';
-import '../../features/payment/presentation/widgets/payment_sheet.dart';
+import '../../features/payment/presentation/pages/payment_options_page.dart';
 import 'active_job_session.dart';
 
 /// Opens the in-progress customer job. Unpaid checkout stays in the payment dialog.
@@ -13,7 +13,7 @@ Future<void> resumeCustomerJob(
 }) async {
   final status = effectiveCustomerJobStatus(job);
   if (status == 'payment_pending') {
-    final route = await showRyvoCheckoutSheet(context);
+    final route = await showRyvoCheckout(context);
     if (!context.mounted) return;
     if (route != null) {
       context.go(route);

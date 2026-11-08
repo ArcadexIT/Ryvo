@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:ryvo_customer/l10n/app_localizations.dart';
 
 import '../../../../core/theme/app_colors.dart';
+import '../../../../shared/widgets/ryvo_close_button.dart';
 import '../../../../data/repositories/repositories.dart';
 import '../../../../shared/providers/app_providers.dart';
 
@@ -21,6 +22,8 @@ class LegalDocumentPage extends ConsumerWidget {
       backgroundColor: AppColors.background,
       appBar: AppBar(
         backgroundColor: AppColors.background,
+        automaticallyImplyLeading: false,
+        leading: const RyvoCloseButton(),
         title: Text(
           document.maybeWhen(
             data: (doc) => doc.title,

@@ -1,13 +1,18 @@
 import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:pin_code_fields/pin_code_fields.dart';
+import 'package:ryvo_customer/l10n/app_localizations.dart';
+
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/theme/app_spacing.dart';
+import '../../../../core/theme/app_theme.dart';
 import '../../../../shared/providers/app_providers.dart';
 import '../../../../shared/widgets/widgets.dart';
-import 'package:ryvo_customer/l10n/app_localizations.dart';
+import '../widgets/auth_scaffold.dart';
 
 class OtpPage extends ConsumerStatefulWidget {
   const OtpPage({super.key});
@@ -18,7 +23,8 @@ class OtpPage extends ConsumerStatefulWidget {
 
 class _OtpPageState extends ConsumerState<OtpPage> {
   final _otpController = TextEditingController();
-  int _seconds = 60;
+  static const int _resendWindow = 30;
+  int _seconds = _resendWindow;
   Timer? _timer;
   String _otp = '';
   bool _loading = false;
@@ -31,101 +37,161 @@ class _OtpPageState extends ConsumerState<OtpPage> {
 
   void _startTimer() {
     _timer?.cancel();
-    setState(() => _seconds = 60);
-    _timer = Timer.periodic(const Duration(seconds: 1), (t) {
+    setState(() => _seconds = _resendWindow);
+    _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
       if (_seconds == 0) {
-        t.cancel();
-      } else {
+        timer.cancel();
+      } else if (mounted) {
         setState(() => _seconds--);
       }
     });
   }
 
+  String _clock(int seconds) {
+    final minutes = (seconds ~/ 60).toString().padLeft(2, '0');
+    final remain = (seconds % 60).toString().padLeft(2, '0');
+    return '$minutes:$remain';
+  }
+
   Future<void> _verify() async {
     final phone = ref.read(pendingPhoneProvider);
-    if (phone == null || _otp.length != 6) return;
+    if (phone == null || _otp.length != 6 || _loading) return;
 
     final purpose = ref.read(otpPurposeProvider);
 
+    final router = GoRouter.of(context);
     setState(() => _loading = true);
+    await dismissKeyboard();
+    if (!isContextActive(context)) return;
     try {
       if (purpose == 'reset_password') {
         final newPassword = await _promptNewPassword();
-        if (newPassword == null) {
-          if (mounted) setState(() => _loading = false);
-          return;
-        }
+        if (newPassword == null) return;
         await ref.read(authRepositoryProvider).resetPassword(
               phone: phone,
               code: _otp,
               newPassword: newPassword,
             );
-        if (!mounted) return;
+        if (!isContextActive(context)) return;
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(AppLocalizations.of(context).passwordResetPleaseSignIn)),
+          SnackBar(
+              content:
+                  Text(AppLocalizations.of(context).passwordResetPleaseSignIn)),
         );
-        context.go('/login');
+        router.go('/login');
         return;
       }
 
       await ref.read(authRepositoryProvider).verifyOtp(phone, _otp, purpose);
       ref.read(needsPhoneVerificationProvider.notifier).state = false;
       ref.read(isAuthenticatedProvider.notifier).state = true;
-      ref.invalidate(profileProvider);
       await afterLogin(ref);
-      if (!mounted) return;
-      context.go('/home');
+      if (router.routerDelegate.currentConfiguration.uri.path != '/home') {
+        router.go('/home');
+      }
     } catch (e) {
-      if (mounted) showApiError(context, e);
+      if (isContextActive(context)) showApiError(context, e);
     } finally {
-      if (mounted) setState(() => _loading = false);
+      if (isContextActive(context)) setState(() => _loading = false);
     }
   }
 
   Future<String?> _promptNewPassword() async {
     final controller = TextEditingController();
-    return showDialog<String>(
+    final password = await showDialog<String>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: AppColors.surface,
-        title: Text(AppLocalizations.of(context).newPassword,
-            style: GoogleFonts.poppins(color: AppColors.textPrimary, fontSize: 18)),
-        content: TextField(
-          controller: controller,
-          obscureText: true,
-          style: GoogleFonts.poppins(color: AppColors.textPrimary),
-          decoration: InputDecoration(hintText: AppLocalizations.of(context).enterNewPasswordMin6),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: Text(AppLocalizations.of(context).cancel, style: GoogleFonts.poppins(color: AppColors.textSecondary)),
+      builder: (dialogContext) {
+        final l10n = AppLocalizations.of(dialogContext);
+        return AlertDialog(
+          backgroundColor: AppColors.modal,
+          title: Text(
+            l10n.newPassword,
+            style: RyvoTypography.heading(
+              fontSize: 20,
+              color: AppColors.textPrimary,
+              letterSpacing: -0.4,
+            ),
           ),
-          TextButton(
-            onPressed: () {
-              if (controller.text.length >= 6) Navigator.pop(ctx, controller.text);
-            },
-            child: Text(AppLocalizations.of(context).reset, style: GoogleFonts.poppins(color: AppColors.primary)),
+          content: RyvoTextField(
+            hint: l10n.enterNewPasswordMin6,
+            controller: controller,
+            isPassword: true,
+            textInputAction: TextInputAction.done,
           ),
-        ],
-      ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: Text(
+                l10n.cancel,
+                style: RyvoTypography.style(
+                  color: AppColors.textSecondary,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+            TextButton(
+              onPressed: () {
+                if (controller.text.length >= 6) {
+                  Navigator.pop(dialogContext, controller.text);
+                }
+              },
+              child: Text(
+                l10n.reset,
+                style: RyvoTypography.style(
+                  color: AppColors.textPrimary,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: -0.2,
+                ),
+              ),
+            ),
+          ],
+        );
+      },
     );
+    WidgetsBinding.instance.addPostFrameCallback((_) => controller.dispose());
+    return password;
   }
 
   Future<void> _resend() async {
     final phone = ref.read(pendingPhoneProvider);
-    if (phone == null) return;
+    if (phone == null || _seconds > 0) return;
     try {
-      await ref.read(authRepositoryProvider).sendOtp(phone, ref.read(otpPurposeProvider));
+      await ref.read(authRepositoryProvider).sendOtp(
+            phone,
+            ref.read(otpPurposeProvider),
+          );
       _startTimer();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(AppLocalizations.of(context).verificationCodeSent)),
+          SnackBar(
+              content: Text(AppLocalizations.of(context).verificationCodeSent)),
         );
       }
     } catch (e) {
       if (mounted) showApiError(context, e);
     }
+  }
+
+  Future<void> _leave() async {
+    final signedIn = ref.read(isAuthenticatedProvider);
+    if (signedIn && ref.read(needsPhoneVerificationProvider)) {
+      await signOut(ref);
+      if (!mounted) return;
+      context.go('/login');
+      return;
+    }
+    if (context.canPop()) {
+      context.pop();
+    } else {
+      context.go(signedIn ? '/home' : '/register');
+    }
+  }
+
+  void _onCodeChanged(String value) {
+    if (value.length > _otp.length) {
+      HapticFeedback.selectionClick();
+    }
+    setState(() => _otp = value);
   }
 
   @override
@@ -137,123 +203,126 @@ class _OtpPageState extends ConsumerState<OtpPage> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     final phone = ref.watch(pendingPhoneProvider);
+    final width = MediaQuery.sizeOf(context).width;
+    final fieldWidth = ((width - 48) / 6 - 8).clamp(36.0, 52.0);
 
-    return Scaffold(
-      backgroundColor: AppColors.background,
-      appBar: AppBar(
-        backgroundColor: AppColors.background,
-        leading: IconButton(
-          onPressed: () async {
-            final signedIn = ref.read(isAuthenticatedProvider);
-            if (signedIn && ref.read(needsPhoneVerificationProvider)) {
-              await signOut(ref);
-              if (!context.mounted) return;
-              context.go('/login');
-              return;
-            }
-            if (context.canPop()) {
-              context.pop();
-            } else {
-              context.go(signedIn ? '/home' : '/register');
-            }
-          },
-          icon: Icon(Icons.arrow_back_ios_new, size: 20, color: AppColors.textPrimary),
-        ),
-      ),
-      body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 24),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const SizedBox(height: 8),
-              Text(
-                AppLocalizations.of(context).verifyPhone,
-                style: GoogleFonts.poppins(
-                  fontSize: 28,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.textPrimary,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                phone != null
-                    ? 'Enter the 6-digit code sent to $phone'
-                    : AppLocalizations.of(context).enterThe6DigitCodeSentToYourNumber,
-                style: GoogleFonts.poppins(
-                  fontSize: 15,
-                  color: AppColors.textSecondary,
-                ),
-              ),
-              const SizedBox(height: 12),
-              Text(
-                'Demo code: 123456',
-                style: GoogleFonts.poppins(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                  color: AppColors.primary,
-                ),
-              ),
-              const SizedBox(height: 28),
-              PinCodeTextField(
-                appContext: context,
-                length: 6,
-                controller: _otpController,
-                onChanged: (v) => setState(() => _otp = v),
-                onCompleted: (_) => _verify(),
-                keyboardType: TextInputType.number,
-                animationType: AnimationType.fade,
-                pinTheme: PinTheme(
-                  shape: PinCodeFieldShape.box,
-                  borderRadius: BorderRadius.circular(12),
-                  fieldHeight: 56,
-                  fieldWidth: 48,
-                  activeFillColor: AppColors.surface,
-                  inactiveFillColor: AppColors.surface,
-                  selectedFillColor: AppColors.surface,
-                  activeColor: AppColors.primary,
-                  inactiveColor: AppColors.divider,
-                  selectedColor: AppColors.primary,
-                ),
-                enableActiveFill: true,
-                textStyle: GoogleFonts.poppins(
-                  fontSize: 22,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.textPrimary,
-                ),
-                cursorColor: AppColors.primary,
-              ),
-              const SizedBox(height: 24),
-              Center(
+    return AuthScaffold(
+      onBack: () {
+        _leave();
+      },
+      child: ListView(
+        keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+        padding: const EdgeInsets.fromLTRB(24, 8, 24, 32),
+        children: [
+          Text(l10n.verifyPhone, style: authTitleStyle()),
+          AppSpacing.h8,
+          Text(
+            phone != null
+                ? 'Enter the 6-digit code sent to $phone'
+                : l10n.enterThe6DigitCodeSentToYourNumber,
+            style: authBodyStyle(),
+          ),
+          AppSpacing.h32,
+          PinCodeTextField(
+            appContext: context,
+            length: 6,
+            controller: _otpController,
+            autoDisposeControllers: false,
+            enabled: !_loading,
+            onChanged: _onCodeChanged,
+            onCompleted: (_) => _verify(),
+            keyboardType: TextInputType.number,
+            textInputAction: TextInputAction.done,
+            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+            animationType: AnimationType.fade,
+            animationDuration: const Duration(milliseconds: 180),
+            enableActiveFill: true,
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            pinTheme: PinTheme(
+              shape: PinCodeFieldShape.box,
+              borderRadius: BorderRadius.circular(12),
+              fieldHeight: 56,
+              fieldWidth: fieldWidth,
+              borderWidth: 2,
+              activeBorderWidth: 2,
+              selectedBorderWidth: 2,
+              inactiveBorderWidth: 2,
+              errorBorderWidth: 2,
+              activeFillColor: AppColors.surface,
+              inactiveFillColor: AppColors.surface,
+              selectedFillColor: AppColors.surface,
+              activeColor: AppColors.focusBorder,
+              selectedColor: AppColors.focusBorder,
+              inactiveColor: Colors.transparent,
+              errorBorderColor: AppColors.error,
+            ),
+            textStyle: RyvoTypography.style(
+              fontSize: 22,
+              fontWeight: FontWeight.w700,
+              color: AppColors.textPrimary,
+              letterSpacing: -0.4,
+              tabular: true,
+            ),
+            cursorColor: AppColors.focusBorder,
+          ),
+          AppSpacing.h8,
+          SizedBox(
+            height: 44,
+            child: Center(
+              child: AnimatedSwitcher(
+                duration: const Duration(milliseconds: 200),
+                switchInCurve: Curves.fastOutSlowIn,
+                switchOutCurve: Curves.fastOutSlowIn,
                 child: _seconds > 0
-                    ? Text(
-                        'Resend code in ${_seconds}s',
-                        style: GoogleFonts.poppins(
-                          fontSize: 14,
-                          color: AppColors.textSecondary,
-                        ),
+                    ? Row(
+                        key: const ValueKey<String>('countdown'),
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Text(
+                            'Resend in ',
+                            style: RyvoTypography.style(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w500,
+                              color: AppColors.textSecondary,
+                            ),
+                          ),
+                          Text(
+                            _clock(_seconds),
+                            style: RyvoTypography.style(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.textPrimary,
+                              letterSpacing: -0.2,
+                              tabular: true,
+                            ),
+                          ),
+                        ],
                       )
                     : TextButton(
+                        key: const ValueKey<String>('resend'),
                         onPressed: _resend,
                         child: Text(
-                          AppLocalizations.of(context).resendCode,
-                          style: GoogleFonts.poppins(
-                            color: AppColors.primary,
-                            fontWeight: FontWeight.w600,
+                          l10n.resendCode,
+                          style: RyvoTypography.style(
+                            color: AppColors.textPrimary,
+                            fontWeight: FontWeight.w700,
                             fontSize: 14,
+                            letterSpacing: -0.2,
                           ),
                         ),
                       ),
               ),
-              const SizedBox(height: 32),
-              RyvoButton(
-                label: _loading ? AppLocalizations.of(context).verifying : AppLocalizations.of(context).verify,
-                onPressed: (_loading || _otp.length != 6) ? null : _verify,
-              ),
-            ],
+            ),
           ),
-        ),
+          AppSpacing.h24,
+          RyvoButton(
+            label: l10n.verify,
+            isLoading: _loading,
+            onPressed: _otp.length == 6 ? _verify : null,
+          ),
+        ],
       ),
     );
   }

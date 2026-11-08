@@ -1,5 +1,5 @@
-import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -11,14 +11,7 @@ import '../../../../shared/providers/app_providers.dart';
 import '../../../../shared/providers/di_providers.dart';
 import 'package:ryvo_driver/l10n/app_localizations.dart';
 
-const _card = Color(0xF21A2333);
-const _text = Color(0xFFF8FAFC);
-const _muted = Color(0xFF94A3B8);
-const _urgentRed = Color(0xFFEF4444);
-const _pickup = Color(0xFF22C55E);
-const _dropoff = Color(0xFFEF4444);
-
-/// Floating ride-offer card shown over the home map.
+/// Offer card that drops in over the map and counts down on its own ticker.
 class IncomingJobSheet extends ConsumerStatefulWidget {
   const IncomingJobSheet({super.key});
 
@@ -26,29 +19,39 @@ class IncomingJobSheet extends ConsumerStatefulWidget {
   ConsumerState<IncomingJobSheet> createState() => _IncomingJobSheetState();
 }
 
-class _IncomingJobSheetState extends ConsumerState<IncomingJobSheet> with SingleTickerProviderStateMixin {
+class _IncomingJobSheetState extends ConsumerState<IncomingJobSheet> with TickerProviderStateMixin {
   /// Used only when the offer has no server expiry. Matches the API default.
   static const _fallbackSeconds = 30;
 
   int _totalSeconds = _fallbackSeconds;
-  int _seconds = _fallbackSeconds;
   String? _offerId;
   bool _expired = false;
-  Timer? _timer;
-  late AnimationController _enterCtrl;
-  late Animation<double> _fadeIn;
-  late Animation<Offset> _slideIn;
+  bool _busy = false;
+
+  late final AnimationController _enter = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 280),
+  );
+  late final Animation<double> _fade = CurvedAnimation(parent: _enter, curve: Curves.fastOutSlowIn);
+  late final Animation<Offset> _slide = Tween<Offset>(begin: const Offset(0, -0.28), end: Offset.zero).animate(
+    CurvedAnimation(parent: _enter, curve: Curves.fastOutSlowIn),
+  );
+  late final Animation<double> _acceptScale = Tween<double>(begin: 0.96, end: 1).animate(
+    CurvedAnimation(parent: _enter, curve: const Interval(0.45, 1, curve: Curves.fastOutSlowIn)),
+  );
+  late final AnimationController _countdown = AnimationController(
+    vsync: this,
+    duration: const Duration(seconds: _fallbackSeconds),
+  )..addStatusListener(_onCountdownStatus);
+
+  void _onCountdownStatus(AnimationStatus status) {
+    if (status == AnimationStatus.dismissed) _expire();
+  }
 
   @override
   void initState() {
     super.initState();
-    _enterCtrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 420));
-    _fadeIn = CurvedAnimation(parent: _enterCtrl, curve: Curves.easeOut);
-    _slideIn = Tween<Offset>(begin: const Offset(0, 0.06), end: Offset.zero)
-        .animate(CurvedAnimation(parent: _enterCtrl, curve: Curves.easeOutCubic));
-    _enterCtrl.forward();
-
-    _arm(ref.read(jobNotifierProvider).value?.incomingJob, notify: false);
+    _arm(ref.read(jobNotifierProvider).value?.incomingJob);
   }
 
   int _secondsLeft(JobEntity? job) {
@@ -58,39 +61,30 @@ class _IncomingJobSheetState extends ConsumerState<IncomingJobSheet> with Single
     return left < 0 ? 0 : left;
   }
 
-  void _arm(JobEntity? job, {bool notify = true}) {
+  void _arm(JobEntity? job) {
     if (job == null || job.id.isEmpty) return;
-    if (job.id == _offerId && _timer != null) return;
+    if (job.id == _offerId && (_countdown.isAnimating || _expired)) return;
     _offerId = job.id;
     _expired = false;
     final left = _secondsLeft(job);
     _totalSeconds = left > 0 ? left : 1;
-    _seconds = left;
-    _timer?.cancel();
-    if (notify && mounted) setState(() {});
+    _countdown.stop();
+    _countdown.duration = Duration(seconds: _totalSeconds);
     if (left <= 0) {
       _expire();
       return;
     }
     JobAlertSound.playIncomingJob();
-    _timer = Timer.periodic(const Duration(seconds: 1), (t) {
-      if (!mounted) {
-        t.cancel();
-        return;
-      }
-      setState(() => _seconds--);
-      if (_seconds <= 0) {
-        t.cancel();
-        _expire();
-      }
-    });
+    _enter.forward(from: 0);
+    _countdown.reverse(from: left / _totalSeconds);
   }
 
   void _expire() {
     if (_expired) return;
     _expired = true;
-    _timer?.cancel();
+    if (_countdown.isAnimating) _countdown.stop();
     JobAlertSound.stop();
+    if (!mounted) return;
     final id = _offerId ?? ref.read(jobNotifierProvider).value?.incomingJob?.id;
     if (id != null && id.isNotEmpty) {
       ref.read(dismissedIncomingOfferIdProvider.notifier).state = id;
@@ -100,13 +94,12 @@ class _IncomingJobSheetState extends ConsumerState<IncomingJobSheet> with Single
 
   @override
   void dispose() {
-    _timer?.cancel();
-    _enterCtrl.dispose();
+    _countdown.removeStatusListener(_onCountdownStatus);
+    _countdown.dispose();
+    _enter.dispose();
     JobAlertSound.stop();
     super.dispose();
   }
-
-  bool _busy = false;
 
   Future<void> _accept() async {
     if (_busy) return;
@@ -115,6 +108,7 @@ class _IncomingJobSheetState extends ConsumerState<IncomingJobSheet> with Single
       _reject();
       return;
     }
+    HapticFeedback.mediumImpact();
     setState(() => _busy = true);
     JobAlertSound.stop();
     final onTrip = ref.read(activeJobProvider)?.status == JobStatusEntity.inProgress;
@@ -122,17 +116,10 @@ class _IncomingJobSheetState extends ConsumerState<IncomingJobSheet> with Single
     if (!mounted) return;
     result.fold(
       (f) {
+        // Accept failed on the server: surface the error, keep the offer open.
         setState(() => _busy = false);
-        if (incoming.isBidRequest) {
-          ref.read(dismissedIncomingOfferIdProvider.notifier).state = incoming.id;
-          ref.read(showIncomingJobProvider.notifier).state = false;
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(f.message.contains('Waiting') ? 'Offer sent to the rider' : f.message)),
-          );
-          return;
-        }
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(f.message), backgroundColor: Colors.red.shade700),
+          SnackBar(content: Text(f.message), backgroundColor: AppColors.error),
         );
       },
       (job) {
@@ -180,69 +167,75 @@ class _IncomingJobSheetState extends ConsumerState<IncomingJobSheet> with Single
             providerLng: liveLoc?.longitude,
           )
         : mockIncomingJob;
-    final progress = (_seconds / _totalSeconds).clamp(0.0, 1.0);
-    final urgent = _seconds <= 5;
     final gpsActive = liveLoc != null;
     final tripDistance = job.tripDistance.trim().isEmpty ? job.distance : job.tripDistance;
 
     return FadeTransition(
-      opacity: _fadeIn,
+      opacity: _fade,
       child: SlideTransition(
-        position: _slideIn,
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(22),
-          child: Container(
-            width: double.infinity,
-            decoration: BoxDecoration(
-              color: _card,
-              borderRadius: BorderRadius.circular(22),
-              border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
-              boxShadow: const [
-                BoxShadow(color: Color(0x66000000), blurRadius: 28, offset: Offset(0, 12)),
-              ],
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                LinearProgressIndicator(
-                  value: progress,
-                  minHeight: 3,
-                  backgroundColor: Colors.white.withValues(alpha: 0.08),
-                  color: urgent ? _urgentRed : _pickup,
-                ),
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
+        position: _slide,
+        child: Container(
+          width: double.infinity,
+          clipBehavior: Clip.antiAlias,
+          decoration: BoxDecoration(
+            color: AppColors.surface,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: AppColors.divider),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              AnimatedBuilder(
+                animation: _countdown,
+                builder: (context, _) {
+                  final seconds = (_countdown.value * _totalSeconds).ceil().clamp(0, _totalSeconds);
+                  final urgent = seconds <= 5;
+                  return Column(
+                    mainAxisSize: MainAxisSize.min,
                     children: [
-                      _TitleRow(
-                        seconds: _seconds,
-                        urgent: urgent,
-                        isHighPriority: job.isHighPriority,
-                        chainedNote: incoming?.chained == true
-                            ? 'After this dropoff · about ${job.eta} until the next pickup'
-                            : null,
+                      LinearProgressIndicator(
+                        value: _countdown.value.clamp(0.0, 1.0),
+                        minHeight: 4,
+                        backgroundColor: AppColors.grey100,
+                        color: urgent ? AppColors.error : AppColors.success,
                       ),
-                      const SizedBox(height: 14),
-                      _FareRow(
-                        job: job,
-                        tripDistance: tripDistance,
-                        busy: _busy,
-                        onAccept: _busy ? null : _accept,
-                      ),
-                      const SizedBox(height: 14),
-                      _RouteBlock(job: job, gpsActive: gpsActive),
-                      _FooterActions(
-                        onReject: _reject,
-                        onCounter: incoming != null && incoming.isBidRequest
-                            ? () => _counter(incoming)
-                            : null,
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                        child: _TitleRow(
+                          seconds: seconds,
+                          urgent: urgent,
+                          isHighPriority: job.isHighPriority,
+                          chainedNote: incoming?.chained == true
+                              ? 'After this dropoff · about ${job.eta} until the next pickup'
+                              : null,
+                        ),
                       ),
                     ],
-                  ),
+                  );
+                },
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    _FareRow(
+                      job: job,
+                      tripDistance: tripDistance,
+                      busy: _busy,
+                      acceptScale: _acceptScale,
+                      onAccept: _busy ? null : _accept,
+                    ),
+                    const SizedBox(height: 12),
+                    _RouteBlock(job: job, gpsActive: gpsActive),
+                    _FooterActions(
+                      onReject: _reject,
+                      onCounter: incoming != null && incoming.isBidRequest ? () => _counter(incoming) : null,
+                    ),
+                  ],
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
       ),
@@ -271,6 +264,7 @@ class _IncomingJobSheetState extends ConsumerState<IncomingJobSheet> with Single
         ],
       ),
     );
+    controller.dispose();
     if (amount == null || amount <= 0) return;
     final jobId = bidJob.jobId.isEmpty ? bidJob.id : bidJob.jobId;
     await ref.read(jobRepositoryProvider).counterBid(jobId, amount);
@@ -302,47 +296,70 @@ class _TitleRow extends StatelessWidget {
             Expanded(
               child: Text(
                 'New ride request',
-                style: GoogleFonts.poppins(fontSize: 15, fontWeight: FontWeight.w600, color: _text),
+                style: _offerStyle(size: 16, weight: FontWeight.w700, color: AppColors.textPrimary, letterSpacing: -0.4),
               ),
             ),
-            if (isHighPriority)
-              Container(
-                margin: const EdgeInsets.only(right: 8),
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                decoration: BoxDecoration(
-                  color: _urgentRed.withValues(alpha: 0.16),
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: Text(
-                  AppLocalizations.of(context).highPRIORITY,
-                  style: GoogleFonts.poppins(fontSize: 9, fontWeight: FontWeight.w700, color: _urgentRed),
-                ),
-              ),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              decoration: BoxDecoration(
-                color: (urgent ? _urgentRed : Colors.white).withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: Text(
-                '${seconds}s',
-                style: GoogleFonts.poppins(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700,
-                  color: urgent ? _urgentRed : _text,
-                ),
-              ),
-            ),
+            if (isHighPriority) ...[
+              const _PriorityChip(),
+              const SizedBox(width: 8),
+            ],
+            _TimerChip(seconds: seconds, urgent: urgent),
           ],
         ),
         if (chainedNote != null) ...[
-          const SizedBox(height: 6),
+          const SizedBox(height: 8),
           Text(
             chainedNote!,
-            style: GoogleFonts.poppins(fontSize: 11, fontWeight: FontWeight.w500, color: AppColors.primary),
+            style: _offerStyle(size: 12, weight: FontWeight.w600, color: AppColors.primary),
           ),
         ],
       ],
+    );
+  }
+}
+
+class _PriorityChip extends StatelessWidget {
+  const _PriorityChip();
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: AppColors.error.withValues(alpha: 0.16),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        child: Text(
+          AppLocalizations.of(context).highPRIORITY,
+          style: _offerStyle(size: 10, weight: FontWeight.w700, color: AppColors.error, letterSpacing: 0.2),
+        ),
+      ),
+    );
+  }
+}
+
+class _TimerChip extends StatelessWidget {
+  const _TimerChip({required this.seconds, required this.urgent});
+
+  final int seconds;
+  final bool urgent;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = urgent ? AppColors.error : AppColors.textPrimary;
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: urgent ? AppColors.errorLight : AppColors.grey100,
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        child: Text(
+          '${seconds}s',
+          style: _offerStyle(size: 13, weight: FontWeight.w700, color: color, letterSpacing: -0.4, tabular: true),
+        ),
+      ),
     );
   }
 }
@@ -352,12 +369,14 @@ class _FareRow extends StatelessWidget {
     required this.job,
     required this.tripDistance,
     required this.busy,
+    required this.acceptScale,
     required this.onAccept,
   });
 
   final MockJob job;
   final String tripDistance;
   final bool busy;
+  final Animation<double> acceptScale;
   final VoidCallback? onAccept;
 
   @override
@@ -366,14 +385,13 @@ class _FareRow extends StatelessWidget {
     final service = job.jobType.trim().isEmpty ? 'Ride' : job.jobType;
 
     return Row(
-      crossAxisAlignment: CrossAxisAlignment.center,
       children: [
         CircleAvatar(
-          radius: 22,
-          backgroundColor: AppColors.primary.withValues(alpha: 0.18),
+          radius: 20,
+          backgroundColor: AppColors.successLight,
           child: Text(
             initial,
-            style: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.w700, color: AppColors.primary),
+            style: _offerStyle(size: 16, weight: FontWeight.w700, color: AppColors.success),
           ),
         ),
         const SizedBox(width: 12),
@@ -384,28 +402,35 @@ class _FareRow extends StatelessWidget {
               Row(
                 children: [
                   Flexible(
-                    fit: FlexFit.loose,
                     child: Text(
                       formatMoney(job.payout),
-                      style: GoogleFonts.poppins(fontSize: 22, fontWeight: FontWeight.w700, color: _text, height: 1.1),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
+                      style: _offerStyle(
+                        size: 22,
+                        weight: FontWeight.w700,
+                        color: AppColors.textPrimary,
+                        letterSpacing: -0.6,
+                        height: 1.1,
+                        tabular: true,
+                      ),
                     ),
                   ),
                   const SizedBox(width: 8),
                   Flexible(
-                    fit: FlexFit.loose,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    child: DecoratedBox(
                       decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.08),
+                        color: AppColors.grey100,
                         borderRadius: BorderRadius.circular(20),
                       ),
-                      child: Text(
-                        service,
-                        style: GoogleFonts.poppins(fontSize: 11, fontWeight: FontWeight.w600, color: _muted),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        child: Text(
+                          service,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: _offerStyle(size: 12, weight: FontWeight.w600, color: AppColors.textSecondary),
+                        ),
                       ),
                     ),
                   ),
@@ -414,22 +439,32 @@ class _FareRow extends StatelessWidget {
               const SizedBox(height: 4),
               Row(
                 children: [
-                  const Icon(Icons.directions_car_filled, size: 14, color: _muted),
+                  const Icon(Icons.directions_car_filled, size: 14, color: AppColors.textSecondary),
                   const SizedBox(width: 4),
                   Flexible(
                     child: Text(
                       tripDistance,
-                      style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.w500, color: _muted),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
+                      style: _offerStyle(
+                        size: 12,
+                        weight: FontWeight.w600,
+                        color: AppColors.textSecondary,
+                        tabular: true,
+                      ),
                     ),
                   ),
-                  const SizedBox(width: 10),
-                  const Icon(Icons.schedule, size: 14, color: _muted),
+                  const SizedBox(width: 12),
+                  const Icon(Icons.schedule, size: 14, color: AppColors.textSecondary),
                   const SizedBox(width: 4),
                   Text(
                     job.eta,
-                    style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.w500, color: _muted),
+                    style: _offerStyle(
+                      size: 12,
+                      weight: FontWeight.w600,
+                      color: AppColors.textSecondary,
+                      tabular: true,
+                    ),
                   ),
                 ],
               ),
@@ -437,31 +472,28 @@ class _FareRow extends StatelessWidget {
           ),
         ),
         const SizedBox(width: 8),
-        Material(
-          color: AppColors.primary,
-          borderRadius: BorderRadius.circular(24),
-          child: InkWell(
-            onTap: onAccept,
+        ScaleTransition(
+          scale: acceptScale,
+          child: Material(
+            color: busy ? AppColors.primaryDark : AppColors.primary,
             borderRadius: BorderRadius.circular(24),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-              child: busy
-                  ? const SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.navy),
-                    )
-                  : Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          'Accept',
-                          style: GoogleFonts.poppins(fontSize: 14, fontWeight: FontWeight.w700, color: AppColors.navy),
-                        ),
-                        const SizedBox(width: 4),
-                        const Icon(Icons.arrow_forward_rounded, size: 16, color: AppColors.navy),
-                      ],
+            child: InkWell(
+              onTap: onAccept,
+              borderRadius: BorderRadius.circular(24),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      'Accept',
+                      style: _offerStyle(size: 14, weight: FontWeight.w700, color: AppColors.navy, letterSpacing: -0.2),
                     ),
+                    const SizedBox(width: 4),
+                    const Icon(Icons.arrow_forward_rounded, size: 16, color: AppColors.navy),
+                  ],
+                ),
+              ),
             ),
           ),
         ),
@@ -484,7 +516,7 @@ class _RouteBlock extends StatelessWidget {
     return Column(
       children: [
         _StopRow(
-          color: _pickup,
+          marker: const _PickupMark(),
           title: 'Pickup',
           badge: gpsActive ? AppLocalizations.of(context).gpsActive : null,
           address: pickup,
@@ -492,7 +524,7 @@ class _RouteBlock extends StatelessWidget {
         ),
         if (dropoff.isNotEmpty)
           _StopRow(
-            color: _dropoff,
+            marker: const _DropoffMark(),
             title: 'Drop off',
             address: dropoff,
             showRail: false,
@@ -502,16 +534,43 @@ class _RouteBlock extends StatelessWidget {
   }
 }
 
+class _PickupMark extends StatelessWidget {
+  const _PickupMark();
+
+  @override
+  Widget build(BuildContext context) {
+    return const DecoratedBox(
+      decoration: BoxDecoration(color: AppColors.success, shape: BoxShape.circle),
+      child: SizedBox(width: 8, height: 8),
+    );
+  }
+}
+
+class _DropoffMark extends StatelessWidget {
+  const _DropoffMark();
+
+  @override
+  Widget build(BuildContext context) {
+    return const DecoratedBox(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.all(Radius.circular(1)),
+        border: Border.fromBorderSide(BorderSide(color: AppColors.error, width: 1.5)),
+      ),
+      child: SizedBox(width: 8, height: 8),
+    );
+  }
+}
+
 class _StopRow extends StatelessWidget {
   const _StopRow({
-    required this.color,
+    required this.marker,
     required this.title,
     required this.address,
     required this.showRail,
     this.badge,
   });
 
-  final Color color;
+  final Widget marker;
   final String title;
   final String address;
   final bool showRail;
@@ -528,21 +587,13 @@ class _StopRow extends StatelessWidget {
             child: Column(
               children: [
                 const SizedBox(height: 4),
-                Container(
-                  width: 10,
-                  height: 10,
-                  decoration: BoxDecoration(
-                    color: color,
-                    shape: BoxShape.circle,
-                    boxShadow: [BoxShadow(color: color.withValues(alpha: 0.45), blurRadius: 6)],
-                  ),
-                ),
+                marker,
                 if (showRail)
                   Expanded(
                     child: Container(
-                      width: 2,
-                      margin: const EdgeInsets.symmetric(vertical: 3),
-                      color: Colors.white.withValues(alpha: 0.12),
+                      width: 1.5,
+                      margin: const EdgeInsets.symmetric(vertical: 4),
+                      color: AppColors.divider,
                     ),
                   ),
               ],
@@ -551,7 +602,7 @@ class _StopRow extends StatelessWidget {
           const SizedBox(width: 8),
           Expanded(
             child: Padding(
-              padding: EdgeInsets.only(bottom: showRail ? 10 : 0),
+              padding: EdgeInsets.only(bottom: showRail ? 12 : 0),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -559,23 +610,32 @@ class _StopRow extends StatelessWidget {
                     children: [
                       Text(
                         title,
-                        style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.w600, color: _muted),
+                        style: _offerStyle(size: 12, weight: FontWeight.w600, color: AppColors.textSecondary),
                       ),
                       if (badge != null) ...[
-                        Text('  ·  ', style: GoogleFonts.poppins(fontSize: 12, color: _muted)),
+                        Text(
+                          '  ·  ',
+                          style: _offerStyle(size: 12, weight: FontWeight.w500, color: AppColors.textSecondary),
+                        ),
                         Text(
                           badge!,
-                          style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.w600, color: _pickup),
+                          style: _offerStyle(size: 12, weight: FontWeight.w600, color: AppColors.success),
                         ),
                       ],
                     ],
                   ),
-                  const SizedBox(height: 2),
+                  const SizedBox(height: 4),
                   Text(
                     address,
-                    style: GoogleFonts.poppins(fontSize: 14, fontWeight: FontWeight.w600, color: _text, height: 1.25),
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
+                    style: _offerStyle(
+                      size: 14,
+                      weight: FontWeight.w600,
+                      color: AppColors.textPrimary,
+                      height: 1.25,
+                      letterSpacing: -0.2,
+                    ),
                   ),
                 ],
               ),
@@ -600,13 +660,13 @@ class _FooterActions extends StatelessWidget {
         TextButton(
           onPressed: onReject,
           style: TextButton.styleFrom(
-            foregroundColor: _muted,
+            foregroundColor: AppColors.textSecondary,
             visualDensity: VisualDensity.compact,
             padding: const EdgeInsets.symmetric(horizontal: 4),
           ),
           child: Text(
             AppLocalizations.of(context).decline,
-            style: GoogleFonts.poppins(fontSize: 13, fontWeight: FontWeight.w600),
+            style: _offerStyle(size: 13, weight: FontWeight.w600, color: AppColors.textSecondary),
           ),
         ),
         const Spacer(),
@@ -620,10 +680,28 @@ class _FooterActions extends StatelessWidget {
             ),
             child: Text(
               'Counter offer',
-              style: GoogleFonts.poppins(fontSize: 13, fontWeight: FontWeight.w600),
+              style: _offerStyle(size: 13, weight: FontWeight.w600, color: AppColors.primary),
             ),
           ),
       ],
     );
   }
+}
+
+TextStyle _offerStyle({
+  required double size,
+  required FontWeight weight,
+  required Color color,
+  double letterSpacing = 0,
+  double height = 1.2,
+  bool tabular = false,
+}) {
+  return GoogleFonts.plusJakartaSans(
+    fontSize: size,
+    fontWeight: weight,
+    color: color,
+    letterSpacing: letterSpacing,
+    height: height,
+    fontFeatures: tabular ? const [FontFeature.tabularFigures()] : null,
+  );
 }

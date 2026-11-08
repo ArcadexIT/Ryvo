@@ -1,6 +1,5 @@
 import 'dart:async';
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_stripe/flutter_stripe.dart';
@@ -8,6 +7,7 @@ import 'package:flutter_stripe/flutter_stripe.dart';
 import '../../core/location/location_service.dart';
 import '../../core/location/uk_places_search.dart';
 import '../../core/network/api_client.dart';
+import '../../core/network/api_exception.dart';
 import '../../core/payments/stripe_config.dart';
 import '../../core/network/push_messaging.dart';
 import '../../core/network/token_storage.dart';
@@ -105,7 +105,6 @@ final countriesProvider = FutureProvider<List<Country>>((ref) async {
 final isAuthenticatedProvider = StateProvider<bool>((ref) => false);
 
 final bottomNavIndexProvider = StateProvider<int>((ref) => 0);
-final selectedServiceProvider = StateProvider<String>((ref) => '');
 final bookNowProvider = StateProvider<bool>((ref) => true);
 final themeModeProvider = StateProvider<ThemeMode>((ref) => ThemeMode.light);
 
@@ -288,6 +287,10 @@ class JobRequestDraft {
 final jobDraftProvider =
     StateProvider<JobRequestDraft>((ref) => JobRequestDraft());
 
+/// Stripe payment method saved from Profile or the payment sheet this session.
+/// Checkout charges this card when the rider pays by card.
+final savedStripeCardIdProvider = StateProvider<String?>((ref) => null);
+
 /// True only while this session is inserting a job and taking payment.
 /// A home refresh must not cancel that job out from under the payment sheet.
 final paymentCheckoutInProgressProvider = StateProvider<bool>((ref) => false);
@@ -430,7 +433,8 @@ Future<void> bootstrapAuth(WidgetRef ref) async {
   ref.invalidate(vehiclesProvider);
   ref.invalidate(jobsListProvider);
   // Socket + FCM must not block splash navigation on a slow cold start.
-  unawaited(_afterLogin(ref));
+  final container = _providerContainerFromNavigator();
+  if (container != null) unawaited(_finishLogin(container));
 }
 
 /// Unverified accounts must finish the OTP step before the rest of the app.
@@ -453,54 +457,32 @@ Future<void> _syncPhoneVerification(WidgetRef ref) async {
 Future<void> signIn(WidgetRef ref, String phone, String password) async {
   await ref.read(authRepositoryProvider).login(phone, password);
   await _syncPhoneVerification(ref);
+  // Grab the container before auth flips. The router replaces the login route
+  // in that same turn, and the page's [WidgetRef] dies with it.
+  final container = _providerContainerFromNavigator();
   ref.read(isAuthenticatedProvider.notifier).state = true;
-  ref.invalidate(profileProvider);
-  ref.invalidate(vehiclesProvider);
-  ref.invalidate(walletBalanceProvider);
-  ref.invalidate(jobsListProvider);
-  ref.invalidate(serviceCategoriesProvider);
-  await _afterLogin(ref);
+  if (container == null) return;
+  container.invalidate(profileProvider);
+  container.invalidate(vehiclesProvider);
+  container.invalidate(walletBalanceProvider);
+  container.invalidate(jobsListProvider);
+  container.invalidate(serviceCategoriesProvider);
+  await _finishLogin(container);
 }
 
 /// Public entry point for post-auth side effects (used after OTP verify).
-Future<void> afterLogin(WidgetRef ref) => _afterLogin(ref);
+Future<void> afterLogin(WidgetRef ref) async {
+  final container = _providerContainerFromNavigator();
+  if (container == null) return;
+  container.invalidate(profileProvider);
+  await _finishLogin(container);
+}
 
 bool _fcmRefreshListening = false;
 
-/// Registers the device FCM token with the API when push is ready and user is logged in.
-Future<void> syncFcmToken(WidgetRef ref) async {
-  if (!ref.read(isAuthenticatedProvider)) return;
-
-  try {
-    await PushMessaging.instance.whenReady();
-    final token = await PushMessaging.instance.getToken();
-    if (token != null && token.isNotEmpty) {
-      await ref.read(notificationRepositoryProvider).registerFcmToken(token);
-      debugPrint('FCM token registered with API');
-    } else {
-      debugPrint('FCM token not available — will retry on token refresh');
-    }
-
-    if (!_fcmRefreshListening) {
-      _fcmRefreshListening = true;
-      final container = _providerContainerFromNavigator();
-      if (container == null) return;
-      PushMessaging.instance.onTokenRefresh.listen((t) {
-        if (!container.read(isAuthenticatedProvider)) return;
-        container
-            .read(notificationRepositoryProvider)
-            .registerFcmToken(t)
-            .catchError((_) {});
-      });
-    }
-  } catch (e) {
-    debugPrint('FCM token registration skipped: $e');
-  }
-}
-
 ProviderContainer? _providerContainerFromNavigator() {
   final context = rootNavigatorKey.currentContext;
-  if (context == null || !context.mounted) return null;
+  if (context == null || !isContextActive(context)) return null;
   return ProviderScope.containerOf(context, listen: false);
 }
 
@@ -534,11 +516,11 @@ Future<void> syncFcmTokenWithContainer(ProviderContainer container) async {
 }
 
 /// Post-auth side effects: open the realtime socket and register the FCM token.
-Future<void> _afterLogin(WidgetRef ref) async {
+Future<void> _finishLogin(ProviderContainer container) async {
   try {
-    await ref.read(trackingSocketProvider).connect();
+    await container.read(trackingSocketProvider).connect();
   } catch (_) {}
-  await syncFcmToken(ref);
+  await syncFcmTokenWithContainer(container);
 }
 
 Future<void> signOut(WidgetRef ref) async {
@@ -553,8 +535,49 @@ Future<void> signOut(WidgetRef ref) async {
   ref.invalidate(profileProvider);
 }
 
+/// False once a route has been replaced. [State.mounted] stays true until
+/// dispose, so it still allows ancestor lookups that Flutter rejects.
+bool isContextActive(BuildContext context) {
+  if (!context.mounted) return false;
+  var active = true;
+  assert(() {
+    active = (context as Element).debugIsActive;
+    return true;
+  }());
+  return active;
+}
+
+BuildContext? activeRootContext() {
+  final context = rootNavigatorKey.currentContext;
+  if (context == null || !isContextActive(context)) return null;
+  return context;
+}
+
+/// Drops the IME before a route replacement. A closing keyboard still notifies
+/// [MediaQuery] after the old page is deactivated, which throws
+/// "Looking up a deactivated widget's ancestor is unsafe."
+Future<void> dismissKeyboard() async {
+  FocusManager.instance.primaryFocus?.unfocus();
+  final deadline = DateTime.now().add(const Duration(milliseconds: 400));
+  while (DateTime.now().isBefore(deadline)) {
+    if (!_keyboardInsetOpen()) return;
+    await Future<void>.delayed(const Duration(milliseconds: 40));
+  }
+}
+
+bool _keyboardInsetOpen() {
+  final views = WidgetsBinding.instance.platformDispatcher.views;
+  if (views.isEmpty) return false;
+  final view = views.first;
+  final ratio = view.devicePixelRatio;
+  if (ratio == 0) return false;
+  return view.viewInsets.bottom / ratio > 1;
+}
+
 void showApiError(BuildContext context, Object error) {
+  if (!isContextActive(context)) return;
   final message = switch (error) {
+    ApiException(:final message) => message,
     RyvoStripeConfigException(:final message) => message,
     StripeException(:final error) =>
       error.localizedMessage ?? 'Payment failed. Please try again.',

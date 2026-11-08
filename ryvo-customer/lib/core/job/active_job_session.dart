@@ -44,7 +44,8 @@ String effectiveCustomerJobStatus(JobModel job) {
   }
   if (status == 'no_provider_found') return status;
   if (status == 'payment_pending') {
-    final paymentSecured = job.paymentStatus == 'held' || job.paymentStatus == 'paid';
+    final paymentSecured =
+        job.paymentStatus == 'held' || job.paymentStatus == 'paid';
     if (job.startedAt != null) return 'completed';
     if (job.provider != null) return 'matched';
     if (paymentSecured) return 'searching';
@@ -55,7 +56,9 @@ String effectiveCustomerJobStatus(JobModel job) {
 bool isResumableCustomerJob(JobModel? job) {
   if (job == null) return false;
   final status = effectiveCustomerJobStatus(job);
-  if (status == 'completed' || status.startsWith('cancelled') || status == 'no_provider_found') {
+  if (status == 'completed' ||
+      status.startsWith('cancelled') ||
+      status == 'no_provider_found') {
     return false;
   }
   return customerResumableStatuses.contains(status);
@@ -174,11 +177,6 @@ void applyActiveJobSession(ProviderContainer container, JobModel job) {
           )
         : current.estimate,
   );
-
-  if (job.serviceCategory?.name != null) {
-    container.read(selectedServiceProvider.notifier).state =
-        job.serviceCategory!.name;
-  }
 
   container.read(trackingSocketProvider).connect().then((_) {
     container.read(trackingSocketProvider).subscribeJob(job.id);

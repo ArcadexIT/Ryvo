@@ -75,11 +75,21 @@ double checkoutFare(JobRequestDraft draft, AppConfig config) {
 }
 
 Future<AppConfig> loadCheckoutConfig(WidgetRef ref) async {
-  var config = ref.read(appConfigProvider).valueOrNull;
-  if (config == null || (config.stripePublishableKey ?? '').trim().isEmpty) {
-    config = await fetchAppConfig();
+  // Always read the publishable key just saved in admin. A cached key from
+  // another Stripe account makes the payment sheet reject the client secret.
+  ref.invalidate(appConfigProvider);
+  return ref.read(appConfigProvider.future);
+}
+
+String stripeSheetErrorText(StripeException error, String fallback) {
+  final raw = '${error.error.localizedMessage ?? ''} ${error.error.message}'.toLowerCase();
+  if (raw.contains('client_secret') && raw.contains('does not match')) {
+    return 'The card sheet could not open because the Stripe publishable key '
+        'and the server secret key are from different accounts. In Stripe, open '
+        'Developers → API keys and copy the secret key beside the publishable key '
+        'saved in admin Settings → Billing. Save that secret key there and try again.';
   }
-  return config;
+  return error.error.localizedMessage ?? fallback;
 }
 
 Future<bool> detectPlatformPaySupport(AppConfig config, {required bool google}) async {
@@ -292,10 +302,17 @@ class CustomerCheckout {
 
       if (job == null) {
         container.read(paymentAwaitingConfirmationProvider.notifier).state = false;
-        String? savedCard = savedCardId;
+        var savedCard = savedCardId;
         final method = (selected == 'wallet' || selected == 'cash') ? selected : 'stripe';
+        if (selected == 'stripe' && (savedCard == null || savedCard.isEmpty)) {
+          savedCard = _ref.read(savedStripeCardIdProvider);
+        }
         if (method == 'stripe' && (savedCard == null || savedCard.isEmpty)) {
-          savedCard = await saveCard(context);
+          final saved = await saveCard(context);
+          savedCard = saved;
+          if (saved.isNotEmpty) {
+            container.read(savedStripeCardIdProvider.notifier).state = saved;
+          }
         }
         final created = await createJobFromDraft(
           paymentMethod: method,
@@ -363,7 +380,7 @@ class CustomerCheckout {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              e.error.localizedMessage ?? l10n.paymentFailedPleaseTryAgain,
+              stripeSheetErrorText(e, l10n.paymentFailedPleaseTryAgain),
               style: GoogleFonts.poppins(),
             ),
             backgroundColor: Colors.red.shade700,
@@ -421,6 +438,24 @@ class CustomerCheckout {
       throw RyvoStripeConfigException('No card was saved.');
     }
     return setup.paymentMethodId;
+  }
+
+  /// Presents the Stripe sheet and keeps the saved card for later card payments.
+  /// Returns null when the rider cancels or setup fails.
+  Future<String?> saveCardForLater(BuildContext context) async {
+    try {
+      final id = await saveCard(context);
+      _ref.read(savedStripeCardIdProvider.notifier).state = id;
+      return id;
+    } on StripeException catch (e) {
+      if (e.error.code != FailureCode.Canceled && context.mounted) {
+        showApiError(context, stripeSheetErrorText(e, e.error.localizedMessage ?? 'Could not save the card.'));
+      }
+      return null;
+    } catch (e) {
+      if (context.mounted) showApiError(context, e);
+      return null;
+    }
   }
 
   /// Closes an unpaid checkout the way the payment page back button did.

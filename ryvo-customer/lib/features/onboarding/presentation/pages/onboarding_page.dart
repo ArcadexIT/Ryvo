@@ -1,10 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import 'package:google_fonts/google_fonts.dart';
-import 'package:smooth_page_indicator/smooth_page_indicator.dart';
-import '../../../../core/theme/app_colors.dart';
-import '../../../../shared/widgets/widgets.dart';
 import 'package:ryvo_customer/l10n/app_localizations.dart';
+import 'package:smooth_page_indicator/smooth_page_indicator.dart';
+
+import '../../../../core/theme/app_colors.dart';
+import '../../../../core/theme/app_spacing.dart';
+import '../../../../core/theme/app_theme.dart';
+import '../../../../shared/widgets/ryvo_button.dart';
+import '../widgets/onboarding_visual_stage.dart';
+
 class OnboardingPage extends StatefulWidget {
   const OnboardingPage({super.key});
 
@@ -13,29 +17,10 @@ class OnboardingPage extends StatefulWidget {
 }
 
 class _OnboardingPageState extends State<OnboardingPage> {
-  final _controller = PageController();
+  final PageController _controller = PageController();
   int _currentPage = 0;
 
-  List<_OnboardingSlide> _slides(BuildContext context) => [
-    _OnboardingSlide(
-      icon: Icons.bolt_rounded,
-      title: AppLocalizations.of(context).instantJumpStart,
-      subtitle: AppLocalizations.of(context).strandedWithADeadBatteryGetAVerifiedProviderToYo,
-      iconBgColor: AppColors.primary,
-    ),
-    _OnboardingSlide(
-      icon: Icons.shield_outlined,
-      title: AppLocalizations.of(context).verifiedTrusted,
-      subtitle: AppLocalizations.of(context).everyProviderIsBackgroundCheckedCertifiedAndRate,
-      iconBgColor: AppColors.success,
-    ),
-    _OnboardingSlide(
-      icon: Icons.location_on_outlined,
-      title: AppLocalizations.of(context).liveTracking,
-      subtitle: AppLocalizations.of(context).watchYourProviderNavigateToYouInRealTimeKnowExac,
-      iconBgColor: AppColors.info,
-    ),
-  ];
+  static const int _pageCount = 3;
 
   @override
   void dispose() {
@@ -43,72 +28,188 @@ class _OnboardingPageState extends State<OnboardingPage> {
     super.dispose();
   }
 
+  void _continue() {
+    if (_currentPage >= _pageCount - 1) {
+      context.go('/login');
+      return;
+    }
+    _controller.nextPage(
+      duration: const Duration(milliseconds: 280),
+      curve: Curves.fastOutSlowIn,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    final slides = <({String title, String body})>[
+      (
+        title: l10n.instantJumpStart,
+        body: l10n.strandedWithADeadBatteryGetAVerifiedProviderToYo,
+      ),
+      (
+        title: l10n.verifiedTrusted,
+        body: l10n.everyProviderIsBackgroundCheckedCertifiedAndRate,
+      ),
+      (
+        title: l10n.liveTracking,
+        body: l10n.watchYourProviderNavigateToYouInRealTimeKnowExac,
+      ),
+    ];
+    final bottomInset = MediaQuery.paddingOf(context).bottom;
+
     return Scaffold(
       backgroundColor: AppColors.background,
-      body: SafeArea(
-        child: Column(
-          children: [
-            const Padding(
-              padding: EdgeInsets.only(top: 16),
-              child: Center(
-                child: AppLogo(size: 30, variant: AppLogoVariant.wordmark),
+      body: LayoutBuilder(
+        builder: (context, constraints) {
+          final sheetTop = constraints.maxHeight * 0.60;
+          return Stack(
+            children: [
+              Positioned(
+                top: 0,
+                left: 0,
+                right: 0,
+                height: sheetTop + 28,
+                child: OnboardingVisualStage(controller: _controller),
               ),
-            ),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                TextButton(
-                  onPressed: () => context.go('/login'),
-                  child: Text(
-                    AppLocalizations.of(context).skip,
-                    style: GoogleFonts.poppins(
-                      color: AppColors.textSecondary,
-                      fontSize: 14,
+              Positioned(
+                left: 0,
+                right: 0,
+                top: sheetTop,
+                bottom: 0,
+                child: const _OnboardingSheet(),
+              ),
+              PageView(
+                controller: _controller,
+                scrollBehavior: const _QuietScrollBehavior(),
+                onPageChanged: (index) {
+                  setState(() => _currentPage = index);
+                },
+                children: [
+                  for (final slide in slides)
+                    _SlideCopy(
+                      key: ValueKey<String>(slide.title),
+                      top: sheetTop + 28,
+                      title: slide.title,
+                      body: slide.body,
+                    ),
+                ],
+              ),
+              Positioned(
+                left: 24,
+                right: 24,
+                bottom: bottomInset + 16,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    IgnorePointer(
+                      child: SmoothPageIndicator(
+                        controller: _controller,
+                        count: slides.length,
+                        effect: ExpandingDotsEffect(
+                          activeDotColor: AppColors.primary,
+                          dotColor: AppColors.textHint,
+                          dotHeight: 6,
+                          dotWidth: 6,
+                          expansionFactor: 3,
+                          spacing: 6,
+                          radius: 3,
+                        ),
+                      ),
+                    ),
+                    AppSpacing.h20,
+                    RyvoButton(
+                      label: _currentPage == slides.length - 1
+                          ? l10n.getStarted
+                          : l10n.next,
+                      onPressed: _continue,
+                    ),
+                  ],
+                ),
+              ),
+              Positioned(
+                top: 0,
+                right: 0,
+                child: SafeArea(
+                  bottom: false,
+                  child: Padding(
+                    padding: const EdgeInsets.only(top: 8, right: 16),
+                    child: _SkipPill(
+                      label: l10n.skip,
+                      onPressed: () => context.go('/login'),
                     ),
                   ),
                 ),
-              ],
-            ),
-            Expanded(
-              child: PageView.builder(
-                controller: _controller,
-                itemCount: _slides(context).length,
-                onPageChanged: (i) => setState(() => _currentPage = i),
-                itemBuilder: (_, i) => _SlideWidget(slide: _slides(context)[i]),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _OnboardingSheet extends StatelessWidget {
+  const _OnboardingSheet();
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: AppColors.modal,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+        border: Border.all(color: AppColors.divider),
+      ),
+      child: const SizedBox.expand(),
+    );
+  }
+}
+
+class _SlideCopy extends StatelessWidget {
+  const _SlideCopy({
+    super.key,
+    required this.top,
+    required this.title,
+    required this.body,
+  });
+
+  final double top;
+  final String title;
+  final String body;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      child: Padding(
+        padding: EdgeInsets.only(top: top, left: 24, right: 24),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              title,
+              maxLines: 3,
+              overflow: TextOverflow.ellipsis,
+              style: RyvoTypography.style(
+                fontSize: 28,
+                fontWeight: FontWeight.w700,
+                color: AppColors.textPrimary,
+                letterSpacing: -0.6,
+                height: 1.12,
               ),
             ),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
-              child: Column(
-                children: [
-                  SmoothPageIndicator(
-                    controller: _controller,
-                    count: _slides(context).length,
-                    effect: ExpandingDotsEffect(
-                      activeDotColor: AppColors.primary,
-                      dotColor: AppColors.grey700,
-                      dotHeight: 8,
-                      dotWidth: 8,
-                      expansionFactor: 3,
-                    ),
-                  ),
-                  const SizedBox(height: 32),
-                  RyvoButton(
-                    label: _currentPage == _slides(context).length - 1 ? AppLocalizations.of(context).getStarted : AppLocalizations.of(context).next,
-                    onPressed: () {
-                      if (_currentPage < _slides(context).length - 1) {
-                        _controller.nextPage(
-                          duration: const Duration(milliseconds: 300),
-                          curve: Curves.easeInOut,
-                        );
-                      } else {
-                        context.go('/login');
-                      }
-                    },
-                  ),
-                ],
+            AppSpacing.h8,
+            Text(
+              body,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: RyvoTypography.style(
+                fontSize: 15,
+                fontWeight: FontWeight.w500,
+                color: AppColors.textSecondary,
+                letterSpacing: -0.2,
+                height: 1.35,
               ),
             ),
           ],
@@ -118,72 +219,46 @@ class _OnboardingPageState extends State<OnboardingPage> {
   }
 }
 
-class _OnboardingSlide {
-  final IconData icon;
-  final String title;
-  final String subtitle;
-  final Color iconBgColor;
-  const _OnboardingSlide({
-    required this.icon,
-    required this.title,
-    required this.subtitle,
-    required this.iconBgColor,
-  });
-}
+class _SkipPill extends StatelessWidget {
+  const _SkipPill({required this.label, required this.onPressed});
 
-class _SlideWidget extends StatelessWidget {
-  final _OnboardingSlide slide;
-  const _SlideWidget({required this.slide});
+  final String label;
+  final VoidCallback onPressed;
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 32),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Container(
-            width: 140,
-            height: 140,
-            decoration: BoxDecoration(
-              color: slide.iconBgColor.withOpacity(0.15),
-              shape: BoxShape.circle,
-            ),
-            child: Center(
-              child: Container(
-                width: 100,
-                height: 100,
-                decoration: BoxDecoration(
-                  color: slide.iconBgColor.withOpacity(0.2),
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(slide.icon, color: slide.iconBgColor, size: 52),
-              ),
-            ),
-          ),
-          const SizedBox(height: 48),
-          Text(
-            slide.title,
-            style: GoogleFonts.poppins(
-              fontSize: 26,
-              fontWeight: FontWeight.w700,
-              color: AppColors.textPrimary,
-            ),
-            textAlign: TextAlign.center,
-          ),
-          const SizedBox(height: 16),
-          Text(
-            slide.subtitle,
-            style: GoogleFonts.poppins(
-              fontSize: 15,
-              fontWeight: FontWeight.w400,
+    return Material(
+      color: AppColors.modal,
+      shape: StadiumBorder(side: BorderSide(color: AppColors.divider)),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onPressed,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+          child: Text(
+            label,
+            style: RyvoTypography.style(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
               color: AppColors.textSecondary,
-              height: 1.6,
+              letterSpacing: -0.2,
             ),
-            textAlign: TextAlign.center,
           ),
-        ],
+        ),
       ),
     );
+  }
+}
+
+class _QuietScrollBehavior extends MaterialScrollBehavior {
+  const _QuietScrollBehavior();
+
+  @override
+  Widget buildOverscrollIndicator(
+    BuildContext context,
+    Widget child,
+    ScrollableDetails details,
+  ) {
+    return child;
   }
 }

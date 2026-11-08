@@ -1,14 +1,17 @@
-import 'package:flutter/foundation.dart';
-
 class AppConstants {
   AppConstants._();
 
   /// NestJS API base URL (includes `/api/v1`).
-  /// Debug builds talk to the local API so the driver demo code 123456 works.
+  ///
+  /// `10.0.2.2` only exists inside the Android emulator, and only when a
+  /// local API is running. Debug builds used to call it, so `GET /countries`
+  /// failed and the dial code never appeared on login, register, or reset
+  /// password. Debug and release both use the live API unless API_BASE_URL
+  /// is set, for example
+  /// `--dart-define=API_BASE_URL=http://10.0.2.2:4000/api/v1`.
   static String get apiBaseUrl {
     const override = String.fromEnvironment('API_BASE_URL');
     if (override.isNotEmpty) return override;
-    if (kDebugMode) return 'http://10.0.2.2:4000/api/v1';
     return 'https://ryvo.arcadexit.com/api/v1';
   }
 

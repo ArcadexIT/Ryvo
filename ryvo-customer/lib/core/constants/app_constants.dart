@@ -1,17 +1,17 @@
-import 'package:flutter/foundation.dart';
-
 class AppConstants {
   AppConstants._();
 
   static const appName = 'Ryvo';
 
   /// NestJS API base URL (includes `/api/v1`).
-  /// Debug builds use the local API. The live server has no SMS sender, so
-  /// rider registration fails there with a server error.
+  ///
+  /// `10.0.2.2` only exists inside the Android emulator. A physical phone
+  /// cannot open it, so the country request sat until Dio aborted it.
+  /// Debug and release both use the live API unless API_BASE_URL is set,
+  /// for example `--dart-define=API_BASE_URL=http://10.0.2.2:4000/api/v1`.
   static String get apiBaseUrl {
     const override = String.fromEnvironment('API_BASE_URL');
     if (override.isNotEmpty) return override;
-    if (kDebugMode) return 'http://10.0.2.2:4000/api/v1';
     return 'https://ryvo.arcadexit.com/api/v1';
   }
 
@@ -34,7 +34,7 @@ class AppConstants {
   /// Override at build time: --dart-define=STRIPE_KEY=pk_live_...
   static const stripePublishableKeyFallback = String.fromEnvironment(
     'STRIPE_KEY',
-    defaultValue: '',
+    defaultValue: 'pk_test_51UXu3RFNK9Lsb92osv6F0rPKqZiB6p8kjTWlPKV6QJFzEJhw6hirtrWQ4OIDmoIBxF6pjxJz59odPKddNyCguCFB00684hz4LX',
   );
 
   /// Apple Pay merchant ID from the Apple Developer account, e.g.

@@ -1,4 +1,3 @@
-import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../../core/theme/app_colors.dart';
@@ -12,61 +11,58 @@ class EarningsBarChart extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final data = values.isEmpty ? List<double>.filled(7, 0) : values;
+    final data = List<double>.generate(7, (i) => i < values.length ? values[i] : 0);
     final maxVal = data.fold<double>(0, (m, v) => v > m ? v : m);
-    final maxY = maxVal <= 0 ? 100.0 : (maxVal * 1.2);
 
-    return Container(
-      height: 200,
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.divider),
-      ),
-      child: BarChart(
-        BarChartData(
-          alignment: BarChartAlignment.spaceAround,
-          maxY: maxY,
-          barTouchData: BarTouchData(enabled: false),
-          titlesData: FlTitlesData(
-            show: true,
-            bottomTitles: AxisTitles(
-              sideTitles: SideTitles(
-                showTitles: true,
-                getTitlesWidget: (value, _) {
-                  final i = value.toInt();
-                  if (i < 0 || i >= _weekDays.length) return const SizedBox.shrink();
-                  return Text(_weekDays[i], style: GoogleFonts.poppins(fontSize: 10, color: AppColors.textSecondary));
-                },
-              ),
-            ),
-            leftTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-            topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-            rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-          ),
-          gridData: FlGridData(
-            show: true,
-            drawVerticalLine: false,
-            horizontalInterval: maxY / 4,
-            getDrawingHorizontalLine: (_) => FlLine(color: AppColors.divider, strokeWidth: 0.5),
-          ),
-          borderData: FlBorderData(show: false),
-          barGroups: List.generate(data.length, (i) {
-            return BarChartGroupData(
-              x: i,
-              barRods: [
-                BarChartRodData(
-                  toY: data[i],
-                  color: AppColors.primary,
-                  width: 16,
-                  borderRadius: const BorderRadius.vertical(top: Radius.circular(6)),
+    return Column(
+      children: [
+        SizedBox(
+          height: 104,
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: List.generate(7, (i) {
+              final value = data[i];
+              final isPeak = maxVal > 0 && value == maxVal;
+              final height = maxVal <= 0 || value <= 0 ? 2.0 : 6 + (value / maxVal) * 98;
+              return Expanded(
+                child: Align(
+                  alignment: Alignment.bottomCenter,
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 220),
+                    curve: Curves.fastOutSlowIn,
+                    width: 7,
+                    height: height,
+                    decoration: BoxDecoration(
+                      color: isPeak ? AppColors.primary : AppColors.grey300,
+                      borderRadius: BorderRadius.circular(99),
+                    ),
+                  ),
                 ),
-              ],
+              );
+            }),
+          ),
+        ),
+        const SizedBox(height: 8),
+        Container(height: 1, color: AppColors.divider),
+        const SizedBox(height: 8),
+        Row(
+          children: List.generate(7, (i) {
+            final value = data[i];
+            final isPeak = maxVal > 0 && value == maxVal;
+            return Expanded(
+              child: Text(
+                _weekDays[i],
+                textAlign: TextAlign.center,
+                style: GoogleFonts.plusJakartaSans(
+                  fontSize: 11,
+                  fontWeight: isPeak ? FontWeight.w700 : FontWeight.w500,
+                  color: isPeak ? AppColors.textPrimary : AppColors.textHint,
+                ),
+              ),
             );
           }),
         ),
-      ),
+      ],
     );
   }
 }

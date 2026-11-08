@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../../../../core/theme/app_colors.dart';
+import '../../../../shared/widgets/ryvo_close_button.dart';
 import '../../../../shared/providers/app_providers.dart';
 import '../../../../shared/widgets/ryvo_button.dart';
 import '../../domain/customer_invoice.dart';
@@ -86,6 +87,8 @@ class _InvoicesPageState extends ConsumerState<InvoicesPage> {
       backgroundColor: AppColors.background,
       appBar: AppBar(
         backgroundColor: AppColors.background,
+        automaticallyImplyLeading: false,
+        leading: const RyvoCloseButton(),
         title: Text('Invoices', style: GoogleFonts.poppins(fontWeight: FontWeight.w600)),
       ),
       body: _loading
@@ -191,7 +194,7 @@ class _EmptyInvoices extends StatelessWidget {
             width: 72,
             height: 72,
             decoration: BoxDecoration(
-              color: AppColors.primary.withOpacity(0.12),
+              color: AppColors.primary.withValues(alpha: 0.12),
               shape: BoxShape.circle,
             ),
             child: const Icon(Icons.receipt_long_outlined, color: AppColors.primary, size: 32),
@@ -242,7 +245,7 @@ class _InvoiceCard extends StatelessWidget {
                 width: 44,
                 height: 44,
                 decoration: BoxDecoration(
-                  color: AppColors.primary.withOpacity(0.12),
+                  color: AppColors.primary.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Icon(serviceIcon(invoice.serviceSlug, invoice.serviceIcon), color: AppColors.primary, size: 22),
