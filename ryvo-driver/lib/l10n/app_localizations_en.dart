@@ -593,6 +593,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get logout => 'Logout';
 
   @override
+  String get logoutConfirmBody =>
+      'You will need to sign in again to get back online.';
+
+  @override
   String get jobHistory => 'Job History';
 
   @override

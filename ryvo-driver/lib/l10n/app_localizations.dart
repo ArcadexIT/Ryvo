@@ -1234,6 +1234,12 @@ abstract class AppLocalizations {
   /// **'Logout'**
   String get logout;
 
+  /// No description provided for @logoutConfirmBody.
+  ///
+  /// In en, this message translates to:
+  /// **'You will need to sign in again to get back online.'**
+  String get logoutConfirmBody;
+
   /// No description provided for @jobHistory.
   ///
   /// In en, this message translates to:
