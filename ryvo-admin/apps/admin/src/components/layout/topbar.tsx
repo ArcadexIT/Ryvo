@@ -37,7 +37,7 @@ export function Topbar() {
   const { open, openPalette, closePalette } = useCommandPalette();
   const { notifications, unreadCount, markAsRead, markAllAsRead } = useNotifications();
   const { user, logout } = useAuth();
-  const { setMobileOpen, toggleCollapsed } = useSidebar();
+  const { setMobileOpen } = useSidebar();
   const [scrolled, setScrolled] = useState(false);
 
   const displayName = user?.fullName ?? 'Admin';
@@ -49,30 +49,30 @@ export function Topbar() {
     <>
       <header
         className={cn(
-          'flex h-16 shrink-0 items-center gap-3 border-b border-border bg-elevated px-4',
-          scrolled && 'shadow-sm',
+          'flex h-14 shrink-0 items-center gap-3 border-b border-hairline bg-sheet px-4',
+          scrolled && 'border-hairline',
         )}
         onScrollCapture={(e) => setScrolled((e.target as HTMLElement).scrollTop > 0)}
       >
         <div className="flex min-w-0 flex-1 items-center gap-3">
           <button
             type="button"
-            className="rounded-lg p-2 text-secondary hover:bg-surface"
-            onClick={() => (window.innerWidth < 1024 ? setMobileOpen(true) : toggleCollapsed())}
-            aria-label="Toggle menu"
+            className="rounded-md p-2 text-secondary hover:bg-input lg:hidden"
+            onClick={() => setMobileOpen(true)}
+            aria-label="Open menu"
           >
-            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+            <svg className="size-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
             </svg>
           </button>
           <button
             type="button"
             onClick={openPalette}
-            className="hidden h-10 max-w-xl flex-1 items-center gap-2 rounded-full border border-border bg-surface px-4 text-sm text-muted transition-colors hover:bg-elevated md:flex"
+            className="hidden h-9 max-w-xl flex-1 items-center gap-2 rounded-full bg-input px-4 text-sm text-muted transition-colors duration-150 hover:border hover:border-hairline md:flex"
           >
-            <Search className="h-4 w-4 shrink-0" />
-            <span className="flex-1 text-left">Search anything...</span>
-            <kbd className="rounded-md border border-border bg-elevated px-1.5 py-0.5 text-[10px] text-secondary">⌘K</kbd>
+            <Search className="size-4 shrink-0" strokeWidth={1.75} />
+            <span className="flex-1 text-left">Search riders, trips, payouts…</span>
+            <kbd className="num rounded-md border border-hairline bg-sheet px-1.5 py-0.5 text-[11px] text-muted">⌘K</kbd>
           </button>
         </div>
 
@@ -144,7 +144,7 @@ export function Topbar() {
                 type="button"
                 className="ml-1 flex items-center gap-2 rounded-full py-1 pl-1 pr-2 transition-colors hover:bg-surface"
               >
-                <Avatar name={displayName} size="sm" className="bg-[#efe4ff] text-[#7c3aed]" />
+                <Avatar name={displayName} size="sm" />
                 <span className="hidden text-sm font-medium text-primary lg:block">{displayName}</span>
                 <ChevronDown className="hidden h-4 w-4 text-muted lg:block" />
               </button>

@@ -24,11 +24,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   useSyncPlatformCurrency();
   return (
     <AuthGuard>
-      <div className="flex h-screen overflow-hidden bg-base">
+      <div className="flex h-screen gap-2 overflow-hidden bg-canvas p-2">
         <Sidebar />
-        <div className="flex min-w-0 flex-1 flex-col overflow-hidden bg-base">
+        <div className="flex min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-hairline bg-sheet">
           <Topbar />
-          <main className="flex flex-1 flex-col overflow-hidden pb-14 lg:pb-0">{children}</main>
+          <main className="flex min-h-0 flex-1 flex-col overflow-hidden pb-14 lg:pb-0">{children}</main>
         </div>
       </div>
     </AuthGuard>

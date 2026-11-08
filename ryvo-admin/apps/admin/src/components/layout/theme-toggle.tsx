@@ -1,30 +1,46 @@
 'use client';
 
-import { Moon, Sun } from 'lucide-react';
+import { Monitor, Moon, Sun } from 'lucide-react';
 import { useTheme } from '@/hooks/use-theme';
 import { Button } from '@/components/ui/button';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import type { ThemePreference } from '@/contexts/theme-context';
 import { cn } from '@/lib/utils';
 
-interface ThemeToggleProps {
-  className?: string;
-}
+const OPTIONS: { value: ThemePreference; label: string; icon: typeof Sun }[] = [
+  { value: 'light', label: 'Light', icon: Sun },
+  { value: 'dark', label: 'Dark', icon: Moon },
+  { value: 'system', label: 'System', icon: Monitor },
+];
 
-export function ThemeToggle({ className }: ThemeToggleProps) {
-  const { theme, toggleTheme } = useTheme();
+export function ThemeToggle({ className }: { className?: string }) {
+  const { theme, preference, setTheme } = useTheme();
+  const Active = theme === 'dark' ? Moon : Sun;
 
   return (
-    <Button
-      variant="ghost"
-      size="icon"
-      onClick={toggleTheme}
-      aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
-      className={cn('relative text-secondary hover:text-primary', className)}
-    >
-      {theme === 'dark' ? (
-        <Sun key="sun" className="h-[18px] w-[18px] theme-icon-animate" />
-      ) : (
-        <Moon key="moon" className="h-[18px] w-[18px] theme-icon-animate" />
-      )}
-    </Button>
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button variant="ghost" size="icon" aria-label="Theme" className={cn('text-secondary', className)}>
+          <Active strokeWidth={1.75} />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end">
+        {OPTIONS.map((option) => {
+          const Icon = option.icon;
+          return (
+            <DropdownMenuItem key={option.value} onClick={() => setTheme(option.value)}>
+              <Icon className="size-4" strokeWidth={1.75} />
+              <span className="flex-1">{option.label}</span>
+              {preference === option.value ? <span className="size-1.5 rounded-full bg-success" /> : null}
+            </DropdownMenuItem>
+          );
+        })}
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }

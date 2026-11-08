@@ -29,7 +29,10 @@ const themeScript = `
       localStorage.setItem('ryvo-theme-visual', 'studio-light');
     }
     var stored = localStorage.getItem('ryvo-theme');
-    var theme = stored === 'dark' ? 'dark' : 'light';
+    var preference = stored === 'dark' || stored === 'light' || stored === 'system' ? stored : 'light';
+    var theme = preference === 'system'
+      ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
+      : preference;
     var root = document.documentElement;
     root.setAttribute('data-theme', theme);
     root.classList.remove('light', 'dark');
