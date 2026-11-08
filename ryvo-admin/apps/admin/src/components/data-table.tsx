@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { ChevronDown, ChevronUp, Search } from 'lucide-react';
+import { ChevronDown, ChevronUp, ChevronsUpDown, Columns3, Rows3, Search } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { EmptyState } from '@/components/ui/empty-state';
@@ -19,6 +19,13 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import type { PaginationMeta } from '@/lib/api';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 
 export interface Column<T> {
@@ -29,6 +36,8 @@ export interface Column<T> {
   sortable?: boolean;
   sortValue?: (row: T) => string | number;
   exportValue?: (row: T) => string | number;
+  numeric?: boolean;
+  truncate?: boolean;
 }
 
 export interface FilterConfig {
@@ -75,6 +84,7 @@ interface DataTableProps<T extends { id?: string }> {
   enableBulkSelect?: boolean;
   bulkActions?: { label: string; onClick: (ids: string[]) => void; variant?: 'default' | 'destructive' }[];
   getRowId?: (row: T) => string;
+  savedView?: React.ReactNode;
 }
 
 type SortDir = 'asc' | 'desc';
@@ -102,6 +112,7 @@ export function DataTable<T extends { id?: string }>({
   enableBulkSelect,
   bulkActions,
   getRowId = (row) => row.id ?? '',
+  savedView,
 }: DataTableProps<T>) {
   const [localSearch, setLocalSearch] = useState(searchValue ?? '');
   const serverSearch = !!onSearchChange;
@@ -121,6 +132,9 @@ export function DataTable<T extends { id?: string }>({
   const [sortKey, setSortKey] = useState<string | null>(null);
   const [sortDir, setSortDir] = useState<SortDir>('asc');
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [hidden, setHidden] = useState<Set<string>>(new Set());
+  const [compact, setCompact] = useState(false);
+  const visibleColumns = columns.filter((col) => !hidden.has(col.key));
 
   const filtered = useMemo(() => {
     let rows = data;
@@ -196,19 +210,53 @@ export function DataTable<T extends { id?: string }>({
     );
   }
 
+  function toggleColumn(key: string) {
+    setHidden((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else if (columns.length - next.size > 1) next.add(key);
+      return next;
+    });
+  }
+
   return (
-    <div className="space-y-4">
+    <TooltipProvider delayDuration={400}>
+    <div className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="relative min-w-[200px] max-w-sm flex-1">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
+        <div className="min-w-[200px] max-w-sm flex-1">
           <Input
+            leading={<Search strokeWidth={1.75} />}
             placeholder={searchPlaceholder}
             value={search}
             onChange={(e) => setLocalSearch(e.target.value)}
-            className="pl-9"
+            className="rounded-full"
           />
         </div>
         <div className="flex items-center gap-2">
+          <Button
+            variant="ghost"
+            size="icon"
+            aria-label={compact ? 'Comfortable rows' : 'Compact rows'}
+            aria-pressed={compact}
+            onClick={() => setCompact((value) => !value)}
+          >
+            <Rows3 strokeWidth={1.75} />
+          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="icon" aria-label="Columns">
+                <Columns3 strokeWidth={1.75} />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              {columns.map((col) => (
+                <DropdownMenuItem key={col.key} onSelect={(event) => event.preventDefault()} onClick={() => toggleColumn(col.key)}>
+                  <span className={cn('size-3 rounded-sm border border-hairline', !hidden.has(col.key) && 'bg-primary')} />
+                  {col.header}
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
           {serverExport ? (
             <ListExportButton type={serverExport.type} params={serverExport.params} />
           ) : (
@@ -224,11 +272,11 @@ export function DataTable<T extends { id?: string }>({
         </div>
       </div>
 
-      {filters && filters.length > 0 && <FilterBar filters={filters} />}
+      {filters && filters.length > 0 && <FilterBar filters={filters} savedView={savedView} />}
 
       {enableBulkSelect && selected.size > 0 && (
-        <div className="flex items-center gap-3 rounded-md border border-accent/30 bg-accent-soft px-4 py-2">
-          <span className="text-sm font-medium text-accent">{selected.size} selected</span>
+        <div className="sticky bottom-3 z-20 flex items-center gap-3 rounded-lg border border-hairline bg-sheet px-4 py-2 shadow-popover">
+          <span className="num text-sm font-medium text-primary">{selected.size} selected</span>
           {bulkActions?.map((action) => (
             <Button
               key={action.label}
@@ -255,37 +303,39 @@ export function DataTable<T extends { id?: string }>({
           onAction={onEmptyAction}
         />
       ) : (
-        <div className="overflow-hidden rounded-xl border border-border bg-elevated shadow-sm">
+        <div className="overflow-hidden rounded-lg border border-hairline bg-sheet">
           <Table>
             <TableHeader>
-              <TableRow className="hover:bg-transparent even:bg-transparent">
+              <TableRow className="hover:bg-transparent">
                 {enableBulkSelect && (
                   <TableHead className="w-10">
                     <input
                       type="checkbox"
                       checked={selected.size === filtered.length && filtered.length > 0}
                       onChange={toggleSelectAll}
-                      className="rounded border-border accent-accent"
+                      aria-label="Select all rows"
+                      className="rounded border-hairline"
+                      style={{ accentColor: 'var(--primary)' }}
                     />
                   </TableHead>
                 )}
-                {columns.map((col) => (
-                  <TableHead key={col.key}>
+                {visibleColumns.map((col) => (
+                  <TableHead key={col.key} className={cn(col.numeric && 'text-right')}>
                     {col.sortable !== false && col.sortValue ? (
                       <button
                         type="button"
-                        className="inline-flex items-center gap-1 hover:text-primary"
+                        className={cn('inline-flex items-center gap-1 hover:text-primary', col.numeric && 'ml-auto')}
                         onClick={() => toggleSort(col.key)}
                       >
                         {col.header}
                         {sortKey === col.key ? (
                           sortDir === 'asc' ? (
-                            <ChevronUp className="h-3 w-3" />
+                            <ChevronUp className="size-3" strokeWidth={1.75} />
                           ) : (
-                            <ChevronDown className="h-3 w-3" />
+                            <ChevronDown className="size-3" strokeWidth={1.75} />
                           )
                         ) : (
-                          <ChevronDown className="h-3 w-3 opacity-30" />
+                          <ChevronsUpDown className="size-3 opacity-40" strokeWidth={1.75} />
                         )}
                       </button>
                     ) : (
@@ -301,21 +351,28 @@ export function DataTable<T extends { id?: string }>({
                 return (
                   <TableRow
                     key={rowId || idx}
-                    className={cn(onRowClick && 'cursor-pointer')}
+                    className={cn(onRowClick && 'cursor-pointer', selected.has(rowId) && 'selected-surface')}
                     onClick={() => onRowClick?.(row)}
                   >
                     {enableBulkSelect && (
-                      <TableCell onClick={(e) => e.stopPropagation()}>
+                      <TableCell className={compact ? 'h-9' : undefined} onClick={(e) => e.stopPropagation()}>
                         <input
                           type="checkbox"
                           checked={selected.has(rowId)}
                           onChange={() => toggleSelect(rowId)}
-                          className="rounded border-border accent-accent"
+                          aria-label="Select row"
+                          className="rounded border-hairline"
+                          style={{ accentColor: 'var(--primary)' }}
                         />
                       </TableCell>
                     )}
-                    {columns.map((col) => (
-                      <TableCell key={col.key}>{col.render(row)}</TableCell>
+                    {visibleColumns.map((col) => (
+                      <TableCell
+                        key={col.key}
+                        className={cn(compact && 'h-9', col.numeric && 'num text-right')}
+                      >
+                        <CellValue truncate={col.truncate}>{col.render(row)}</CellValue>
+                      </TableCell>
                     ))}
                   </TableRow>
                 );
@@ -335,5 +392,19 @@ export function DataTable<T extends { id?: string }>({
         />
       )}
     </div>
+    </TooltipProvider>
+  );
+}
+
+function CellValue({ truncate, children }: { truncate?: boolean; children: React.ReactNode }) {
+  if (!truncate || (typeof children !== 'string' && typeof children !== 'number')) return children;
+  const text = String(children);
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span className="block max-w-[220px] truncate">{text}</span>
+      </TooltipTrigger>
+      <TooltipContent>{text}</TooltipContent>
+    </Tooltip>
   );
 }

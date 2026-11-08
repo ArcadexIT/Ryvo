@@ -17,6 +17,7 @@ function getInitials(name: string) {
   return name
     .split(' ')
     .map((n) => n[0])
+    .filter(Boolean)
     .join('')
     .slice(0, 2)
     .toUpperCase();
@@ -36,7 +37,7 @@ export function Avatar({ name, src, size = 'md', className }: AvatarProps) {
   return (
     <div
       className={cn(
-        'flex items-center justify-center rounded-full bg-accent-soft font-semibold text-accent',
+        'flex items-center justify-center rounded-full bg-input font-semibold text-primary',
         sizeClasses[size],
         className,
       )}

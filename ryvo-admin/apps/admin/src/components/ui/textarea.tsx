@@ -13,13 +13,14 @@ export const Textarea = React.forwardRef<HTMLTextAreaElement, TextareaProps>(
       <textarea
         ref={ref}
         className={cn(
-          'flex min-h-[80px] w-full rounded-md border bg-elevated px-3 py-2 text-sm text-primary placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-accent disabled:cursor-not-allowed disabled:opacity-40',
-          error ? 'border-danger focus:ring-danger' : 'border-border',
+          'flex min-h-[80px] w-full rounded-md border border-transparent bg-input px-3 py-2 text-sm text-primary placeholder:text-muted transition-colors duration-150 hover:border-hairline disabled:cursor-not-allowed disabled:opacity-40',
+          error && 'border-danger',
           className,
         )}
+        aria-invalid={error ? true : undefined}
         {...props}
       />
-      {error && <p className="mt-1 text-xs text-danger">{error}</p>}
+      {error ? <p className="mt-1 text-xs text-danger">{error}</p> : null}
     </div>
   ),
 );

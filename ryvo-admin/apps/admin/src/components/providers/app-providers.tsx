@@ -19,7 +19,7 @@ export function AppProviders({ children }: { children: React.ReactNode }) {
               toastOptions={{
                 classNames: {
                   toast:
-                    'bg-elevated border border-border text-primary shadow-xl rounded-xl',
+                    'bg-sheet border border-hairline text-primary shadow-popover rounded-xl',
                   success: 'border-success/30',
                   error: 'border-danger/30',
                   warning: 'border-warning/30',

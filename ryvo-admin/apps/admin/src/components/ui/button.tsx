@@ -4,20 +4,22 @@ import { cn } from '@/lib/utils';
 import { Spinner } from './spinner';
 
 const buttonVariants = cva(
-  'inline-flex items-center justify-center gap-2 rounded-md text-sm font-medium transition-all duration-150 ease-in-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-base disabled:pointer-events-none disabled:opacity-40',
+  'relative inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-colors duration-150 ease-out active:scale-[0.98] disabled:pointer-events-none disabled:opacity-40 [&_svg]:size-4 [&_svg]:shrink-0',
   {
     variants: {
       variant: {
-        default: 'bg-accent text-accent-foreground hover:bg-accent-hover shadow-sm',
-        secondary: 'border border-border bg-elevated text-primary hover:bg-surface',
-        outline: 'border border-border bg-transparent text-primary hover:bg-surface',
-        ghost: 'text-secondary hover:bg-surface hover:text-primary',
-        destructive: 'bg-danger text-white hover:opacity-90',
+        default: 'bg-primary text-primary-fg hover:opacity-90',
+        emphasis: 'bg-emphasis text-emphasis-fg hover:opacity-90',
+        secondary: 'bg-input text-primary hover:bg-sheet',
+        outline: 'border border-hairline bg-transparent text-primary hover:bg-input',
+        ghost: 'text-secondary hover:bg-input hover:text-primary',
+        destructive: 'bg-danger text-primary-fg hover:opacity-90',
+        link: 'text-success underline-offset-4 hover:underline',
       },
       size: {
-        sm: 'h-7 px-3 text-xs',
-        md: 'h-9 px-4',
-        lg: 'h-11 px-6 text-base',
+        sm: 'h-8 px-3 text-xs',
+        md: 'h-9 px-3.5',
+        lg: 'h-11 px-5 text-base',
         icon: 'h-9 w-9',
       },
     },
@@ -40,9 +42,15 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
       className={cn(buttonVariants({ variant, size, className }))}
       ref={ref}
       disabled={disabled || loading}
+      aria-busy={loading || undefined}
       {...props}
     >
-      {loading ? <Spinner size="sm" /> : children}
+      <span className={cn('inline-flex items-center gap-2', loading && 'invisible')}>{children}</span>
+      {loading ? (
+        <span className="absolute inset-0 grid place-items-center">
+          <Spinner size="sm" className="text-current" />
+        </span>
+      ) : null}
     </button>
   ),
 );

@@ -235,8 +235,14 @@ body {
   animation: fade-in 200ms ease-out;
 }
 
+.dialog-surface {
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+}
+
 .animate-dialog-in {
-  animation: dialog-in 200ms ease-out;
+  animation: dialog-in 200ms ease-out both;
 }
 
 .animate-sheet-in {

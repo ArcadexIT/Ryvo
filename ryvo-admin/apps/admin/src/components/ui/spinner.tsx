@@ -6,10 +6,8 @@ interface SpinnerProps {
   size?: 'sm' | 'md' | 'lg';
 }
 
-const sizes = { sm: 'h-3 w-3', md: 'h-4 w-4', lg: 'h-5 w-5' };
+const sizes = { sm: 'size-3', md: 'size-4', lg: 'size-5' };
 
 export function Spinner({ className, size = 'md' }: SpinnerProps) {
-  return (
-    <Loader2 className={cn('animate-spin text-accent', sizes[size], className)} />
-  );
+  return <Loader2 className={cn('animate-spin', sizes[size], className)} strokeWidth={1.75} />;
 }

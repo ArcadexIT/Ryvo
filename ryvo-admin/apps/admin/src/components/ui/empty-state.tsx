@@ -18,22 +18,17 @@ export function EmptyState({
   className,
 }: EmptyStateProps) {
   return (
-    <div
-      className={cn(
-        'flex flex-col items-center justify-center rounded-lg border border-dashed border-border bg-surface px-6 py-16 text-center',
-        className,
-      )}
-    >
-      <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-accent-soft">
-        <Inbox className="h-8 w-8 text-accent" />
+    <div className={cn('flex flex-col items-center justify-center px-6 py-16 text-center', className)}>
+      <div className="mb-4 grid size-12 place-items-center rounded-full bg-input text-muted">
+        <Inbox className="size-5" strokeWidth={1.75} />
       </div>
-      <h3 className="mb-1 text-base font-semibold text-primary">{title}</h3>
-      <p className="mb-4 max-w-sm text-sm text-secondary">{description}</p>
-      {actionLabel && onAction && (
-        <Button onClick={onAction} size="sm">
+      <h3 className="text-base font-semibold text-primary">{title}</h3>
+      <p className="mt-1 max-w-sm text-sm text-muted">{description}</p>
+      {actionLabel && onAction ? (
+        <Button onClick={onAction} size="sm" className="mt-4">
           {actionLabel}
         </Button>
-      )}
+      ) : null}
     </div>
   );
 }

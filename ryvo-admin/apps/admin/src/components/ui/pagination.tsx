@@ -26,37 +26,22 @@ export function Pagination({
 }: PaginationProps) {
   const totalPages = meta?.totalPages ?? 1;
   const total = meta?.total ?? 0;
-
   const rangeStart = total === 0 ? 0 : (page - 1) * pageSize + 1;
   const rangeEnd = Math.min(page * pageSize, total);
-
   const pages = getPageNumbers(page, totalPages);
 
   return (
-    <div
-      className={cn(
-        'flex flex-wrap items-center justify-between gap-4 border-t border-border pt-4 text-sm text-secondary',
-        className,
-      )}
-    >
+    <div className={cn('flex flex-wrap items-center justify-between gap-3 text-sm text-muted', className)}>
       <div className="flex items-center gap-3">
-        <span className="font-tabular">
-          {total === 0 ? (
-            'No results'
-          ) : (
-            <>
-              <span className="font-medium text-primary">
-                {rangeStart}–{rangeEnd}
-              </span>{' '}
-              of <span className="font-medium text-primary">{total}</span>
-            </>
-          )}
+        <span className="num">
+          {total === 0 ? '0 of 0' : `${rangeStart}–${rangeEnd} of ${total}`}
         </span>
-        {onPageSizeChange && (
+        {onPageSizeChange ? (
           <select
             value={pageSize}
             onChange={(e) => onPageSizeChange(Number(e.target.value))}
-            className="h-8 rounded-lg border border-border bg-elevated px-2 text-xs text-primary transition-colors hover:border-border-strong"
+            className="h-8 rounded-md border border-transparent bg-input px-2 text-xs text-primary hover:border-hairline"
+            aria-label="Rows per page"
           >
             {PAGE_SIZES.map((s) => (
               <option key={s} value={s}>
@@ -64,22 +49,22 @@ export function Pagination({
               </option>
             ))}
           </select>
-        )}
+        ) : null}
       </div>
       <div className="flex items-center gap-1">
         <Button
           variant="ghost"
           size="icon"
-          className="h-8 w-8 rounded-full"
+          className="size-8"
           disabled={page <= 1}
           onClick={() => onPageChange(page - 1)}
           aria-label="Previous page"
         >
-          <ChevronLeft className="h-4 w-4" />
+          <ChevronLeft strokeWidth={1.75} />
         </Button>
         {pages.map((p, i) =>
           p === '...' ? (
-            <span key={`ellipsis-${i}`} className="px-1.5 text-muted">
+            <span key={`ellipsis-${i}`} className="px-1 text-muted">
               …
             </span>
           ) : (
@@ -88,10 +73,8 @@ export function Pagination({
               type="button"
               onClick={() => onPageChange(p as number)}
               className={cn(
-                'font-tabular flex h-8 min-w-8 items-center justify-center rounded-full px-2 text-sm font-medium transition-colors duration-150',
-                p === page
-                  ? 'bg-accent text-accent-foreground shadow-xs'
-                  : 'text-secondary hover:bg-surface hover:text-primary',
+                'num flex h-8 min-w-8 items-center justify-center rounded-md px-2 text-sm font-medium transition-colors duration-150',
+                p === page ? 'bg-primary text-primary-fg' : 'text-secondary hover:bg-input hover:text-primary',
               )}
               aria-current={p === page ? 'page' : undefined}
             >
@@ -102,12 +85,12 @@ export function Pagination({
         <Button
           variant="ghost"
           size="icon"
-          className="h-8 w-8 rounded-full"
+          className="size-8"
           disabled={page >= totalPages}
           onClick={() => onPageChange(page + 1)}
           aria-label="Next page"
         >
-          <ChevronRight className="h-4 w-4" />
+          <ChevronRight strokeWidth={1.75} />
         </Button>
       </div>
     </div>

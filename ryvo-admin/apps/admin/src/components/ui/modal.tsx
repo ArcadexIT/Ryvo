@@ -19,27 +19,27 @@ export function Modal({ open, onClose, title, description, children, className }
   return (
     <DialogPrimitive.Root open={open} onOpenChange={(v) => !v && onClose()}>
       <DialogPrimitive.Portal>
-        <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0" />
+        <DialogPrimitive.Overlay className="animate-overlay-in fixed inset-0 z-50 bg-black/40" />
         <DialogPrimitive.Content
           className={cn(
-            'fixed left-1/2 top-1/2 z-50 w-full max-w-lg -translate-x-1/2 -translate-y-1/2 rounded-xl border border-border bg-elevated p-6 shadow-xl duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95',
+            'dialog-surface animate-dialog-in fixed z-50 w-[calc(100%-2rem)] max-w-lg rounded-xl border border-hairline bg-sheet p-6 shadow-popover',
             className,
           )}
         >
-          <div className="mb-4 flex items-start justify-between">
+          <div className="mb-4 flex items-start justify-between gap-4">
             <div>
-              <DialogPrimitive.Title className="text-lg font-semibold text-primary">
+              <DialogPrimitive.Title className="text-xl font-semibold tracking-tight text-primary">
                 {title}
               </DialogPrimitive.Title>
-              {description && (
-                <DialogPrimitive.Description className="mt-1 text-sm text-secondary">
+              {description ? (
+                <DialogPrimitive.Description className="mt-1 text-sm text-muted">
                   {description}
                 </DialogPrimitive.Description>
-              )}
+              ) : null}
             </div>
             <DialogPrimitive.Close asChild>
-              <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0">
-                <X className="h-4 w-4" />
+              <Button variant="ghost" size="icon" className="size-8 shrink-0" aria-label="Close">
+                <X strokeWidth={1.75} />
               </Button>
             </DialogPrimitive.Close>
           </div>
@@ -50,7 +50,6 @@ export function Modal({ open, onClose, title, description, children, className }
   );
 }
 
-// Legacy Dialog alias
 export function Dialog(props: ModalProps) {
   return <Modal {...props} />;
 }
