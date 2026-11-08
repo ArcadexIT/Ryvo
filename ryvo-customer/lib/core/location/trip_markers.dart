@@ -9,30 +9,28 @@ class TripMarkerSet {
   const TripMarkerSet({
     required this.pickup,
     required this.dropoff,
-    required this.car,
   });
 
   final BitmapDescriptor pickup;
   final BitmapDescriptor dropoff;
-  final BitmapDescriptor car;
 }
 
-/// Compact ride-hailing markers. Bitmaps are drawn at the device pixel ratio
-/// and handed to the map with the same `imagePixelRatio`, so they keep the
-/// logical sizes below on every screen density.
+/// Compact ride-hailing stop markers. Bitmaps are drawn at the device pixel
+/// ratio and handed to the map with the same `imagePixelRatio`, so they keep
+/// the logical sizes below on every screen density.
+///
+/// Driver vehicles are not drawn here; see `DriverMarkerRenderer`.
 class TripMarkers {
   TripMarkers._();
 
   static const Color _pickupColor = AppColors.obsidian;
   static const Color _dropoffColor = AppColors.obsidian;
-  static const Color _carColor = AppColors.obsidian;
 
   static TripMarkerSet? _cache;
   static double? _cachedRatio;
 
   static const Offset dropoffAnchor = Offset(0.5, 1.0);
   static const Offset pickupAnchor = Offset(0.5, 0.5);
-  static const Offset carAnchor = Offset(0.5, 0.5);
 
   /// Device pixel ratio of the first view, with a sane fallback for tests.
   static double get _devicePixelRatio {
@@ -49,7 +47,6 @@ class TripMarkers {
     final set = TripMarkerSet(
       pickup: await _buildDot(ratio),
       dropoff: await _buildPin(ratio),
-      car: await _buildCar(ratio),
     );
     _cache = set;
     _cachedRatio = ratio;
@@ -109,57 +106,6 @@ class TripMarkers {
     canvas.drawCircle(const Offset(cx, headCy), headR, paint);
     paint.color = AppColors.white;
     canvas.drawCircle(const Offset(cx, headCy), 2.4, paint);
-
-    return _toBitmap(recorder, width, height, ratio);
-  }
-
-  static Future<BitmapDescriptor> _buildCar(double ratio) async {
-    const width = 22.0;
-    const height = 32.0;
-    final recorder = ui.PictureRecorder();
-    final canvas = Canvas(recorder);
-    canvas.scale(ratio);
-    const cx = width / 2;
-    const cy = height / 2;
-    final paint = Paint()..isAntiAlias = true;
-
-    paint.color = _shadow;
-    canvas.drawOval(
-      Rect.fromCenter(center: const Offset(cx, cy + 1), width: 15, height: 23),
-      paint,
-    );
-
-    final outline = RRect.fromRectAndRadius(
-      Rect.fromCenter(center: const Offset(cx, cy), width: 15.2, height: 25.2),
-      const Radius.circular(5),
-    );
-    paint.color = AppColors.white;
-    canvas.drawRRect(outline, paint);
-
-    final body = RRect.fromRectAndRadius(
-      Rect.fromCenter(center: const Offset(cx, cy), width: 13.2, height: 23.2),
-      const Radius.circular(4),
-    );
-    paint.color = _carColor;
-    canvas.drawRRect(body, paint);
-
-    paint.color = AppColors.grey300;
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(
-        Rect.fromCenter(
-            center: const Offset(cx, cy - 5.2), width: 8.4, height: 5.4),
-        const Radius.circular(1.4),
-      ),
-      paint,
-    );
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(
-        Rect.fromCenter(
-            center: const Offset(cx, cy + 5.6), width: 8.4, height: 4.6),
-        const Radius.circular(1.4),
-      ),
-      paint,
-    );
 
     return _toBitmap(recorder, width, height, ratio);
   }

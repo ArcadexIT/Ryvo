@@ -8,6 +8,7 @@ import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import '../../../../core/constants/mock_data.dart';
+import '../../../../core/location/driving_route.dart';
 import '../../../../core/services/job_alert_sound.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/utils/money.dart';
@@ -20,6 +21,7 @@ import '../../../../shared/providers/notifiers/job_notifier.dart';
 import '../../../../shared/providers/notifiers/location_notifier.dart';
 import '../widgets/active_job_banner.dart';
 import '../widgets/incoming_job_sheet.dart';
+import '../widgets/offer_route_layer.dart';
 import '../widgets/map_control_panel.dart';
 import '../widgets/map_markers.dart';
 import '../widgets/offline_overlay.dart';
@@ -45,6 +47,17 @@ class _HomeMapPageState extends ConsumerState<HomeMapPage> with WidgetsBindingOb
   Offset? _dropoffAnchor;
 
   Timer? _jobTimer;
+  final DrivingRouteService _routes = DrivingRouteService();
+  final ValueNotifier<CameraPosition> _camera = ValueNotifier(
+    const CameraPosition(target: _providerPos, zoom: 15),
+  );
+  OfferRouteFlow? _flow;
+  List<LatLng> _roadPoints = const [];
+  Set<Polyline> _roadPolylines = const {};
+  int _routeGeneration = 0;
+  int _roadRequest = 0;
+  String? _roadKey;
+  String? _roadLoadingKey;
   double _markerScale = 1.0;
   bool _followLocation = true;
   bool _locating = false;
@@ -62,6 +75,7 @@ class _HomeMapPageState extends ConsumerState<HomeMapPage> with WidgetsBindingOb
         restoreActiveJobSession(ProviderScope.containerOf(context, listen: false));
       }
       await _ensureApproved();
+      if (mounted) _syncOfferRoute();
     });
   }
 
@@ -108,11 +122,15 @@ class _HomeMapPageState extends ConsumerState<HomeMapPage> with WidgetsBindingOb
         ? await MapMarkers.buildCustomerJobMarker(
             'Pickup',
             markerScale: scale,
-            pinColor: const Color(0xFF22C55E),
+            pinColor: AppColors.success,
           )
         : null;
     final dropoff = hasDrop
-        ? await MapMarkers.buildCustomerJobMarker('Drop off', markerScale: scale)
+        ? await MapMarkers.buildCustomerJobMarker(
+            'Drop off',
+            markerScale: scale,
+            pinColor: AppColors.error,
+          )
         : null;
     if (!mounted) return;
     setState(() {
@@ -132,7 +150,8 @@ class _HomeMapPageState extends ConsumerState<HomeMapPage> with WidgetsBindingOb
     final pad = R.w(context, 72).clamp(56.0, 96.0);
     final liveLoc = ref.read(locationStreamProvider).valueOrNull;
     final providerPos = liveLoc != null ? LatLng(liveLoc.latitude, liveLoc.longitude) : _providerPos;
-    final points = _routePoints(providerPos);
+    final points = _roadPoints.length >= 2 ? _roadPoints : _endpointTargets(providerPos);
+    if (points.isEmpty) return;
     var south = points.first.latitude;
     var north = points.first.latitude;
     var west = points.first.longitude;
@@ -142,6 +161,10 @@ class _HomeMapPageState extends ConsumerState<HomeMapPage> with WidgetsBindingOb
       if (point.latitude > north) north = point.latitude;
       if (point.longitude < west) west = point.longitude;
       if (point.longitude > east) east = point.longitude;
+    }
+    if ((north - south).abs() < 1e-5 && (east - west).abs() < 1e-5) {
+      _mapController?.animateCamera(CameraUpdate.newLatLngZoom(points.first, 15));
+      return;
     }
     _mapController?.animateCamera(
       CameraUpdate.newLatLngBounds(
@@ -272,12 +295,12 @@ class _HomeMapPageState extends ConsumerState<HomeMapPage> with WidgetsBindingOb
       final liveLoc = ref.read(locationStreamProvider).valueOrNull;
       var forcedOffline = false;
       if (liveLoc != null) {
-        final sent = await ref.read(locationRepositoryProvider).broadcastLocation(liveLoc);
+        final sent = await ref.read(locationRepositoryProvider).broadcastLocation(liveLoc, seed: true);
         forcedOffline = sent.fold((_) => false, (forced) => forced);
       } else {
         final result = await ref.read(locationRepositoryProvider).getCurrentLocation();
         await result.fold((_) async {}, (loc) async {
-          final sent = await ref.read(locationRepositoryProvider).broadcastLocation(loc);
+          final sent = await ref.read(locationRepositoryProvider).broadcastLocation(loc, seed: true);
           forcedOffline = sent.fold((_) => false, (forced) => forced);
         });
       }
@@ -353,11 +376,125 @@ class _HomeMapPageState extends ConsumerState<HomeMapPage> with WidgetsBindingOb
     return LatLng(lat, lng);
   }
 
-  List<LatLng> _routePoints(LatLng providerPos) {
-    final pickup = _customerPosFor(providerPos);
+  List<LatLng> _endpointTargets(LatLng providerPos) {
+    final pickup = _pickupOrNull() ?? _customerPosFor(providerPos);
     final dropoff = _dropoffPos();
-    if (dropoff == null) return [providerPos, pickup];
-    return [providerPos, pickup, dropoff];
+    return [providerPos, pickup, if (dropoff != null) dropoff];
+  }
+
+  LatLng? _pickupOrNull() {
+    final incoming = ref.read(jobNotifierProvider).value?.incomingJob;
+    final lat = incoming?.customerLat;
+    final lng = incoming?.customerLng;
+    if (lat == null || lng == null || lat == 0 || lng == 0) return null;
+    return LatLng(lat, lng);
+  }
+
+  bool _separated(LatLng a, LatLng b) {
+    return (a.latitude - b.latitude).abs() > 0.0004 || (a.longitude - b.longitude).abs() > 0.0004;
+  }
+
+  void _syncOfferRoute() {
+    if (!mounted) return;
+    final show = ref.read(isOnlineProvider) && ref.read(showIncomingJobProvider);
+    final incoming = ref.read(jobNotifierProvider).value?.incomingJob;
+    final pickup = _pickupOrNull();
+    if (!show || incoming == null || pickup == null) {
+      _clearOfferRoute();
+      return;
+    }
+    final dropoff = _dropoffPos();
+    final live = ref.read(locationStreamProvider).valueOrNull;
+    final driver = live == null ? null : LatLng(live.latitude, live.longitude);
+    final hasTrip = dropoff != null;
+    final approach = driver != null && _separated(driver, pickup);
+    final LatLng origin;
+    final LatLng dest;
+    final LatLng? via;
+    if (hasTrip && approach) {
+      origin = driver;
+      dest = dropoff;
+      via = pickup;
+    } else if (hasTrip) {
+      origin = pickup;
+      dest = dropoff;
+      via = null;
+    } else if (approach) {
+      origin = driver;
+      dest = pickup;
+      via = null;
+    } else {
+      _clearOfferRoute();
+      return;
+    }
+    final key = '${incoming.id}|${hasTrip ? 'trip' : 'pickup'}|${approach ? 'approach' : 'direct'}';
+    if (key == _roadKey || key == _roadLoadingKey) return;
+    _roadLoadingKey = key;
+    _loadOfferRoute(key: key, origin: origin, dest: dest, via: via);
+  }
+
+  Future<void> _loadOfferRoute({
+    required String key,
+    required LatLng origin,
+    required LatLng dest,
+    required LatLng? via,
+  }) async {
+    final request = ++_roadRequest;
+    final route = await _routes.fetch(
+      originLat: origin.latitude,
+      originLng: origin.longitude,
+      destinationLat: dest.latitude,
+      destinationLng: dest.longitude,
+      via: via == null ? const [] : [via],
+    );
+    if (!mounted || request != _roadRequest) return;
+    if (!(ref.read(isOnlineProvider) && ref.read(showIncomingJobProvider))) return;
+    final points = _dedupeRoute(route?.points ?? [origin, if (via != null) via, dest]);
+    if (points.length < 2) {
+      if (_roadLoadingKey == key) _roadLoadingKey = null;
+      return;
+    }
+    setState(() {
+      _roadKey = key;
+      _roadLoadingKey = null;
+      _roadPoints = points;
+      _routeGeneration += 1;
+      _flow = OfferRouteFlow(points: points, generation: _routeGeneration);
+      _roadPolylines = const {};
+    });
+    _fitJobBounds(context);
+  }
+
+  void _clearOfferRoute() {
+    _roadRequest++;
+    _roadLoadingKey = null;
+    if (_flow == null && _roadKey == null && _roadPolylines.isEmpty) return;
+    setState(() {
+      _roadKey = null;
+      _roadPoints = const [];
+      _flow = null;
+      _roadPolylines = const {};
+    });
+  }
+
+  void _onRouteDrawn(int generation) {
+    final flow = _flow;
+    if (!mounted || flow == null || flow.generation != generation || _roadPolylines.isNotEmpty) return;
+    setState(() => _roadPolylines = OfferRouteStyle.polylines(flow.points));
+  }
+
+  List<LatLng> _dedupeRoute(List<LatLng> raw) {
+    if (raw.length < 2) return raw;
+    final points = <LatLng>[raw.first];
+    for (final point in raw.skip(1)) {
+      final previous = points.last;
+      if ((point.latitude - previous.latitude).abs() < 1e-6 &&
+          (point.longitude - previous.longitude).abs() < 1e-6) {
+        continue;
+      }
+      points.add(point);
+    }
+    return points.length >= 2 ? points : raw;
   }
 
   LatLng _customerPosFor(LatLng fallback) {
@@ -373,6 +510,7 @@ class _HomeMapPageState extends ConsumerState<HomeMapPage> with WidgetsBindingOb
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _jobTimer?.cancel();
+    _camera.dispose();
     super.dispose();
   }
 
@@ -459,7 +597,7 @@ class _HomeMapPageState extends ConsumerState<HomeMapPage> with WidgetsBindingOb
         final pos = LatLng(loc.latitude, loc.longitude);
         if (!_hasInitialCentered && _mapController != null) {
           _hasInitialCentered = true;
-          _centerOnProvider(pos);
+          if (!showJob) _centerOnProvider(pos);
           _resolveAreaLabel(loc.latitude, loc.longitude);
         } else if (_followLocation && !showJob) {
           _mapController?.animateCamera(CameraUpdate.newLatLng(pos));
@@ -468,10 +606,12 @@ class _HomeMapPageState extends ConsumerState<HomeMapPage> with WidgetsBindingOb
         if (ref.read(jobNotifierProvider).value?.incomingJob != null) {
           _loadMarkers();
         }
+        _syncOfferRoute();
       });
     });
 
     ref.listen<bool>(showIncomingJobProvider, (prev, next) {
+      _syncOfferRoute();
       if (next && isOnline) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (mounted) _fitJobBounds(context);
@@ -494,6 +634,9 @@ class _HomeMapPageState extends ConsumerState<HomeMapPage> with WidgetsBindingOb
       } else if (ref.read(showIncomingJobProvider) != show) {
         ref.read(showIncomingJobProvider.notifier).state = show;
       }
+      if (incoming?.id != prev?.value?.incomingJob?.id || !show) {
+        _syncOfferRoute();
+      }
     });
 
     ref.listen<MockJob?>(activeJobProvider, (previous, next) {
@@ -513,41 +656,44 @@ class _HomeMapPageState extends ConsumerState<HomeMapPage> with WidgetsBindingOb
       backgroundColor: const Color(0xFF0E1626),
       body: Stack(
         children: [
-          GoogleMap(
-            initialCameraPosition: CameraPosition(target: providerPos, zoom: 15),
-            myLocationEnabled: false,
-            myLocationButtonEnabled: false,
-            zoomControlsEnabled: false,
-            mapToolbarEnabled: false,
-            compassEnabled: false,
-            padding: EdgeInsets.only(top: mapTopPad, bottom: mapBottomPad),
-            markers: _buildMarkers(showJob, providerPos),
-            polylines: showJob
-                ? {
-                    Polyline(
-                      polylineId: const PolylineId('route_preview'),
-                      points: _routePoints(providerPos),
-                      color: const Color(0xFF5B9DFF),
-                      width: 5,
-                      jointType: JointType.round,
-                      startCap: Cap.roundCap,
-                      endCap: Cap.roundCap,
-                    ),
-                  }
-                : {},
-            onCameraMoveStarted: () {
-              if (_followLocation) {
-                setState(() => _followLocation = false);
-              }
-            },
-            style: MockData.darkMapStyle,
-            onMapCreated: (c) {
-              _mapController = c;
-              if (liveLoc != null && !_hasInitialCentered) {
-                _hasInitialCentered = true;
-                _centerOnProvider(LatLng(liveLoc.latitude, liveLoc.longitude));
-              }
-            },
+          RepaintBoundary(
+            child: GoogleMap(
+              initialCameraPosition: CameraPosition(target: providerPos, zoom: 15),
+              myLocationEnabled: false,
+              myLocationButtonEnabled: false,
+              zoomControlsEnabled: false,
+              mapToolbarEnabled: false,
+              compassEnabled: false,
+              tiltGesturesEnabled: !showJob,
+              padding: EdgeInsets.only(top: mapTopPad, bottom: mapBottomPad),
+              markers: _buildMarkers(showJob, providerPos),
+              polylines: showJob ? _roadPolylines : const {},
+              onCameraMove: (position) => _camera.value = position,
+              onCameraMoveStarted: () {
+                if (_followLocation) {
+                  setState(() => _followLocation = false);
+                }
+              },
+              style: MockData.darkMapStyle,
+              onMapCreated: (c) {
+                _mapController = c;
+                _camera.value = CameraPosition(target: providerPos, zoom: 15);
+                if (_roadPoints.length >= 2) {
+                  _fitJobBounds(context);
+                } else if (liveLoc != null && !_hasInitialCentered) {
+                  _hasInitialCentered = true;
+                  _centerOnProvider(LatLng(liveLoc.latitude, liveLoc.longitude));
+                }
+              },
+            ),
+          ),
+          Positioned.fill(
+            child: OfferRouteLayer(
+              flow: showJob ? _flow : null,
+              camera: _camera,
+              padding: EdgeInsets.only(top: mapTopPad, bottom: mapBottomPad),
+              onDrawn: _onRouteDrawn,
+            ),
           ),
           const IgnorePointer(
             child: DecoratedBox(

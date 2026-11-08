@@ -3,10 +3,8 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/theme/app_colors.dart';
-import '../../core/theme/app_spacing.dart';
 import '../../core/theme/app_theme.dart';
 import '../providers/app_providers.dart';
-import 'ryvo_button.dart';
 
 /// True when [lat]/[lng] is inside an active customer service zone from the
 /// admin panel. Null when the check could not be completed.
@@ -25,8 +23,7 @@ Future<bool?> customerAreaCovered(WidgetRef ref, double lat, double lng) async {
 
 bool _dialogOpen = false;
 
-/// Shows the same out-of-area dialog as the provider app.
-/// Returns true when the customer asks to be notified.
+/// Anchored out-of-area sheet. Returns true when the customer asks to be notified.
 Future<bool> showServiceUnavailableDialog(
   BuildContext context,
   WidgetRef ref, {
@@ -36,100 +33,16 @@ Future<bool> showServiceUnavailableDialog(
 }) async {
   if (_dialogOpen || !context.mounted) return false;
   _dialogOpen = true;
-  final notified = await showDialog<bool>(
+  final notified = await showModalBottomSheet<bool>(
     context: context,
-    barrierDismissible: false,
-    barrierColor: Colors.black54,
-    builder: (ctx) => Dialog(
-      elevation: 0,
-      backgroundColor: AppColors.modal,
-      surfaceTintColor: AppColors.modal,
-      insetPadding: const EdgeInsets.symmetric(horizontal: AppSpacing.s24),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(20),
-        side: BorderSide(color: AppColors.divider),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(
-            AppSpacing.s24, AppSpacing.s24, AppSpacing.md, AppSpacing.md),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Container(
-              width: 48,
-              height: 48,
-              decoration: const BoxDecoration(
-                color: AppColors.primaryLight,
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(
-                Icons.location_off_rounded,
-                color: AppColors.primary,
-                size: 24,
-              ),
-            ),
-            AppSpacing.h16,
-            Text(
-              'Rides unavailable',
-              style: RyvoTypography.heading(
-                  fontSize: 18, color: AppColors.textPrimary),
-            ),
-            AppSpacing.h8,
-            Text(
-              'RYVO is unavailable in the current area',
-              style: RyvoTypography.style(
-                fontSize: 14,
-                height: 1.4,
-                color: AppColors.textSecondary,
-              ),
-            ),
-            AppSpacing.h8,
-            Row(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                TextButton(
-                  onPressed: () {
-                    HapticFeedback.lightImpact();
-                    Navigator.pop(ctx, false);
-                  },
-                  child: Text(
-                    'Close',
-                    style: RyvoTypography.button(
-                        fontSize: 15, color: AppColors.primary),
-                  ),
-                ),
-                AppSpacing.w4,
-                RyvoPressScale(
-                  child: FilledButton(
-                    style: FilledButton.styleFrom(
-                      backgroundColor: AppColors.cta,
-                      foregroundColor: AppColors.onCta,
-                      minimumSize: const Size(64, 40),
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: AppSpacing.md, vertical: AppSpacing.xs),
-                      elevation: 0,
-                      shadowColor: Colors.transparent,
-                      shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(20)),
-                    ),
-                    onPressed: () {
-                      HapticFeedback.lightImpact();
-                      Navigator.pop(ctx, true);
-                    },
-                    child: Text(
-                      'Notify me',
-                      style: RyvoTypography.button(
-                          fontSize: 15, color: AppColors.onCta),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    ),
+    useRootNavigator: true,
+    isScrollControlled: true,
+    isDismissible: true,
+    enableDrag: true,
+    backgroundColor: Colors.transparent,
+    elevation: 0,
+    barrierColor: AppColors.obsidian.withValues(alpha: 0.46),
+    builder: (ctx) => const _ServiceUnavailableSheet(),
   );
   _dialogOpen = false;
   if (notified != true || !context.mounted) return false;
@@ -140,8 +53,19 @@ Future<bool> showServiceUnavailableDialog(
     );
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-            content: Text('We will notify you when RYVO is available here.')),
+        SnackBar(
+          content: Text(
+            "We'll let you know when Ryvo opens nearby.",
+            style: RyvoTypography.style(
+              fontSize: 14,
+              fontWeight: FontWeight.w500,
+              color: AppColors.onCta,
+            ),
+          ),
+          backgroundColor: AppColors.cta,
+          behavior: SnackBarBehavior.floating,
+          elevation: 0,
+        ),
       );
     }
   } catch (_) {}
@@ -168,4 +92,144 @@ Future<bool> ensureCustomerCoverage(
     addressLabel: addressLabel,
   );
   return false;
+}
+
+class _ServiceUnavailableSheet extends StatelessWidget {
+  const _ServiceUnavailableSheet();
+
+  @override
+  Widget build(BuildContext context) {
+    final bottom = MediaQuery.paddingOf(context).bottom + 16;
+    return Material(
+      color: AppColors.modal,
+      borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+      child: Padding(
+        padding: EdgeInsets.fromLTRB(16, 8, 16, bottom),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const Center(child: _SheetHandle()),
+            const SizedBox(height: 24),
+            const Center(child: _UnavailableMark()),
+            const SizedBox(height: 16),
+            Text(
+              "Ryvo isn't available here",
+              textAlign: TextAlign.center,
+              style: RyvoTypography.heading(
+                fontSize: 22,
+                color: AppColors.textPrimary,
+                letterSpacing: -0.6,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              "We don't serve this pickup yet. Choose a covered address, or get a note when rides open nearby.",
+              textAlign: TextAlign.center,
+              style: RyvoTypography.style(
+                fontSize: 15,
+                fontWeight: FontWeight.w500,
+                color: AppColors.textSecondary,
+                height: 1.4,
+              ),
+            ),
+            const SizedBox(height: 24),
+            _SheetAction(
+              label: 'Notify me',
+              background: AppColors.cta,
+              foreground: AppColors.onCta,
+              onTap: () {
+                HapticFeedback.lightImpact();
+                Navigator.pop(context, true);
+              },
+            ),
+            const SizedBox(height: 8),
+            _SheetAction(
+              label: 'Got it',
+              background: AppColors.surface,
+              foreground: AppColors.textPrimary,
+              onTap: () => Navigator.pop(context, false),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _SheetHandle extends StatelessWidget {
+  const _SheetHandle();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 36,
+      height: 4,
+      decoration: BoxDecoration(
+        color: AppColors.divider,
+        borderRadius: BorderRadius.circular(2),
+      ),
+    );
+  }
+}
+
+class _UnavailableMark extends StatelessWidget {
+  const _UnavailableMark();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 64,
+      height: 64,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        shape: BoxShape.circle,
+      ),
+      child: Icon(
+        Icons.location_off_outlined,
+        size: 28,
+        color: AppColors.textPrimary,
+      ),
+    );
+  }
+}
+
+class _SheetAction extends StatelessWidget {
+  const _SheetAction({
+    required this.label,
+    required this.background,
+    required this.foreground,
+    required this.onTap,
+  });
+
+  final String label;
+  final Color background;
+  final Color foreground;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: Container(
+        height: 52,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: background,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Text(
+          label,
+          style: RyvoTypography.style(
+            fontSize: 16,
+            fontWeight: FontWeight.w700,
+            color: foreground,
+            letterSpacing: -0.4,
+          ),
+        ),
+      ),
+    );
+  }
 }

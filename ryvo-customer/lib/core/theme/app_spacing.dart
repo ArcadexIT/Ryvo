@@ -41,3 +41,15 @@ class AppSpacing {
   static const SizedBox w20 = SizedBox(width: s20);
   static const SizedBox w24 = SizedBox(width: lg);
 }
+
+/// Floating pill height plus the gap under it, before the system inset.
+const double kRyvoFloatingNavHeight = 88.0;
+
+/// Space a shell screen must keep clear of the floating navigation pill.
+double kFloatingNavClearance(BuildContext context) {
+  return 88.0 + MediaQuery.paddingOf(context).bottom;
+}
+
+/// Space a shell screen must keep clear of the floating navigation pill.
+double kRyvoBottomNavClearance(BuildContext context) =>
+    kFloatingNavClearance(context);

@@ -39,7 +39,7 @@ class DriverTripCard extends StatelessWidget {
       child: SafeArea(
         top: false,
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(20, 10, 20, 12),
+          padding: const EdgeInsets.fromLTRB(20, 10, 20, 24),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,

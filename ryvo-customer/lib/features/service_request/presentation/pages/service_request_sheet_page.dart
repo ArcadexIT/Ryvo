@@ -34,8 +34,7 @@ class ServiceRequestSheetPage extends ConsumerStatefulWidget {
 }
 
 class _ServiceRequestSheetPageState
-    extends ConsumerState<ServiceRequestSheetPage>
-    {
+    extends ConsumerState<ServiceRequestSheetPage> {
   static const double _snapMin = 0.38;
   static const double _snapMid = 0.56;
   static const double _snapMax = 0.88;
@@ -328,10 +327,10 @@ class _ServiceRequestSheetPageState
     );
   }
 
-  /// Keeps the route between the route bar and the top of the sheet.
+  /// Keeps the route between the compact route bar and the top of the sheet.
   EdgeInsets _paddingFor(double sheetFraction) {
     return EdgeInsets.only(
-      top: MediaQuery.paddingOf(context).top + 132,
+      top: MediaQuery.paddingOf(context).top + _RouteBar.clearance,
       bottom: MediaQuery.sizeOf(context).height * sheetFraction,
     );
   }
@@ -496,8 +495,9 @@ class _ServiceRequestSheetPageState
     final cheapest = quoted.reduce((a, b) =>
         _quotes[b.id]!.estimatedFare < _quotes[a.id]!.estimatedFare ? b : a);
     final badges = <String, String>{cheapest.id: 'Best value'};
-    final timed =
-        quoted.where((service) => _quotes[service.id]!.durationMin > 0).toList();
+    final timed = quoted
+        .where((service) => _quotes[service.id]!.durationMin > 0)
+        .toList();
     if (timed.length >= 2) {
       final fastest = timed.reduce((a, b) =>
           _quotes[b.id]!.durationMin < _quotes[a.id]!.durationMin ? b : a);
@@ -667,12 +667,10 @@ class _ServiceRequestSheetPageState
       buttonLabel: _buttonLabel(jobType),
       buttonPrice: _buttonPrice(jobType),
       loading: _confirming || _quoting,
-      onPressed: _confirming ||
-              _quoting ||
-              _selected == null ||
-              _payment == null
-          ? null
-          : _confirm,
+      onPressed:
+          _confirming || _quoting || _selected == null || _payment == null
+              ? null
+              : _confirm,
     );
 
     return PopScope(
@@ -686,14 +684,19 @@ class _ServiceRequestSheetPageState
           children: [
             _requestMap(context),
             SafeArea(
+              bottom: false,
               child: Padding(
-                padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
-                child: _RouteBar(
-                  pickup: _shortPlace(pickupAddress),
-                  dropoff: _shortPlace(dropoffAddress),
-                  onClose: _confirming ? null : _handleBack,
-                  onPickup: _confirming ? null : _editPickup,
-                  onDropoff: _confirming ? null : _editDropoff,
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                child: Align(
+                  alignment: Alignment.topCenter,
+                  child: _RouteBar(
+                    pickup: _shortPlace(pickupAddress),
+                    dropoff: _shortPlace(dropoffAddress),
+                    onClose: _confirming ? null : _handleBack,
+                    onPickup: _confirming ? null : _editPickup,
+                    onDropoff: _confirming ? null : _editDropoff,
+                  ),
                 ),
               ),
             ),
@@ -786,9 +789,7 @@ class _ServiceRequestSheetPageState
 
   String _shortPlace(String address) {
     final part = address.split(',').first.trim();
-    if (part.isEmpty) return address;
-    if (part.length <= 22) return part;
-    return '${part.substring(0, 21)}…';
+    return part.isEmpty ? address : part;
   }
 
   String _paymentLabel(BuildContext context, String method) {
@@ -936,9 +937,7 @@ class _ChooseRideHeader extends StatelessWidget {
   }
 }
 
-/// Floating trip card: a back button and a single card holding pickup and
-/// dropoff on a vertical timeline (filled circle to square), the same shapes
-/// the map markers use.
+/// Compact floating header: a 40px back button beside pickup and dropoff.
 class _RouteBar extends StatelessWidget {
   const _RouteBar({
     required this.pickup,
@@ -954,26 +953,45 @@ class _RouteBar extends StatelessWidget {
   final VoidCallback? onPickup;
   final VoidCallback? onDropoff;
 
-  static const double rowHeight = 52;
+  static const double rowHeight = 36;
+  static const double dividerSlot = 8;
+  static const double node = 8;
+  static const double verticalPadding = 10;
+
+  /// Address rows plus the divider slot. Nodes are centered on each row.
+  static const double contentHeight = rowHeight * 2 + dividerSlot;
+
+  /// Card chrome. Stays under the map clearance used by the camera.
+  static const double height = contentHeight + verticalPadding * 2;
+
+  /// Safe-area padding around the bar, the card, and a gap before the route.
+  static const double clearance = 8 + height + 8 + 16;
+
+  /// Distance from a row edge to an 8px node so the node sits on the row center.
+  static const double nodeInset = (rowHeight - node) / 2;
+
+  /// Line starts at the bottom of the pickup node and ends at the top of the square.
+  static const double lineInset = nodeInset + node;
 
   @override
   Widget build(BuildContext context) {
     return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.center,
       children: [
         _RouteBackButton(onTap: onClose),
-        const SizedBox(width: 8),
+        const SizedBox(width: 10),
         Expanded(
           child: DecoratedBox(
             decoration: BoxDecoration(
               color: AppColors.modal,
               borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: AppColors.divider),
+              border: Border.all(color: AppColors.divider, width: 1),
               boxShadow: [
                 BoxShadow(
                   color: AppColors.obsidian.withValues(alpha: 0.06),
-                  blurRadius: 12,
-                  offset: const Offset(0, 4),
+                  blurRadius: 8,
+                  offset: const Offset(0, 2),
                 ),
               ],
             ),
@@ -981,33 +999,49 @@ class _RouteBar extends StatelessWidget {
               color: Colors.transparent,
               borderRadius: BorderRadius.circular(16),
               clipBehavior: Clip.antiAlias,
-              child: Row(
-                children: [
-                  const SizedBox(width: 16),
-                  const SizedBox(
-                    width: 16,
-                    height: rowHeight * 2,
-                    child: CustomPaint(painter: _TimelinePainter()),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      children: [
-                        _RouteStop(
-                          caption: 'Pickup',
-                          label: pickup,
-                          onTap: onPickup,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(
+                    12, verticalPadding, 10, verticalPadding),
+                child: IntrinsicHeight(
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      const SizedBox(
+                        width: 20,
+                        child: _RouteTimeline(),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            _RouteAddressRow(
+                              semanticsLabel: 'Pickup',
+                              label: pickup,
+                              onTap: onPickup,
+                            ),
+                            SizedBox(
+                              height: dividerSlot,
+                              child: Center(
+                                child: Divider(
+                                  height: 1,
+                                  thickness: 1,
+                                  color: AppColors.divider,
+                                ),
+                              ),
+                            ),
+                            _RouteAddressRow(
+                              semanticsLabel: 'Dropoff',
+                              label: dropoff,
+                              onTap: onDropoff,
+                            ),
+                          ],
                         ),
-                        Divider(height: 1, color: AppColors.divider),
-                        _RouteStop(
-                          caption: 'Dropoff',
-                          label: dropoff,
-                          onTap: onDropoff,
-                        ),
-                      ],
-                    ),
+                      ),
+                    ],
                   ),
-                ],
+                ),
               ),
             ),
           ),
@@ -1028,12 +1062,12 @@ class _RouteBackButton extends StatelessWidget {
       decoration: BoxDecoration(
         color: AppColors.modal,
         shape: BoxShape.circle,
-        border: Border.all(color: AppColors.divider),
+        border: Border.all(color: AppColors.divider, width: 1),
         boxShadow: [
           BoxShadow(
             color: AppColors.obsidian.withValues(alpha: 0.06),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
           ),
         ],
       ),
@@ -1048,12 +1082,13 @@ class _RouteBackButton extends StatelessWidget {
                   HapticFeedback.selectionClick();
                   onTap!();
                 },
+          customBorder: const CircleBorder(),
           child: SizedBox(
-            width: 44,
-            height: 44,
+            width: 40,
+            height: 40,
             child: Icon(
               CupertinoIcons.arrow_left,
-              size: 20,
+              size: 18,
               color: AppColors.textPrimary,
             ),
           ),
@@ -1063,116 +1098,104 @@ class _RouteBackButton extends StatelessWidget {
   }
 }
 
-class _RouteStop extends StatelessWidget {
-  const _RouteStop({
-    required this.caption,
+class _RouteAddressRow extends StatelessWidget {
+  const _RouteAddressRow({
+    required this.semanticsLabel,
     required this.label,
     required this.onTap,
   });
 
-  final String caption;
+  final String semanticsLabel;
   final String label;
   final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap == null
-          ? null
-          : () {
-              HapticFeedback.selectionClick();
-              onTap!();
-            },
-      child: SizedBox(
-        height: _RouteBar.rowHeight,
-        child: Row(
-          children: [
-            Expanded(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    caption,
-                    style: RyvoTypography.style(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
-                      height: 1.2,
-                      color: AppColors.textSecondary,
-                    ),
+    return Semantics(
+      button: true,
+      label: '$semanticsLabel, $label',
+      child: InkWell(
+        onTap: onTap == null
+            ? null
+            : () {
+                HapticFeedback.selectionClick();
+                onTap!();
+              },
+        child: SizedBox(
+          height: _RouteBar.rowHeight,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Expanded(
+                child: Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: RyvoTypography.style(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    height: 1.2,
+                    letterSpacing: -0.2,
+                    color: AppColors.textPrimary,
                   ),
-                  const SizedBox(height: 2),
-                  Text(
-                    label,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: RyvoTypography.style(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w700,
-                      height: 1.2,
-                      letterSpacing: -0.3,
-                      color: AppColors.textPrimary,
-                    ),
-                  ),
-                ],
+                ),
               ),
-            ),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              child: Icon(
+              const SizedBox(width: 8),
+              Icon(
                 CupertinoIcons.chevron_right,
                 size: 14,
                 color: AppColors.textHint,
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
   }
 }
 
-/// Filled circle at the pickup row, 1.5px connector, square at the dropoff
-/// row. Each row is [_RouteBar.rowHeight] tall, so both nodes sit on the row
-/// centres.
-class _TimelinePainter extends CustomPainter {
-  const _TimelinePainter();
+/// Pickup circle, a 1.5px connector, and a dropoff square. Each node is
+/// centered on its 36px address row; the line runs only between the nodes.
+class _RouteTimeline extends StatelessWidget {
+  const _RouteTimeline();
 
   @override
-  void paint(Canvas canvas, Size size) {
-    final cx = size.width / 2;
-    const top = _RouteBar.rowHeight / 2;
-    const bottom = _RouteBar.rowHeight * 1.5;
-    const circleR = 5.0;
-    const squareHalf = 4.5;
-
-    final line = Paint()
-      ..color = AppColors.textHint
-      ..strokeWidth = 1.5
-      ..strokeCap = StrokeCap.butt;
-    canvas.drawLine(
-      Offset(cx, top + circleR + 3),
-      Offset(cx, bottom - squareHalf - 3),
-      line,
-    );
-
-    final fill = Paint()
-      ..color = AppColors.textPrimary
-      ..isAntiAlias = true;
-    canvas.drawCircle(Offset(cx, top), circleR, fill);
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(
-        Rect.fromCenter(
-          center: Offset(cx, bottom),
-          width: squareHalf * 2,
-          height: squareHalf * 2,
+  Widget build(BuildContext context) {
+    final square = AppColors.isDark ? AppColors.white : AppColors.obsidian;
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        const SizedBox(height: _RouteBar.nodeInset),
+        const _RouteNode(color: AppColors.primary, circle: true),
+        SizedBox(
+          height: _RouteBar.contentHeight - _RouteBar.lineInset * 2,
+          width: 1.5,
+          child: ColoredBox(color: AppColors.divider),
         ),
-        const Radius.circular(1.5),
-      ),
-      fill,
+        _RouteNode(color: square, circle: false),
+        const SizedBox(height: _RouteBar.nodeInset),
+      ],
     );
   }
+}
+
+class _RouteNode extends StatelessWidget {
+  const _RouteNode({required this.color, required this.circle});
+
+  final Color color;
+  final bool circle;
 
   @override
-  bool shouldRepaint(covariant _TimelinePainter oldDelegate) => true;
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: _RouteBar.node,
+      height: _RouteBar.node,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: color,
+          shape: circle ? BoxShape.circle : BoxShape.rectangle,
+        ),
+      ),
+    );
+  }
 }

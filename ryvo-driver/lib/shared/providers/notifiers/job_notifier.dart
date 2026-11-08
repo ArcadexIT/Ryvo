@@ -1,4 +1,6 @@
+import 'package:dartz/dartz.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../core/errors/failure.dart';
 import '../../../features/job/domain/entities/job_entity.dart';
 import '../app_providers.dart';
 import '../di_providers.dart';
@@ -13,10 +15,12 @@ class JobNotifier extends AsyncNotifier<JobUiState> {
   @override
   Future<JobUiState> build() async {
     final repo = ref.read(jobRepositoryProvider);
-    repo.watchIncomingJob().listen((job) {
+    // Stream errors are swallowed on purpose: the last good JobUiState stays in
+    // place, so a network blip never clears the offer or the active trip.
+    final incomingSub = repo.watchIncomingJob().listen((job) {
       state = AsyncData(JobUiState(incomingJob: job, activeJob: state.value?.activeJob));
-    });
-    repo.watchActiveJob().listen((job) {
+    }, onError: (Object _) {});
+    final activeSub = repo.watchActiveJob().listen((job) {
       if (job != null) {
         ref.read(activeJobProvider.notifier).state = mockJobFromEntity(job);
         ref.read(providerSocketProvider).setActiveJob(job.id);
@@ -31,19 +35,23 @@ class JobNotifier extends AsyncNotifier<JobUiState> {
         incomingJob: keepOffer ? state.value?.incomingJob : (job != null ? null : state.value?.incomingJob),
         activeJob: job,
       ));
+    }, onError: (Object _) {});
+    ref.onDispose(() {
+      incomingSub.cancel();
+      activeSub.cancel();
     });
     return const JobUiState();
   }
 
-  Future<void> acceptJob(String jobId) async {
-    await ref.read(jobRepositoryProvider).acceptJob(jobId);
+  Future<Either<Failure, JobEntity>> acceptJob(String jobId) {
+    return ref.read(jobRepositoryProvider).acceptJob(jobId);
   }
 
-  Future<void> declineJob(String jobId) async {
-    await ref.read(jobRepositoryProvider).declineJob(jobId);
+  Future<Either<Failure, void>> declineJob(String jobId) {
+    return ref.read(jobRepositoryProvider).declineJob(jobId);
   }
 
-  Future<void> updateStatus(String jobId, JobStatusEntity status) async {
-    await ref.read(jobRepositoryProvider).updateJobStatus(jobId, status);
+  Future<Either<Failure, void>> updateStatus(String jobId, JobStatusEntity status) {
+    return ref.read(jobRepositoryProvider).updateJobStatus(jobId, status);
   }
 }

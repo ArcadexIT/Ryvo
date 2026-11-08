@@ -30,6 +30,12 @@ final tripCameraProvider = StateProvider.family<RyvoMapCamera, TripMapScope>(
 final tripDriverProvider =
     StateProvider.family<DriverPose?, TripMapScope>((ref, scope) => null);
 
+/// Nearby drivers keyed by provider id, for screens that show idle cars.
+final tripFleetProvider =
+    StateProvider.family<Map<String, DriverPose>, TripMapScope>(
+  (ref, scope) => const {},
+);
+
 class TripRouteMeta {
   const TripRouteMeta({this.minutes, this.km});
 

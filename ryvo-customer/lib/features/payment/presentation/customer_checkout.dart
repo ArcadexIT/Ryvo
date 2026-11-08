@@ -75,11 +75,21 @@ double checkoutFare(JobRequestDraft draft, AppConfig config) {
 }
 
 Future<AppConfig> loadCheckoutConfig(WidgetRef ref) async {
-  var config = ref.read(appConfigProvider).valueOrNull;
-  if (config == null || (config.stripePublishableKey ?? '').trim().isEmpty) {
-    config = await fetchAppConfig();
+  // Always read the publishable key just saved in admin. A cached key from
+  // another Stripe account makes the payment sheet reject the client secret.
+  ref.invalidate(appConfigProvider);
+  return ref.read(appConfigProvider.future);
+}
+
+String stripeSheetErrorText(StripeException error, String fallback) {
+  final raw = '${error.error.localizedMessage ?? ''} ${error.error.message}'.toLowerCase();
+  if (raw.contains('client_secret') && raw.contains('does not match')) {
+    return 'The card sheet could not open because the Stripe publishable key '
+        'and the server secret key are from different accounts. In Stripe, open '
+        'Developers → API keys and copy the secret key beside the publishable key '
+        'saved in admin Settings → Billing. Save that secret key there and try again.';
   }
-  return config;
+  return error.error.localizedMessage ?? fallback;
 }
 
 Future<bool> detectPlatformPaySupport(AppConfig config, {required bool google}) async {
@@ -370,7 +380,7 @@ class CustomerCheckout {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              e.error.localizedMessage ?? l10n.paymentFailedPleaseTryAgain,
+              stripeSheetErrorText(e, l10n.paymentFailedPleaseTryAgain),
               style: GoogleFonts.poppins(),
             ),
             backgroundColor: Colors.red.shade700,
@@ -439,7 +449,7 @@ class CustomerCheckout {
       return id;
     } on StripeException catch (e) {
       if (e.error.code != FailureCode.Canceled && context.mounted) {
-        showApiError(context, e);
+        showApiError(context, stripeSheetErrorText(e, e.error.localizedMessage ?? 'Could not save the card.'));
       }
       return null;
     } catch (e) {

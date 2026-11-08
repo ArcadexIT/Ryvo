@@ -16,7 +16,7 @@ import '../../features/home/presentation/pages/shell_page.dart';
 import '../../features/notifications/presentation/pages/notifications_page.dart';
 import '../../features/onboarding/presentation/pages/onboarding_page.dart';
 import '../../features/onboarding/presentation/pages/splash_page.dart';
-import '../../features/payment/presentation/pages/payment_success_page.dart';
+import '../../features/tracking/presentation/pages/rate_driver_page.dart';
 import '../../features/profile/presentation/pages/appearance_page.dart';
 import '../../features/profile/presentation/pages/edit_profile_page.dart';
 import '../../features/profile/presentation/pages/payment_methods_page.dart';
@@ -127,13 +127,8 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(path: '/in-progress', builder: (_, __) => const InProgressPage()),
       GoRoute(
         path: '/payment-success',
-        builder: (_, __) => const PaymentSuccessPage(),
-        pageBuilder: (_, state) => CustomTransitionPage(
-          key: state.pageKey,
-          child: const PaymentSuccessPage(),
-          transitionsBuilder: (_, anim, __, child) =>
-              FadeTransition(opacity: anim, child: child),
-        ),
+        pageBuilder: (_, state) =>
+            _fullscreenPage(state, const RateDriverPage()),
       ),
       GoRoute(path: '/top-up', builder: (_, __) => const TopUpPage()),
       GoRoute(

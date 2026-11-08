@@ -100,6 +100,16 @@ class AppColors {
   static const Color successLight = Color(0xFFD1FAE5);
   static const Color error = Color(0xFFEF4444);
   static const Color errorLight = Color(0xFFFEE2E2);
+
+  /// Cancellation crimson. Light sheets use the pale wash; dark sheets use a
+  /// carbon-tinted wash so the control stays quiet next to the primary CTA.
+  static const Color danger = Color(0xFFE11900);
+  static const Color dangerOnDark = Color(0xFFFF8A78);
+  static const Color dangerSurfaceDark = Color(0xFF3A1714);
+
+  static Color get dangerSurface => isDark ? dangerSurfaceDark : errorLight;
+  static Color get dangerText => isDark ? dangerOnDark : danger;
+
   static const Color warning = Color(0xFFF59E0B);
   static const Color info = Color(0xFF3B82F6);
 }

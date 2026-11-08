@@ -219,11 +219,22 @@ class JobRemoteDataSource {
     Timer? pollTimer;
 
     return Stream<JobEntity?>.multi((controller) async {
+      // Last value that actually came from the server (or socket). A failed
+      // poll must never be reported as "no offer": we re-yield this instead.
+      JobEntity? lastKnown;
+      var hasKnown = false;
+
+      void emit(JobEntity? job) {
+        lastKnown = job;
+        hasKnown = true;
+        controller.add(job);
+      }
+
       Future<void> emitLatest() async {
         try {
-          controller.add(await fetchTopOffer());
+          emit(await fetchTopOffer());
         } catch (_) {
-          controller.add(null);
+          if (hasKnown) controller.add(lastKnown);
         }
       }
 
@@ -232,7 +243,7 @@ class JobRemoteDataSource {
       socketSub = _socket.onIncomingJob.listen((payload) {
         final job = (payload['job'] as Map?)?.cast<String, dynamic>();
         if (job != null && job['status'] == 'searching') {
-          controller.add(_jobFromJson(
+          emit(_jobFromJson(
             job,
             overrideId: payload['offerId'] as String?,
             expiresAt: _parseDate(payload['expiresAt']),
@@ -250,34 +261,42 @@ class JobRemoteDataSource {
   }
 
   Stream<JobEntity?> watchActiveJob() async* {
+    // Last server-confirmed active job. A network blip re-yields this instead
+    // of `null`, so `activeJobProvider` is never reset mid-trip.
+    JobEntity? lastKnown;
+    var hasKnown = false;
+
     try {
-      yield await fetchActive();
+      lastKnown = await fetchActive();
+      hasKnown = true;
+      yield lastKnown;
     } catch (_) {
-      yield null;
+      // No confirmed state yet: stay silent rather than claim "no job".
     }
     await for (final _ in _socket.onJobStatus) {
       try {
-        yield await fetchActive();
-      } catch (_) {}
+        lastKnown = await fetchActive();
+        hasKnown = true;
+        yield lastKnown;
+      } catch (_) {
+        if (hasKnown) yield lastKnown;
+      }
     }
   }
 
   Future<JobEntity> acceptOffer(String offerId) async {
+    // No fallback bid: if the server rejects the accept, the failure surfaces
+    // to the caller (Left) and the driver sees the error.
+    final res = await _dio.post('/provider/offers/$offerId/accept');
     try {
-      final res = await _dio.post('/provider/offers/$offerId/accept');
       final active = await fetchActive();
       if (active != null) return active;
-      final data = _data(res);
-      return _jobFromJson((data as Map).cast<String, dynamic>());
     } catch (_) {
-      await _dio.post('/provider/jobs/$offerId/bids', data: {
-        'kind': 'accept',
-        'amount': 1,
-      });
-      final active = await fetchActive();
-      if (active != null) return active;
-      throw Exception('Waiting for the rider to accept your bid');
+      // Accept succeeded; fall through to the job returned by the accept call.
     }
+    final data = _data(res);
+    if (data is Map) return _jobFromJson(data.cast<String, dynamic>());
+    throw Exception('Offer accepted but the job could not be loaded');
   }
 
   Future<void> rejectOffer(String offerId, {JobEntity? incoming}) async {
@@ -330,6 +349,16 @@ class JobRemoteDataSource {
   }
 }
 
+/// Prefer the typed [Failure] the error interceptor attached to a Dio error so
+/// the driver sees the server's message, not a stringified exception.
+Failure _failureOf(Object e) {
+  if (e is DioException) {
+    final failure = e.error;
+    if (failure is Failure) return failure;
+  }
+  return ServerFailure(e.toString().replaceFirst('Exception: ', ''));
+}
+
 class JobRepositoryImpl implements IJobRepository {
   JobRepositoryImpl(this._remote);
   final JobRemoteDataSource _remote;
@@ -351,7 +380,7 @@ class JobRepositoryImpl implements IJobRepository {
     try {
       return Right(await _remote.acceptOffer(jobId)); // incoming id is offer id or job id
     } catch (e) {
-      return Left(ServerFailure(e.toString()));
+      return Left(_failureOf(e));
     }
   }
 
@@ -371,7 +400,7 @@ class JobRepositoryImpl implements IJobRepository {
       await _remote.updateStatus(jobId, status);
       return const Right(null);
     } catch (e) {
-      return Left(ServerFailure(e.toString()));
+      return Left(_failureOf(e));
     }
   }
 

@@ -15,6 +15,7 @@ import '../../../../shared/widgets/widgets.dart';
 import '../../../home/presentation/widgets/incoming_job_sheet.dart';
 import '../widgets/customer_location_actions.dart';
 import '../widgets/ride_trip_map.dart';
+import '../widgets/swipe_to_confirm.dart';
 import 'package:ryvo_driver/l10n/app_localizations.dart';
 
 class ServiceInProgressPage extends ConsumerStatefulWidget {
@@ -27,13 +28,18 @@ class ServiceInProgressPage extends ConsumerStatefulWidget {
 class _ServiceInProgressPageState extends ConsumerState<ServiceInProgressPage> {
   Timer? _pollTimer;
   int? _routeMinutes;
+  late final StateController<bool> _tripCovering;
+  bool _markedCovering = false;
+  bool _ending = false;
 
   @override
   void initState() {
     super.initState();
+    _tripCovering = ref.read(tripScreenCoveringHomeProvider.notifier);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      ref.read(tripScreenCoveringHomeProvider.notifier).state = true;
+      _markedCovering = true;
+      _tripCovering.state = true;
     });
     _pollTimer = Timer.periodic(const Duration(seconds: 4), (_) => _refreshActiveJob());
     Future.microtask(_refreshActiveJob);
@@ -91,9 +97,10 @@ class _ServiceInProgressPageState extends ConsumerState<ServiceInProgressPage> {
   @override
   void dispose() {
     _pollTimer?.cancel();
-    final covering = ref.read(tripScreenCoveringHomeProvider.notifier);
+    final covering = _tripCovering;
+    final marked = _markedCovering;
     super.dispose();
-    Future(() => covering.state = false);
+    if (marked) Future(() => covering.state = false);
   }
 
   LatLng? _point(double? lat, double? lng) {
@@ -101,7 +108,33 @@ class _ServiceInProgressPageState extends ConsumerState<ServiceInProgressPage> {
     return LatLng(lat, lng);
   }
 
-  Future<void> _endTrip(MockJob job) async {
+  void _showError(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(content: Text(message), backgroundColor: AppColors.error),
+      );
+  }
+
+  /// Wraps [_endTrip] with the swipe's busy state. Returns true only when the
+  /// server completed the trip; any rejection returns false so the
+  /// [SwipeToConfirm] thumb springs back and the driver stays on this page.
+  Future<bool> _onEndTripSwiped(MockJob job) async {
+    if (_ending) return false;
+    setState(() => _ending = true);
+    bool completed;
+    try {
+      completed = await _endTrip(job);
+    } catch (e) {
+      _showError(e.toString().replaceFirst('Exception: ', ''));
+      completed = false;
+    }
+    if (!completed && mounted) setState(() => _ending = false);
+    return completed;
+  }
+
+  Future<bool> _endTrip(MockJob job) async {
     if (job.bookingMode == 'parcel') {
       String? dropoffPhotoUrl;
       try {
@@ -110,18 +143,16 @@ class _ServiceInProgressPageState extends ConsumerState<ServiceInProgressPage> {
           imageQuality: 80,
           maxWidth: 1600,
         );
-        if (picked == null) return;
+        if (picked == null) return false;
         dropoffPhotoUrl = await ref.read(fileUploadServiceProvider).uploadProviderFile(
               localPath: picked.path,
               folder: 'parcels',
             );
       } catch (e) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
-        }
-        return;
+        _showError('$e');
+        return false;
       }
-      if (!mounted) return;
+      if (!mounted) return false;
       final otpCtrl = TextEditingController();
       final otp = await showDialog<String>(
         context: context,
@@ -138,7 +169,7 @@ class _ServiceInProgressPageState extends ConsumerState<ServiceInProgressPage> {
           ],
         ),
       );
-      if (otp == null || otp.isEmpty) return;
+      if (otp == null || otp.isEmpty) return false;
       final delivered = await ref.read(jobRepositoryProvider).deliverParcel(
             job.id,
             otp: otp,
@@ -146,17 +177,35 @@ class _ServiceInProgressPageState extends ConsumerState<ServiceInProgressPage> {
           );
       final fail = delivered.fold((f) => f.message, (_) => null);
       if (fail != null) {
-        if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(fail)));
-        return;
+        _showError(fail);
+        return false;
       }
     }
-    await ref.read(jobRepositoryProvider).updateJobStatus(job.id, JobStatusEntity.completed);
-    ref.read(providerSocketProvider).setActiveJob(null);
-    final detail = await ref.read(jobRepositoryProvider).fetchJobDetail(job.id);
-    if (detail != null) {
-      ref.read(activeJobProvider.notifier).state = mockJobFromEntity(detail);
+
+    // Strict Either handling: only a server-confirmed completion may leave
+    // this page. A rejection keeps the trip active and the swipe re-armed.
+    final result = await ref.read(jobRepositoryProvider).updateJobStatus(job.id, JobStatusEntity.completed);
+    final rejection = result.fold<String?>((f) => f.message, (_) => null);
+    if (rejection != null) {
+      _showError(rejection);
+      return false;
     }
-    if (mounted) context.push('/job-completed?jobId=${job.id}');
+
+    ref.read(providerSocketProvider).setActiveJob(null);
+    try {
+      final detail = await ref.read(jobRepositoryProvider).fetchJobDetail(job.id);
+      if (detail != null) {
+        ref.read(activeJobProvider.notifier).state = mockJobFromEntity(detail);
+      }
+    } catch (_) {
+      // The trip is already completed server-side; the summary page can
+      // still load its own detail, so a failed refresh must not block it.
+    }
+    if (!mounted) return true;
+    context.push('/job-completed?jobId=${job.id}').whenComplete(() {
+      if (mounted) setState(() => _ending = false);
+    });
+    return true;
   }
 
   @override
@@ -276,10 +325,13 @@ class _ServiceInProgressPageState extends ConsumerState<ServiceInProgressPage> {
                       phone: job.customerPhone,
                     ),
                     const SizedBox(height: 16),
-                    RyvoButton(
-                      label: 'End trip',
-                      onPressed: () => _endTrip(job),
+                    SwipeToConfirm(
+                      label: _ending ? 'ENDING…' : 'SWIPE TO END TRIP',
+                      enabled: !_ending,
+                      busy: _ending,
+                      onConfirmed: () => _onEndTripSwiped(job),
                     ),
+                    const SizedBox(height: 8),
                     RyvoButton(
                       label: l10n.cancelJob,
                       variant: RyvoButtonVariant.ghost,

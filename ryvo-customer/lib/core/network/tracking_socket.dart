@@ -32,6 +32,14 @@ class TrackingSocket {
   final TokenStorage _tokenStorage;
   io.Socket? _socket;
 
+  /// Job the customer is tracking. Kept across reconnects so a dropped
+  /// connection can re-enter the same room.
+  String? _activeJobId;
+
+  /// Room joined on this connection. Cleared when the socket drops, otherwise
+  /// a reconnect would look already subscribed and never emit `job:subscribe`.
+  String? _joinedJobId;
+
   final _location = StreamController<JobLocation>.broadcast();
   final _status = StreamController<Map<String, dynamic>>.broadcast();
   final _message = StreamController<Map<String, dynamic>>.broadcast();
@@ -58,7 +66,9 @@ class TrackingSocket {
           .build(),
     );
 
-    socket.onConnect((_) {});
+    socket.onConnect((_) => _rejoinActiveJob());
+    socket.onReconnect((_) => _rejoinActiveJob());
+    socket.onDisconnect((_) => _joinedJobId = null);
     socket.on('job:location', (data) {
       if (data is Map)
         _location.add(JobLocation.fromMap(Map<String, dynamic>.from(data)));
@@ -97,15 +107,43 @@ class TrackingSocket {
     _socket = socket;
   }
 
+  /// Re-enter the trip room after the handshake, including a 4G reconnect.
+  void _rejoinActiveJob() {
+    _joinedJobId = null;
+    final jobId = _activeJobId;
+    if (jobId != null) _emitSubscribe(jobId);
+  }
+
   void subscribeJob(String jobId) {
-    _socket?.emit('job:subscribe', {'jobId': jobId});
+    final previous = _activeJobId;
+    _activeJobId = jobId;
+    if (previous != null && previous != jobId) _emitUnsubscribe(previous);
+    _emitSubscribe(jobId);
   }
 
   void unsubscribeJob(String jobId) {
-    _socket?.emit('job:unsubscribe', {'jobId': jobId});
+    if (_activeJobId == jobId) _activeJobId = null;
+    if (_joinedJobId == jobId) _joinedJobId = null;
+    _emitUnsubscribe(jobId);
+  }
+
+  void _emitSubscribe(String jobId) {
+    final socket = _socket;
+    if (socket == null || !socket.connected) return;
+    if (_joinedJobId == jobId) return;
+    socket.emit('job:subscribe', {'jobId': jobId});
+    _joinedJobId = jobId;
+  }
+
+  void _emitUnsubscribe(String jobId) {
+    final socket = _socket;
+    if (socket == null || !socket.connected) return;
+    socket.emit('job:unsubscribe', {'jobId': jobId});
   }
 
   void dispose() {
+    _activeJobId = null;
+    _joinedJobId = null;
     _socket?.dispose();
     _socket = null;
     _location.close();

@@ -241,6 +241,7 @@ export const PLATFORM_SETTINGS_KEYS = {
   SURGE_MULTIPLIER: 'surge_multiplier',
   MAP_API_KEY: 'map_api_key',
   STRIPE_PUBLISHABLE_KEY: 'stripe_publishable_key',
+  STRIPE_SECRET_KEY: 'stripe_secret_key',
   PROVIDER_OTP_ENABLED: 'provider_otp_enabled',
   PROVIDER_AGREEMENT_VERSION: 'provider_agreement_version',
   PAYMENT_WALLET_ENABLED: 'payment_wallet_enabled',

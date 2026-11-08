@@ -5,8 +5,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 
+import '../location/driver_marker_renderer.dart';
+import '../location/driver_motion.dart';
+import '../location/live_user_location.dart';
 import '../location/route_flow.dart';
-import 'ryvo_live_location_pulse.dart';
+import '../location/user_location_marker.dart';
+import 'ryvo_radar_pulse.dart';
 import 'ryvo_route_flow_layer.dart';
 
 /// A driver pin the map eases toward. Location ticks update this target;
@@ -14,13 +18,16 @@ import 'ryvo_route_flow_layer.dart';
 class DriverPose {
   const DriverPose({
     required this.position,
-    this.bearing = 0,
+    this.bearing,
     this.icon,
   });
 
   final LatLng position;
-  final double bearing;
-  final BitmapDescriptor? icon;
+
+  /// Heading in degrees. Null means "unknown": the canvas keeps the current
+  /// heading, or derives one from the direction of travel.
+  final double? bearing;
+  final DriverMarkerIcon? icon;
 
   @override
   bool operator ==(Object other) {
@@ -75,13 +82,17 @@ class RyvoMapCanvas extends ConsumerStatefulWidget {
     required this.camera,
     this.circles,
     this.driver,
+    this.fleet,
     this.routeFlow,
+    this.radarAnchor,
     this.onMapCreated,
     this.onTap,
     this.padding = EdgeInsets.zero,
     this.paddingListenable,
     this.showLiveLocation = false,
     this.boundsPadding = 48,
+    this.initialTarget,
+    this.initialZoom = 16,
   });
 
   final ProviderListenable<Set<Marker>> markers;
@@ -90,11 +101,19 @@ class RyvoMapCanvas extends ConsumerStatefulWidget {
   final ProviderListenable<Set<Circle>>? circles;
   final ProviderListenable<DriverPose?>? driver;
 
+  /// Nearby drivers keyed by provider id. Each one glides to its next
+  /// position and turns along the shortest arc, like [driver].
+  final ProviderListenable<Map<String, DriverPose>>? fleet;
+
   /// Route to reveal and pulse. It is painted by [RyvoRouteFlowLayer] above
   /// the map, so animation frames never reach the platform channel. While a
   /// route is being revealed the static [polylines] are held back and
   /// handed to the map when the reveal ends.
   final ProviderListenable<RouteFlow?>? routeFlow;
+
+  /// Pickup the searching radar expands from. Painted in Flutter, so pulse
+  /// frames never update [circles] or rebuild the platform map.
+  final ValueListenable<LatLng>? radarAnchor;
   final ValueChanged<GoogleMapController>? onMapCreated;
   final ArgumentCallback<LatLng>? onTap;
   final EdgeInsets padding;
@@ -104,10 +123,19 @@ class RyvoMapCanvas extends ConsumerStatefulWidget {
   /// centered in the visible part of the map.
   final ValueListenable<EdgeInsets>? paddingListenable;
 
-  /// Draws [RyvoLiveLocationPulse] for the device location. The platform blue
-  /// dot stays off so the painter is the only current-location mark.
+  /// Places a flat marker on the device GPS coordinate. The platform blue
+  /// dot stays off so this marker is the only current-location mark.
   final bool showLiveLocation;
   final double boundsPadding;
+
+  /// Where the platform map is created. Pass the real pickup when [camera]
+  /// may still hold a placeholder, so the first frame is that coordinate.
+  /// Later [camera] updates still move the map. [GoogleMap.padding] shifts
+  /// this target into the visible area above a bottom sheet.
+  final LatLng? initialTarget;
+
+  /// Zoom used with [initialTarget].
+  final double initialZoom;
 
   /// Quiet light basemap. Roads stay neutral so a route polyline and markers
   /// remain the only saturated elements.
@@ -176,37 +204,51 @@ class _RyvoMapCanvasState extends ConsumerState<RyvoMapCanvas>
     with SingleTickerProviderStateMixin {
   GoogleMapController? _controller;
   RyvoMapCamera? _pendingCamera;
+  BitmapDescriptor? _youIcon;
   late final CameraPosition _initialCamera;
   late final ValueNotifier<CameraPosition> _viewCamera;
-  AnimationController? _driverAnim;
-  LatLng? _driverFrom;
-  LatLng? _driverTo;
-  double _bearingFrom = 0;
-  double _bearingTo = 0;
-  LatLng? _driverShown;
-  double _bearingShown = 0;
-  BitmapDescriptor? _driverIcon;
+  AnimationController? _motion;
   int _drawnGeneration = -1;
+
+  /// Every driver on the map, keyed by marker id. One controller drives all
+  /// of them so a refresh of 20 cars is still one tick and one rebuild.
+  final Map<String, _DriverTrack> _tracks = {};
+
+  static const String _driverKey = 'driver';
+  static const String _fleetPrefix = 'driver-';
 
   @override
   void initState() {
     super.initState();
-    final camera = ref.read(widget.camera);
-    _initialCamera = CameraPosition(target: camera.target, zoom: camera.zoom);
+    final seeded = widget.initialTarget;
+    if (seeded != null) {
+      _initialCamera = CameraPosition(target: seeded, zoom: widget.initialZoom);
+    } else {
+      final camera = ref.read(widget.camera);
+      _initialCamera = CameraPosition(target: camera.target, zoom: camera.zoom);
+    }
     _viewCamera = ValueNotifier(_initialCamera);
     final driver = widget.driver;
-    if (driver != null) {
-      final pose = ref.read(driver);
-      _driverShown = pose?.position;
-      _bearingShown = pose?.bearing ?? 0;
-      _driverIcon = pose?.icon;
+    if (driver != null) _seedTrack(_driverKey, ref.read(driver));
+    final fleet = widget.fleet;
+    if (fleet != null) {
+      ref.read(fleet).forEach((id, pose) => _seedTrack('$_fleetPrefix$id', pose));
     }
+    if (widget.showLiveLocation) {
+      unawaited(_loadYouIcon());
+    }
+  }
+
+  Future<void> _loadYouIcon() async {
+    final icon = await UserLocationMarker.load();
+    if (!mounted) return;
+    setState(() => _youIcon = icon);
   }
 
   @override
   void dispose() {
     _viewCamera.dispose();
-    _driverAnim?.dispose();
+    _motion?.dispose();
     super.dispose();
   }
 
@@ -233,14 +275,26 @@ class _RyvoMapCanvasState extends ConsumerState<RyvoMapCanvas>
     if (driver != null) {
       ref.listen<DriverPose?>(driver, (previous, next) => _onDriver(next));
     }
+    final fleet = widget.fleet;
+    if (fleet != null) {
+      ref.listen<Map<String, DriverPose>>(
+        fleet,
+        (previous, next) => _onFleet(next),
+      );
+    }
 
     // Theme.of registers a dependency, so a light/dark flip rebuilds only this
     // State and hands GoogleMap a new `style`. The platform view, camera,
     // markers, and polylines are updated in place, never recreated.
     final style = RyvoMapCanvas.styleFor(Theme.of(context).brightness);
-    final shown = _driverShown;
+    final driverMarkers = _driverMarkers();
+    final you = widget.showLiveLocation
+        ? ref.watch(
+            liveUserLocationProvider.select((async) => async.valueOrNull),
+          )
+        : null;
+    final youIcon = _youIcon;
 
-    final driverIcon = _driverIcon;
     Widget buildMap(EdgeInsets padding) {
       return GoogleMap(
         initialCameraPosition: _initialCamera,
@@ -258,16 +312,15 @@ class _RyvoMapCanvasState extends ConsumerState<RyvoMapCanvas>
         padding: padding,
         markers: {
           ...markers,
-          // Wait for the driver bitmap instead of flashing a stock pin.
-          if (shown != null && driverIcon != null)
+          ...driverMarkers,
+          if (you != null && youIcon != null)
             Marker(
-              markerId: const MarkerId('driver'),
-              position: shown,
-              icon: driverIcon,
-              anchor: const Offset(0.5, 0.5),
+              markerId: UserLocationMarker.id,
+              position: you,
+              icon: youIcon,
+              anchor: UserLocationMarker.anchor,
               flat: true,
-              rotation: _bearingShown,
-              zIndexInt: 4,
+              zIndexInt: 5,
             ),
         },
         polylines: polylines,
@@ -299,74 +352,116 @@ class _RyvoMapCanvasState extends ConsumerState<RyvoMapCanvas>
               setState(() => _drawnGeneration = generation);
             },
           ),
-        if (widget.showLiveLocation)
-          RyvoLiveLocationPulse(
+        if (widget.radarAnchor != null)
+          RyvoRadarPulse(
+            anchor: widget.radarAnchor!,
             camera: _viewCamera,
             padding: widget.padding,
+            paddingListenable: paddingListenable,
           ),
       ],
+    );
+  }
+
+  /// Driver markers for this frame. A track is drawn only once its bitmap
+  /// exists, so a stock pin never flashes in first.
+  List<Marker> _driverMarkers() {
+    final markers = <Marker>[];
+    _tracks.forEach((key, track) {
+      final icon = track.icon;
+      if (icon == null) return;
+      markers.add(
+        Marker(
+          markerId: MarkerId(key),
+          position: track.shown,
+          icon: icon.descriptor,
+          anchor: DriverMarkerRenderer.anchor,
+          flat: true,
+          rotation: icon.rotates ? track.bearing : 0,
+          zIndexInt: key == _driverKey ? 4 : 3,
+        ),
+      );
+    });
+    return markers;
+  }
+
+  void _seedTrack(String key, DriverPose? pose) {
+    if (pose == null) return;
+    _tracks[key] = _DriverTrack(
+      position: pose.position,
+      bearing: pose.bearing ?? 0,
+      icon: pose.icon,
     );
   }
 
   void _onDriver(DriverPose? next) {
     if (!mounted) return;
     if (next == null) {
-      _driverAnim?.stop();
-      setState(() {
-        _driverShown = null;
-        _driverIcon = null;
-      });
-      return;
-    }
-    _driverIcon = next.icon;
-    final current = _driverShown;
-    if (current == null) {
-      setState(() {
-        _driverShown = next.position;
-        _bearingShown = next.bearing;
-      });
-      return;
-    }
-    final sameSpot = (current.latitude - next.position.latitude).abs() < 1e-7 &&
-        (current.longitude - next.position.longitude).abs() < 1e-7 &&
-        (_bearingShown - next.bearing).abs() < 0.5;
-    if (sameSpot) {
+      _tracks.remove(_driverKey);
       setState(() {});
       return;
     }
-    _driverFrom = current;
-    _bearingFrom = _bearingShown;
-    _driverTo = next.position;
-    _bearingTo = next.bearing;
-    _driverAnim ??= AnimationController(
+    final moving = _retarget(_driverKey, next);
+    setState(() {});
+    if (moving) _startMotion();
+  }
+
+  void _onFleet(Map<String, DriverPose> next) {
+    if (!mounted) return;
+    final wanted = {for (final id in next.keys) '$_fleetPrefix$id'};
+    _tracks.removeWhere(
+      (key, _) => key.startsWith(_fleetPrefix) && !wanted.contains(key),
+    );
+    var moving = false;
+    next.forEach((id, pose) {
+      if (_retarget('$_fleetPrefix$id', pose)) moving = true;
+    });
+    setState(() {});
+    if (moving) _startMotion();
+  }
+
+  /// Points [key]'s track at [pose]. Returns true when it has to travel.
+  bool _retarget(String key, DriverPose pose) {
+    final track = _tracks[key];
+    if (track == null) {
+      _seedTrack(key, pose);
+      return false;
+    }
+    track.icon = pose.icon;
+    // A tween already in flight resumes from where the marker is drawn now.
+    final from = track.shown;
+    final to = pose.position;
+    final travelled = approxMeters(from, to);
+    // Heading wins when reported. Otherwise face the direction of travel, and
+    // hold the last heading while the car is (nearly) stationary.
+    final bearing = pose.bearing ??
+        (travelled > 3 ? bearingBetween(from, to) : track.bearing);
+    final turn = shortestAngleDelta(track.bearing, bearing).abs();
+    if (travelled < 0.01 && turn < 0.5) {
+      track.settle();
+      return false;
+    }
+    track.retarget(to, bearing);
+    return true;
+  }
+
+  void _startMotion() {
+    final controller = _motion ??= AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 800),
-    )..addListener(_tickDriver);
-    _driverAnim!.forward(from: 0);
+    )..addListener(_tickMotion);
+    controller.forward(from: 0);
   }
 
-  void _tickDriver() {
-    final from = _driverFrom;
-    final to = _driverTo;
-    final controller = _driverAnim;
-    if (!mounted || from == null || to == null || controller == null) return;
+  void _tickMotion() {
+    final controller = _motion;
+    if (!mounted || controller == null) return;
     final t = Curves.easeOut.transform(controller.value);
     setState(() {
-      _driverShown = LatLng(
-        from.latitude + (to.latitude - from.latitude) * t,
-        from.longitude + (to.longitude - from.longitude) * t,
-      );
-      _bearingShown = _lerpBearing(_bearingFrom, _bearingTo, t);
+      for (final track in _tracks.values) {
+        track.advance(t);
+      }
     });
-  }
-
-  double _lerpBearing(double from, double to, double t) {
-    var delta = (to - from) % 360;
-    if (delta > 180) delta -= 360;
-    if (delta < -180) delta += 360;
-    final bearing = from + delta * t;
-    final wrapped = bearing % 360;
-    return wrapped < 0 ? wrapped + 360 : wrapped;
   }
 
   Future<void> _onMapCreated(GoogleMapController controller) async {
@@ -386,11 +481,60 @@ class _RyvoMapCanvasState extends ConsumerState<RyvoMapCanvas>
       return;
     }
     _pendingCamera = null;
+    // GoogleMap.padding shifts the visual center, so this target lands in the
+    // map area above the bottom sheet rather than under the nav bar.
     final update = camera.bounds != null
         ? CameraUpdate.newLatLngBounds(camera.bounds!, widget.boundsPadding)
         : CameraUpdate.newLatLngZoom(camera.target, camera.zoom);
     unawaited(
       controller.animateCamera(update).catchError((Object _) {}),
     );
+  }
+}
+
+/// Animation state for one driver marker. [advance] maps a 0..1 progress
+/// onto the straight line between the two positions and the shortest arc
+/// between the two headings.
+class _DriverTrack {
+  _DriverTrack({
+    required LatLng position,
+    required double bearing,
+    this.icon,
+  })  : shown = position,
+        bearing = bearing,
+        _from = position,
+        _to = position,
+        _bearingFrom = bearing,
+        _bearingTo = bearing;
+
+  DriverMarkerIcon? icon;
+  LatLng shown;
+  double bearing;
+
+  LatLng _from;
+  LatLng _to;
+  double _bearingFrom;
+  double _bearingTo;
+
+  void retarget(LatLng to, double bearingTo) {
+    _from = shown;
+    _to = to;
+    _bearingFrom = bearing;
+    _bearingTo = bearingTo;
+  }
+
+  void settle() {
+    _from = shown;
+    _to = shown;
+    _bearingFrom = bearing;
+    _bearingTo = bearing;
+  }
+
+  void advance(double t) {
+    shown = LatLng(
+      _from.latitude + (_to.latitude - _from.latitude) * t,
+      _from.longitude + (_to.longitude - _from.longitude) * t,
+    );
+    bearing = lerpBearing(_bearingFrom, _bearingTo, t);
   }
 }

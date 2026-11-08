@@ -6,6 +6,16 @@ class AppColors {
   static const Color primary = Color(0xFFB9F36B);
   static const Color primaryDark = Color(0xFF8FE04A);
   static const Color primaryLight = Color(0xFFE8FCCE);
+
+  /// Electric lime for high-emphasis driver CTAs. Pair with [obsidian] text.
+  static const Color lime = Color(0xFFB5F558);
+
+  /// Obsidian ink on lime surfaces, and the dropoff mark in light HUDs.
+  static const Color obsidian = Color(0xFF090A0D);
+
+  /// Circular quick-action fill on dark sheets.
+  static const Color actionSurface = Color(0xFF262B36);
+
   static const Color navy = Color(0xFF0B1220);
 
   static const Color background = Color(0xFF0E1626);

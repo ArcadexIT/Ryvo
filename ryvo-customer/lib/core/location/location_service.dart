@@ -142,7 +142,7 @@ class LocationService {
     try {
       position = await Geolocator.getCurrentPosition(
         locationSettings: const LocationSettings(
-          accuracy: LocationAccuracy.high,
+          accuracy: LocationAccuracy.bestForNavigation,
           timeLimit: Duration(seconds: 12),
         ),
       );
@@ -254,14 +254,15 @@ class LocationService {
   Stream<Position> watchPosition({int distanceFilter = 10}) {
     return Geolocator.getPositionStream(
       locationSettings: LocationSettings(
-        accuracy: LocationAccuracy.high,
+        accuracy: LocationAccuracy.bestForNavigation,
         distanceFilter: distanceFilter,
       ),
     );
   }
 
-  /// Last known fix, then movement updates. Coordinates stay free of map types
-  /// so the location layer does not depend on Google Maps.
+  /// Last known fix, then a fresh high-accuracy lock, then movement updates.
+  /// Coordinates stay free of map types so the location layer does not depend
+  /// on Google Maps.
   Stream<({double lat, double lng})> watchLatLng(
       {int distanceFilter = 8}) async* {
     try {
@@ -269,6 +270,15 @@ class LocationService {
       if (last != null) {
         yield (lat: last.latitude, lng: last.longitude);
       }
+    } catch (_) {}
+    try {
+      final current = await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.bestForNavigation,
+          timeLimit: Duration(seconds: 12),
+        ),
+      );
+      yield (lat: current.latitude, lng: current.longitude);
     } catch (_) {}
     yield* watchPosition(distanceFilter: distanceFilter).map(
       (position) => (lat: position.latitude, lng: position.longitude),

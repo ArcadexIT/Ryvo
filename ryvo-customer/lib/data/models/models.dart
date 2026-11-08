@@ -341,10 +341,13 @@ class ProviderSummary {
     this.phone,
     this.currentLat,
     this.currentLng,
+    this.vehicleImageUrl,
+    this.avatarUrl,
   });
 
   factory ProviderSummary.fromJson(Map<String, dynamic> json) {
     final user = json['user'] as Map<String, dynamic>?;
+    final avatar = user?['avatarUrl'] ?? json['avatarUrl'];
     return ProviderSummary(
       fullName: user?['fullName'] as String?,
       phone: user?['phone'] as String?,
@@ -353,6 +356,10 @@ class ProviderSummary {
           : null,
       currentLat: json['currentLat'] != null ? _toDouble(json['currentLat']) : null,
       currentLng: json['currentLng'] != null ? _toDouble(json['currentLng']) : null,
+      vehicleImageUrl: _vehicleImageUrl(json),
+      avatarUrl: avatar is String && avatar.trim().isNotEmpty
+          ? avatar.trim()
+          : null,
     );
   }
 
@@ -361,6 +368,22 @@ class ProviderSummary {
   final String? phone;
   final double? currentLat;
   final double? currentLng;
+  final String? avatarUrl;
+
+  /// Backend vehicle artwork for the map marker. Null falls back to the
+  /// built-in top-down silhouette.
+  final String? vehicleImageUrl;
+}
+
+/// Reads the provider vehicle image from either a flat `vehicleImageUrl` or a
+/// nested `vehicle.imageUrl`. Blank strings count as missing.
+String? _vehicleImageUrl(Map<String, dynamic> json) {
+  final vehicle = json['vehicle'];
+  final raw = json['vehicleImageUrl'] ??
+      (vehicle is Map ? vehicle['imageUrl'] : null);
+  if (raw is! String) return null;
+  final url = raw.trim();
+  return url.startsWith('http') ? url : null;
 }
 
 class WalletBalance {
@@ -417,9 +440,13 @@ class NearbyProvider {
     this.ratingAvg,
     this.distanceKm,
     this.etaMinutes,
+    this.heading,
+    this.vehicleImageUrl,
   });
 
   factory NearbyProvider.fromJson(Map<String, dynamic> json) => NearbyProvider(
+        heading: json['heading'] != null ? _toDouble(json['heading']) : null,
+        vehicleImageUrl: _vehicleImageUrl(json),
         id: json['id'] as String,
         fullName: json['fullName'] as String? ?? 'Driver',
         lat: json['lat'] != null ? _toDouble(json['lat']) : null,
@@ -436,6 +463,10 @@ class NearbyProvider {
   final double? ratingAvg;
   final double? distanceKm;
   final int? etaMinutes;
+
+  /// Compass heading in degrees when the backend reports one.
+  final double? heading;
+  final String? vehicleImageUrl;
 }
 
 class NotificationItem {

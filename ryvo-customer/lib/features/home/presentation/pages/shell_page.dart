@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/theme/app_spacing.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../data/models/app_config.dart';
 import '../../../../shared/providers/app_providers.dart';
@@ -16,11 +17,10 @@ abstract final class RyvoFloatingNav {
   static const double bottomMargin = 12;
 
   /// Pill plus the gap above the system home indicator.
-  static const double lift = height + bottomMargin;
+  static const double lift = kRyvoFloatingNavHeight;
 
-  static double reservedHeight(BuildContext context) {
-    return lift + MediaQuery.paddingOf(context).bottom;
-  }
+  static double reservedHeight(BuildContext context) =>
+      kRyvoBottomNavClearance(context);
 }
 
 class ShellPage extends ConsumerWidget {

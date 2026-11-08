@@ -6,6 +6,11 @@ import '../../../core/widgets/ryvo_map_canvas.dart';
 /// Marker set for [RyvoMapCanvas] on the home map. Nothing else should write it.
 final homeMapMarkersProvider = StateProvider<Set<Marker>>((ref) => const {});
 
+/// Nearby drivers on the home map, keyed by provider id. The canvas glides
+/// each car to its new position instead of redrawing it.
+final homeMapFleetProvider =
+    StateProvider<Map<String, DriverPose>>((ref) => const {});
+
 /// Route lines for the home map. Empty until a route is published.
 final homeMapPolylinesProvider =
     StateProvider<Set<Polyline>>((ref) => const {});

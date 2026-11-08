@@ -11,7 +11,6 @@ import '../../core/location/location_service.dart';
 import '../../core/location/uk_places_search.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_theme.dart';
-import '../../core/widgets/ryvo_live_location_pulse.dart';
 import '../../core/widgets/ryvo_map_canvas.dart';
 import '../providers/app_providers.dart';
 import 'ryvo_button.dart';
@@ -71,7 +70,6 @@ class _PickupLocationPickerState extends ConsumerState<PickupLocationPicker> {
 
   GoogleMapController? _mapController;
   late final Widget _mapLayer;
-  late final ValueNotifier<CameraPosition> _viewCamera;
 
   late double _lat;
   late double _lng;
@@ -100,9 +98,6 @@ class _PickupLocationPickerState extends ConsumerState<PickupLocationPicker> {
       _locatingPin.value = true;
       Future.microtask(_resolveInitialPin);
     }
-    _viewCamera = ValueNotifier(
-      CameraPosition(target: LatLng(_lat, _lng), zoom: 16),
-    );
     _mapLayer = _StableLocationMap(
       initialTarget: LatLng(_lat, _lng),
       mapStyle: _mapStyle,
@@ -111,7 +106,6 @@ class _PickupLocationPickerState extends ConsumerState<PickupLocationPicker> {
         if (!_dragging.value) _dragging.value = true;
       },
       onMove: (target) => _mapCenter = target,
-      onView: (position) => _viewCamera.value = position,
       onIdle: _onCameraIdle,
     );
   }
@@ -124,7 +118,6 @@ class _PickupLocationPickerState extends ConsumerState<PickupLocationPicker> {
     _addressText.dispose();
     _regionText.dispose();
     _errorText.dispose();
-    _viewCamera.dispose();
     super.dispose();
   }
 
@@ -307,9 +300,6 @@ class _PickupLocationPickerState extends ConsumerState<PickupLocationPicker> {
       body: Stack(
         children: [
           Positioned.fill(child: _mapLayer),
-          Positioned.fill(
-            child: RyvoLiveLocationPulse(camera: _viewCamera),
-          ),
           Positioned.fill(
             child: IgnorePointer(
               child: Align(
@@ -707,7 +697,6 @@ class _StableLocationMap extends StatefulWidget {
     required this.onCreated,
     required this.onMoveStarted,
     required this.onMove,
-    required this.onView,
     required this.onIdle,
   });
 
@@ -716,7 +705,6 @@ class _StableLocationMap extends StatefulWidget {
   final ValueChanged<GoogleMapController> onCreated;
   final VoidCallback onMoveStarted;
   final ValueChanged<LatLng> onMove;
-  final ValueChanged<CameraPosition> onView;
   final VoidCallback onIdle;
 
   @override
@@ -738,7 +726,6 @@ class _StableLocationMapState extends State<_StableLocationMap> {
         onCameraMoveStarted: widget.onMoveStarted,
         onCameraMove: (position) {
           widget.onMove(position.target);
-          widget.onView(position);
         },
         onCameraIdle: widget.onIdle,
         myLocationEnabled: false,

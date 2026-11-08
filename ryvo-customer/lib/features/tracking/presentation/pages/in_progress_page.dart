@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import '../../../../core/job/active_job_session.dart';
+import '../../../../core/location/driver_marker_renderer.dart';
 import '../../../../core/location/driving_route.dart';
 import '../../../../core/location/trip_markers.dart';
 import '../../../../core/network/tracking_socket.dart';
@@ -38,27 +39,40 @@ class _InProgressPageState extends ConsumerState<InProgressPage> {
   List<LatLng> _routePoints = const [];
   String? _routeKey;
   TripMarkerSet? _markers;
+  DriverMarkerIcon? _driverIcon;
+  String? _driverIconUrl;
   int? _routeMinutes;
   Widget? _map;
   int _cameraGeneration = 0;
+  late final TrackingSocket _socket;
+  ProviderContainer? _container;
+  bool _closed = false;
+  DateTime? _lastSocketEventAt;
+  static const Duration _socketStaleAfter = Duration(seconds: 12);
 
   @override
   void initState() {
     super.initState();
+    _socket = ref.read(trackingSocketProvider);
     final job = ref.read(jobDraftProvider).activeJob;
     _jobId = job?.id;
     _seedDriver(job);
-    _publishDriver();
-    final camera =
-        _dropoffOf(job) ?? _pickupOf(job) ?? const LatLng(52.48, -1.89);
-    ref.read(tripCameraProvider(TripMapScope.progress).notifier).state =
-        RyvoMapCamera(target: camera, zoom: 14);
+    // Provider writes are illegal during initState. The map reads the camera
+    // on the next frame, then recenters onto the trip.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _publishDriver();
+      final camera =
+          _dropoffOf(job) ?? _pickupOf(job) ?? const LatLng(52.48, -1.89);
+      ref.read(tripCameraProvider(TripMapScope.progress).notifier).state =
+          RyvoMapCamera(target: camera, zoom: 14);
+    });
     _loadMarkers();
     _ticker = Timer.periodic(const Duration(seconds: 1), (_) {
       if (mounted) setState(() {});
     });
     _pollTimer = Timer.periodic(const Duration(seconds: 4), (_) {
-      if (ref.read(trackingSocketProvider).connected) return;
+      if (_closed || _socketHealthy) return;
       _refreshJob();
     });
     Future.microtask(() async {
@@ -75,8 +89,20 @@ class _InProgressPageState extends ConsumerState<InProgressPage> {
     final set = await TripMarkers.load();
     if (!mounted) return;
     _markers = set;
-    _publishDriver();
     _publishStaticMarkers();
+    await _loadDriverIcon();
+  }
+
+  /// Loads the unified driver marker once per image URL. The renderer caches
+  /// it for the session, so calling this on every job refresh is cheap.
+  Future<void> _loadDriverIcon() async {
+    final url = ref.read(jobDraftProvider).activeJob?.provider?.vehicleImageUrl;
+    if (_driverIcon != null && url == _driverIconUrl) return;
+    _driverIconUrl = url;
+    final icon = await DriverMarkerRenderer.load(imageUrl: url);
+    if (!mounted || url != _driverIconUrl) return;
+    _driverIcon = icon;
+    _publishDriver();
   }
 
   void _seedDriver(JobModel? job) {
@@ -103,37 +129,54 @@ class _InProgressPageState extends ConsumerState<InProgressPage> {
   }
 
   Future<void> _connectTracking() async {
-    if (_jobId == null) return;
-    final socket = ref.read(trackingSocketProvider);
-    await socket.connect();
-    socket.subscribeJob(_jobId!);
-    _statusSub = socket.onStatus.listen((data) {
+    if (_jobId == null || _closed) return;
+    await _socket.connect();
+    if (_closed || _jobId == null) return;
+    _socket.subscribeJob(_jobId!);
+    _statusSub = _socket.onStatus.listen((data) {
+      _lastSocketEventAt = DateTime.now();
       if (!mounted) return;
       final status = data['status'] as String?;
       if (status != null) _refreshJob();
     });
-    _locSub = socket.onLocation.listen((loc) {
+    _locSub = _socket.onLocation.listen((loc) {
+      _lastSocketEventAt = DateTime.now();
       if (!mounted) return;
       _driverPos = LatLng(loc.lat, loc.lng);
-      _publishDriver(bearing: loc.heading ?? 0);
+      _publishDriver(bearing: loc.heading);
       _loadRoute();
     });
   }
 
+  bool get _alive => !_closed && mounted && context.mounted;
+
+  /// Connected is not the same as receiving trip events. A quiet socket still
+  /// needs the HTTP refresh so a missed status cannot freeze the trip.
+  bool get _socketHealthy {
+    if (!_socket.connected) return false;
+    final last = _lastSocketEventAt;
+    if (last == null) return false;
+    return DateTime.now().difference(last) < _socketStaleAfter;
+  }
+
   Future<void> _refreshJob() async {
+    if (!_alive) return;
     final jobId = _jobId ?? ref.read(jobDraftProvider).activeJob?.id;
-    if (jobId == null || !mounted) return;
+    if (jobId == null || !_alive) return;
     try {
       final updated = await ref.read(jobRepositoryProvider).getJob(jobId);
-      if (!mounted) return;
-      final container = ProviderScope.containerOf(context, listen: false);
-      container.read(jobDraftProvider.notifier).state =
-          container.read(jobDraftProvider).copyWith(activeJob: updated);
+      // The element is already defunct during dispose, while State.mounted
+      // is still true. Writing here notifies a select() listener that can
+      // no longer rebuild.
+      if (!_alive) return;
+      ref.read(jobDraftProvider.notifier).state =
+          ref.read(jobDraftProvider).copyWith(activeJob: updated);
       if (_driverPos == null) {
         _seedDriver(updated);
         _publishDriver();
       }
       _publishStaticMarkers();
+      _loadDriverIcon();
       _loadRoute();
       _handleStatus(updated.status);
     } catch (_) {}
@@ -165,7 +208,7 @@ class _InProgressPageState extends ConsumerState<InProgressPage> {
     _publishCamera(_routePoints);
   }
 
-  void _publishDriver({double bearing = 0}) {
+  void _publishDriver({double? bearing}) {
     final pos = _driverPos;
     ref.read(tripDriverProvider(TripMapScope.progress).notifier).state =
         pos == null
@@ -173,7 +216,7 @@ class _InProgressPageState extends ConsumerState<InProgressPage> {
             : DriverPose(
                 position: pos,
                 bearing: bearing,
-                icon: _markers?.car,
+                icon: _driverIcon,
               );
   }
 
@@ -289,15 +332,30 @@ class _InProgressPageState extends ConsumerState<InProgressPage> {
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _container ??= ProviderScope.containerOf(context, listen: false);
+  }
+
+  @override
   void dispose() {
+    _closed = true;
     _ticker?.cancel();
     _pollTimer?.cancel();
     _statusSub?.cancel();
     _locSub?.cancel();
-    if (_jobId != null) {
-      ref.read(trackingSocketProvider).unsubscribeJob(_jobId!);
-    }
+    _releaseSocketRoom();
     super.dispose();
+  }
+
+  /// [WidgetRef.read] throws once the element is defunct. The container was
+  /// captured while this page was mounted and still sees the live job.
+  void _releaseSocketRoom() {
+    final jobId = _jobId;
+    if (jobId == null) return;
+    final activeId = _container?.read(jobDraftProvider).activeJob?.id;
+    if (activeId == jobId) return;
+    _socket.unsubscribeJob(jobId);
   }
 
   Future<void> _cancelJob() async {

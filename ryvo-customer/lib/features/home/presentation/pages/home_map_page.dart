@@ -6,7 +6,9 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import '../../../../core/job/active_job_session.dart';
 import '../../../../core/job/resume_customer_job.dart';
+import '../../../../core/location/nearby_fleet.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/theme/app_spacing.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/widgets/ryvo_map_canvas.dart';
 import '../../../../data/models/models.dart';
@@ -14,7 +16,6 @@ import '../../../../shared/providers/app_providers.dart';
 import '../../../../shared/widgets/widgets.dart';
 import '../home_map_providers.dart';
 import '../widgets/active_job_banner.dart';
-import '../widgets/map_markers.dart';
 import '../widgets/ryvo_spatial_drawer.dart';
 import '../widgets/ryvo_spatial_menu.dart';
 import 'package:ryvo_customer/l10n/app_localizations.dart';
@@ -30,13 +31,12 @@ class _HomeMapPageState extends ConsumerState<HomeMapPage>
     with WidgetsBindingObserver {
   final GlobalKey<RyvoSpatialDrawerControllerState> _drawerKey =
       GlobalKey<RyvoSpatialDrawerControllerState>();
+  final ValueNotifier<EdgeInsets> _mapPadding =
+      ValueNotifier(const EdgeInsets.only(top: 120));
   GoogleMapController? _mapController;
   GoRouter? _router;
   String? _lastHomeRefreshPath;
 
-  // Custom marker bitmaps — loaded once in initState
-  final Map<String, BitmapDescriptor> _providerMarkers = {};
-  List<NearbyProvider> _providers = const [];
   bool _pickupPinnedManually = false;
   int _pickupRequest = 0;
   int _cameraGeneration = 0;
@@ -72,7 +72,6 @@ class _HomeMapPageState extends ConsumerState<HomeMapPage>
       if (!mounted) return;
       final draft = ref.read(jobDraftProvider);
       _requestCamera(LatLng(draft.pickupLat, draft.pickupLng), 14.5);
-      _publishMarkers();
       ref.invalidate(serviceCategoriesProvider);
       _init();
     });
@@ -92,6 +91,7 @@ class _HomeMapPageState extends ConsumerState<HomeMapPage>
   @override
   void dispose() {
     _router?.routerDelegate.removeListener(_onRouteChanged);
+    _mapPadding.dispose();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
@@ -236,7 +236,6 @@ class _HomeMapPageState extends ConsumerState<HomeMapPage>
     _setLocating(false);
     await _refreshActiveJob();
     if (!mounted) return;
-    _publishMarkers();
     // Always take a fresh GPS fix on home open so a previous launch
     // address is never reused as the current pickup.
     await _resolveLocation(silent: true, recenter: true);
@@ -259,7 +258,6 @@ class _HomeMapPageState extends ConsumerState<HomeMapPage>
 
     _pickupPinnedManually = false;
     if (recenter) _requestCamera(_pickup, 15);
-    _publishMarkers();
     await _loadNearbyProviders();
     await _promptIfOutsideCoverage();
   }
@@ -273,7 +271,6 @@ class _HomeMapPageState extends ConsumerState<HomeMapPage>
     _pickupPinnedManually = true;
     if (_locating) _setLocating(false);
     _requestCamera(_pickup, 16);
-    _publishMarkers();
     await _loadNearbyProviders();
     await _promptIfOutsideCoverage();
   }
@@ -295,12 +292,10 @@ class _HomeMapPageState extends ConsumerState<HomeMapPage>
     );
     if (!mounted) return;
     _setLocating(true);
-    _publishMarkers();
     if (recenter) _requestCamera(position, 16);
     await applyPickupCoordinates(ref, position.latitude, position.longitude);
     if (!mounted || request != _pickupRequest) return;
     _setLocating(false);
-    _publishMarkers();
     await _loadNearbyProviders();
     await _promptIfOutsideCoverage();
   }
@@ -328,45 +323,23 @@ class _HomeMapPageState extends ConsumerState<HomeMapPage>
           .read(jobRepositoryProvider)
           .nearbyProviders(lat: pickup.latitude, lng: pickup.longitude);
     } catch (_) {}
-    // Only keep providers that have a live location to plot.
-    providers = providers.where((p) => p.lat != null && p.lng != null).toList();
-
-    final providerIcons = await Future.wait(
-      providers.map((p) => MapMarkers.buildProviderMarker(
-            p.etaMinutes != null ? '${p.etaMinutes} min' : '—',
-            p.distanceKm != null
-                ? '${p.distanceKm!.toStringAsFixed(1)} km'
-                : '—',
-          )),
-    );
+    // Compact car icons only: no ETA bubble on the idle map. Icons are cached
+    // by the renderer, so a refresh only moves the cars.
+    final fleet = await buildNearbyFleet(providers);
     if (!mounted || request != _pickupRequest) return;
-    _providers = providers;
-    _providerMarkers.clear();
-    for (var i = 0; i < providers.length; i++) {
-      _providerMarkers['p$i'] = providerIcons[i];
-    }
-    _publishMarkers();
+    ref.read(homeMapFleetProvider.notifier).state = fleet;
   }
 
-  void _publishMarkers() {
-    ref.read(homeMapMarkersProvider.notifier).state = {
-      // A provider is plotted only once its bitmap exists, so a stock pin
-      // never flashes in first.
-      ..._providers.asMap().entries.where((e) {
-        return _providerMarkers.containsKey('p${e.key}');
-      }).map((e) => Marker(
-            markerId: MarkerId('p${e.key}'),
-            position: LatLng(e.value.lat!, e.value.lng!),
-            icon: _providerMarkers['p${e.key}']!,
-            anchor: const Offset(0.5, 0.78),
-          )),
-    };
+  void _onSheetExtent(double size) {
+    final height = MediaQuery.sizeOf(context).height;
+    final capped = size > 0.56 ? 0.56 : size;
+    final bottom = height * capped;
+    if ((_mapPadding.value.bottom - bottom).abs() < 0.5) return;
+    _mapPadding.value = EdgeInsets.only(top: 120, bottom: bottom);
   }
 
   @override
   Widget build(BuildContext context) {
-    final mapBottom = MediaQuery.sizeOf(context).height * 0.42;
-
     return RyvoSpatialDrawerController(
       key: _drawerKey,
       drawer: RyvoSpatialMenu(
@@ -390,13 +363,12 @@ class _HomeMapPageState extends ConsumerState<HomeMapPage>
           children: [
             RyvoMapCanvas(
               markers: homeMapMarkersProvider,
+              fleet: homeMapFleetProvider,
               polylines: homeMapPolylinesProvider,
               camera: homeMapCameraProvider,
               showLiveLocation: true,
-              padding: EdgeInsets.only(
-                top: 120,
-                bottom: mapBottom,
-              ),
+              padding: const EdgeInsets.only(top: 120),
+              paddingListenable: _mapPadding,
               onMapCreated: (controller) => _mapController = controller,
               onTap: _onMapTap,
             ),
@@ -414,6 +386,7 @@ class _HomeMapPageState extends ConsumerState<HomeMapPage>
             ),
             Positioned.fill(
               child: _HomeBottomOverlay(
+                onSheetExtent: _onSheetExtent,
                 onLocate: () => _resolveLocation(),
                 onZoomIn: () =>
                     _mapController?.animateCamera(CameraUpdate.zoomIn()),
@@ -446,9 +419,15 @@ bool _hasPrecisePickup(String address, bool locationResolved) {
 }
 
 String _ctaLabel(String jobType) => switch (jobType) {
-      'bidding' => 'Place a bid',
-      'parcel' => 'Send a parcel',
-      _ => 'Request ride',
+      'bidding' => 'Find Drivers',
+      'parcel' => 'Send Parcel',
+      _ => 'Request Ride',
+    };
+
+String _searchPrompt(String jobType) => switch (jobType) {
+      'bidding' => 'Where to? (Set your fare)',
+      'parcel' => 'Deliver parcel to?',
+      _ => 'Where to?',
     };
 
 class _RecentPlace {
@@ -588,6 +567,7 @@ class _HomeTopBar extends ConsumerWidget {
 
 class _HomeBottomOverlay extends ConsumerStatefulWidget {
   const _HomeBottomOverlay({
+    required this.onSheetExtent,
     required this.onLocate,
     required this.onZoomIn,
     required this.onZoomOut,
@@ -596,6 +576,7 @@ class _HomeBottomOverlay extends ConsumerStatefulWidget {
     required this.onRecentPlace,
   });
 
+  final ValueChanged<double> onSheetExtent;
   final VoidCallback onLocate;
   final VoidCallback onZoomIn;
   final VoidCallback onZoomOut;
@@ -608,26 +589,54 @@ class _HomeBottomOverlay extends ConsumerStatefulWidget {
 }
 
 class _HomeBottomOverlayState extends ConsumerState<_HomeBottomOverlay> {
+  static const _detents = <double>[0.42, 0.56, 0.88];
+
   final DraggableScrollableController _sheet = DraggableScrollableController();
-  double _extent = 0.42;
+  final ValueNotifier<double> _extent = ValueNotifier(0.42);
+  double? _detent;
 
   @override
   void initState() {
     super.initState();
     _sheet.addListener(_onSheetExtent);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _onSheetExtent();
+    });
   }
 
   void _onSheetExtent() {
     if (!isContextActive(context) || !_sheet.isAttached) return;
-    final next = _sheet.size;
-    if ((next - _extent).abs() < 0.001) return;
-    setState(() => _extent = next);
+    final size = _sheet.size;
+    if ((_extent.value - size).abs() >= 0.001) {
+      _extent.value = size;
+    }
+    widget.onSheetExtent(size);
+    double? nearest;
+    for (final detent in _detents) {
+      if ((size - detent).abs() < 0.012) nearest = detent;
+    }
+    if (nearest != null && nearest != _detent) {
+      final arrived = _detent != null;
+      _detent = nearest;
+      if (arrived) HapticFeedback.selectionClick();
+    }
+  }
+
+  void _revealRequest() {
+    if (!_sheet.isAttached) return;
+    _sheet.animateTo(
+      0.56,
+      duration: const Duration(milliseconds: 280),
+      curve: Curves.fastOutSlowIn,
+    );
   }
 
   @override
   void dispose() {
     _sheet.removeListener(_onSheetExtent);
     _sheet.dispose();
+    _extent.dispose();
     super.dispose();
   }
 
@@ -639,11 +648,16 @@ class _HomeBottomOverlayState extends ConsumerState<_HomeBottomOverlay> {
     ref.invalidate(serviceCategoriesProvider);
   }
 
-  double _controlsBottom(BuildContext context, BoxConstraints constraints) {
+  double _controlsBottom(
+    BuildContext context,
+    BoxConstraints constraints,
+    double extent,
+  ) {
     const controlsHeight = 36.0 * 3 + 16;
     final safeTop = MediaQuery.paddingOf(context).top + 72;
     final limit = constraints.maxHeight - safeTop - controlsHeight;
-    final desired = constraints.maxHeight * _extent + 12;
+    final capped = extent > 0.56 ? 0.56 : extent;
+    final desired = constraints.maxHeight * capped + 12;
     if (limit < 12) return 12;
     return desired.clamp(12.0, limit);
   }
@@ -653,9 +667,6 @@ class _HomeBottomOverlayState extends ConsumerState<_HomeBottomOverlay> {
     final jobType =
         ref.watch(jobDraftProvider.select((draft) => draft.jobType));
     final locating = ref.watch(homeMapLocatingProvider);
-    final dropoffAddress = ref.watch(
-      jobDraftProvider.select((draft) => draft.dropoffAddress),
-    );
     final hasDropoff = ref.watch(
       jobDraftProvider.select(
         (draft) =>
@@ -663,6 +674,23 @@ class _HomeBottomOverlayState extends ConsumerState<_HomeBottomOverlay> {
             draft.dropoffLng != null &&
             draft.dropoffAddress.trim().isNotEmpty,
       ),
+    );
+    ref.listen<bool>(
+      jobDraftProvider.select(
+        (draft) =>
+            draft.dropoffLat != null &&
+            draft.dropoffLng != null &&
+            draft.dropoffAddress.trim().isNotEmpty,
+      ),
+      (previous, next) {
+        if (next && previous != true) _revealRequest();
+      },
+    );
+    ref.listen<String>(
+      jobDraftProvider.select((draft) => draft.jobType),
+      (previous, next) {
+        if (previous != null && previous != next) _revealRequest();
+      },
     );
 
     return LayoutBuilder(
@@ -672,19 +700,16 @@ class _HomeBottomOverlayState extends ConsumerState<_HomeBottomOverlay> {
             DraggableScrollableSheet(
               controller: _sheet,
               initialChildSize: 0.42,
-              minChildSize: 0.26,
-              maxChildSize: 0.78,
+              minChildSize: 0.42,
+              maxChildSize: 0.88,
               snap: true,
-              snapSizes: const [0.26, 0.42, 0.78],
-              snapAnimationDuration: const Duration(milliseconds: 280),
+              snapSizes: _detents,
+              snapAnimationDuration: const Duration(milliseconds: 260),
               builder: (context, scrollController) {
                 return _HomeRequestSheet(
                   scrollController: scrollController,
                   jobType: jobType,
                   hasDropoff: hasDropoff,
-                  dropoffLabel: dropoffAddress.trim().isEmpty
-                      ? null
-                      : _shortPlace(dropoffAddress),
                   ctaLabel: _ctaLabel(jobType),
                   onModeSelected: _selectMode,
                   onSearch: locating
@@ -701,9 +726,15 @@ class _HomeBottomOverlayState extends ConsumerState<_HomeBottomOverlay> {
                 );
               },
             ),
-            Positioned(
-              right: 16,
-              bottom: _controlsBottom(context, constraints),
+            ValueListenableBuilder<double>(
+              valueListenable: _extent,
+              builder: (context, extent, child) {
+                return Positioned(
+                  right: 16,
+                  bottom: _controlsBottom(context, constraints, extent),
+                  child: child!,
+                );
+              },
               child: _MapControls(
                 locating: locating,
                 onLocate: locating ? null : widget.onLocate,
@@ -1019,7 +1050,6 @@ class _HomeRequestSheet extends ConsumerWidget {
     required this.scrollController,
     required this.jobType,
     required this.hasDropoff,
-    required this.dropoffLabel,
     required this.ctaLabel,
     required this.onModeSelected,
     required this.onSearch,
@@ -1030,7 +1060,6 @@ class _HomeRequestSheet extends ConsumerWidget {
   final ScrollController scrollController;
   final String jobType;
   final bool hasDropoff;
-  final String? dropoffLabel;
   final String ctaLabel;
   final ValueChanged<String> onModeSelected;
   final VoidCallback? onSearch;
@@ -1042,11 +1071,7 @@ class _HomeRequestSheet extends ConsumerWidget {
     final jobsAsync = ref.watch(jobsListProvider);
     final places = _recentPlaces(jobsAsync.valueOrNull ?? const <JobModel>[]);
     final loading = jobsAsync.isLoading && places.isEmpty;
-    final l10n = AppLocalizations.of(context);
-    final destination = dropoffLabel?.trim();
-    final whereTo = destination == null || destination.isEmpty
-        ? l10n.whatDoYouNeedHelpWith
-        : destination;
+    final prompt = _searchPrompt(jobType);
 
     return DecoratedBox(
       decoration: BoxDecoration(
@@ -1055,7 +1080,7 @@ class _HomeRequestSheet extends ConsumerWidget {
         boxShadow: [
           BoxShadow(
             color: AppColors.obsidian.withValues(alpha: 0.06),
-            blurRadius: 16,
+            blurRadius: 12,
             offset: const Offset(0, -4),
           ),
         ],
@@ -1064,58 +1089,64 @@ class _HomeRequestSheet extends ConsumerWidget {
         borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
         child: Material(
           color: AppColors.modal,
-          child: ListView(
-            controller: scrollController,
-            physics: const AlwaysScrollableScrollPhysics(),
-            padding: EdgeInsets.fromLTRB(
-              16,
-              8,
-              16,
-              MediaQuery.paddingOf(context).bottom + 90,
-            ),
+          child: Column(
             children: [
-              const Center(child: _SheetHandle()),
-              const SizedBox(height: 14),
-              _TripModeSelector(
-                jobType: jobType,
-                onSelected: onModeSelected,
-              ),
-              const SizedBox(height: 16),
-              _WhereToPill(label: whereTo, onTap: onSearch),
-              const SizedBox(height: 18),
-              Text(
-                'Recent',
-                style: RyvoTypography.style(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.textSecondary,
-                  letterSpacing: 0.2,
+              Expanded(
+                child: ListView(
+                  controller: scrollController,
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+                  children: [
+                    const Center(child: _SheetHandle()),
+                    const SizedBox(height: 14),
+                    _TripModeSelector(
+                      jobType: jobType,
+                      onSelected: onModeSelected,
+                    ),
+                    const SizedBox(height: 16),
+                    _WhereToPill(
+                      prompt: prompt,
+                      onTap: onSearch,
+                    ),
+                    const SizedBox(height: 18),
+                    Text(
+                      'Recent',
+                      style: RyvoTypography.style(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.textSecondary,
+                        letterSpacing: 0.2,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    if (loading)
+                      const _RecentPlaceholder()
+                    else if (places.isEmpty)
+                      _DestinationRow(
+                        icon: Icons.history_rounded,
+                        title: 'No recent places',
+                        subtitle: 'Search for a destination',
+                        onTap: onSearch,
+                      )
+                    else
+                      for (final place in places)
+                        _DestinationRow(
+                          icon: Icons.history_rounded,
+                          title: place.title,
+                          subtitle: place.subtitle,
+                          onTap: onRecentPlace == null
+                              ? null
+                              : () => onRecentPlace!(place),
+                        ),
+                  ],
                 ),
               ),
-              const SizedBox(height: 4),
-              if (loading)
-                const _RecentPlaceholder()
-              else if (places.isEmpty)
-                _DestinationRow(
-                  icon: Icons.history_rounded,
-                  title: 'No recent places',
-                  subtitle: 'Search for a destination',
-                  onTap: onSearch,
-                )
-              else
-                for (final place in places)
-                  _DestinationRow(
-                    icon: Icons.history_rounded,
-                    title: place.title,
-                    subtitle: place.subtitle,
-                    onTap: onRecentPlace == null
-                        ? null
-                        : () => onRecentPlace!(place),
-                  ),
-              if (hasDropoff) ...[
-                const SizedBox(height: 16),
-                _FindRideButton(label: ctaLabel, onTap: onFindRide),
-              ],
+              if (hasDropoff)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                  child: _FindRideButton(label: ctaLabel, onTap: onFindRide),
+                ),
+              SizedBox(height: kFloatingNavClearance(context)),
             ],
           ),
         ),
@@ -1257,36 +1288,46 @@ class _TripModeSelector extends StatelessWidget {
 }
 
 class _WhereToPill extends StatelessWidget {
-  const _WhereToPill({required this.label, required this.onTap});
+  const _WhereToPill({
+    required this.prompt,
+    required this.onTap,
+  });
 
-  final String label;
+  final String prompt;
   final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
     return Material(
       color: AppColors.surface,
-      borderRadius: BorderRadius.circular(16),
+      borderRadius: BorderRadius.circular(14),
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(14),
         child: SizedBox(
-          height: 56,
+          height: 52,
           child: Row(
             children: [
               const SizedBox(width: 16),
-              Icon(Icons.search_rounded,
-                  color: AppColors.textPrimary, size: 22),
+              Icon(
+                Icons.search_rounded,
+                color: AppColors.textPrimary,
+                size: 22,
+              ),
               const SizedBox(width: 12),
               Expanded(
-                child: Text(
-                  label,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: RyvoTypography.heading(
-                    fontSize: 18,
-                    color: AppColors.textPrimary,
-                    letterSpacing: -0.5,
+                child: _RollingSwitcher(
+                  value: prompt,
+                  child: Text(
+                    prompt,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: RyvoTypography.style(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.textPrimary,
+                      letterSpacing: -0.3,
+                    ),
                   ),
                 ),
               ),
@@ -1294,6 +1335,47 @@ class _WhereToPill extends StatelessWidget {
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _RollingSwitcher extends StatelessWidget {
+  const _RollingSwitcher({required this.value, required this.child});
+
+  final String value;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return ClipRect(
+      child: AnimatedSwitcher(
+        duration: const Duration(milliseconds: 280),
+        switchInCurve: Curves.easeOutCubic,
+        switchOutCurve: Curves.easeInCubic,
+        layoutBuilder: (current, previous) {
+          return Stack(
+            alignment: Alignment.centerLeft,
+            children: [
+              ...previous,
+              if (current != null) current,
+            ],
+          );
+        },
+        transitionBuilder: (child, animation) {
+          final reverse = animation.status == AnimationStatus.reverse;
+          return FadeTransition(
+            opacity: animation,
+            child: SlideTransition(
+              position: Tween<Offset>(
+                begin: reverse ? const Offset(0, -0.45) : const Offset(0, 0.45),
+                end: Offset.zero,
+              ).animate(animation),
+              child: child,
+            ),
+          );
+        },
+        child: KeyedSubtree(key: ValueKey<String>(value), child: child),
       ),
     );
   }
