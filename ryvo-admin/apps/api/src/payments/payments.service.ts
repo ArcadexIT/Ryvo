@@ -204,6 +204,14 @@ export class PaymentsService implements OnModuleInit {
     return updated;
   }
 
+  private isMissingStripeResource(err: unknown): boolean {
+    const stripeErr = err as { code?: string; message?: string };
+    return (
+      stripeErr.code === 'resource_missing' ||
+      /No such (customer|payment_method)/i.test(stripeErr.message ?? '')
+    );
+  }
+
   private async getOrCreateStripeCustomer(userId: string) {
     const stripe = this.requireStripe();
     const customer = await this.prisma.customer.findUnique({
@@ -213,7 +221,19 @@ export class PaymentsService implements OnModuleInit {
     if (!customer) throw new NotFoundException('Customer profile not found');
 
     if (customer.stripeCustomerId) {
-      return customer.stripeCustomerId;
+      try {
+        const existing = await stripe.customers.retrieve(customer.stripeCustomerId);
+        if (!('deleted' in existing && existing.deleted)) return customer.stripeCustomerId;
+      } catch (err) {
+        if (!this.isMissingStripeResource(err)) throw err;
+        this.logger.warn(
+          `Stripe customer ${customer.stripeCustomerId} is not on this account; creating a new one`,
+        );
+      }
+      await this.prisma.customer.update({
+        where: { id: customer.id },
+        data: { stripeCustomerId: null },
+      });
     }
 
     const created = await stripe.customers.create({
@@ -421,7 +441,15 @@ export class PaymentsService implements OnModuleInit {
       }
       if (this.stripe) {
         const stripeCustomerId = await this.getOrCreateStripeCustomer(input.userId);
-        const paymentMethod = await this.stripe.paymentMethods.retrieve(stripePaymentMethodId);
+        let paymentMethod;
+        try {
+          paymentMethod = await this.stripe.paymentMethods.retrieve(stripePaymentMethodId);
+        } catch (err) {
+          if (this.isMissingStripeResource(err)) {
+            throw new BadRequestException('That card is no longer valid. Add your card again.');
+          }
+          throw err;
+        }
         const owner =
           typeof paymentMethod.customer === 'string'
             ? paymentMethod.customer

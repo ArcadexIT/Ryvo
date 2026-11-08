@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
-import { isAuthenticated } from '@/lib/auth';
+import { ensureSessionCookie, isAuthenticated } from '@/lib/auth';
 import { canAccessRoute } from '@/lib/permissions';
 import { useAuth } from '@/contexts/auth-context';
 
@@ -17,6 +17,7 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
       router.replace('/login');
       return;
     }
+    ensureSessionCookie();
     if (isLoading) return;
 
     if (!canAccessRoute(permissions, pathname)) {

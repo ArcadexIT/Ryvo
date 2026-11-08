@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 const MARKETING_HOSTS = new Set(['ryvo.arcadexit.com', 'www.ryvo.arcadexit.com']);
+const ADMIN_HOST = 'https://ryvo.arcadexit.com';
+// Routing hint only. The real session stays in localStorage; AuthGuard still checks it.
+const ADMIN_SESSION_COOKIE = 'ryvo_admin_session';
 
 export function middleware(request: NextRequest) {
   const host = request.headers.get('host')?.split(':')[0]?.toLowerCase() ?? '';
@@ -40,13 +43,17 @@ export function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  // Admin login/dashboard must not run on the public site (API CORS is admin-only).
-  if (pathname === '/login' || pathname.startsWith('/login/')) {
-    return NextResponse.redirect(new URL(pathname, 'https://ryvo.arcadexit.com'));
+  // www has no certificate. Keep login on the apex, which is this same app.
+  if (
+    host !== 'ryvo.arcadexit.com' &&
+    (pathname === '/login' || pathname.startsWith('/login/'))
+  ) {
+    return NextResponse.redirect(new URL(pathname + request.nextUrl.search, ADMIN_HOST));
   }
 
-  // Marketing domain: serve landing at `/`.
-  if (pathname === '/') {
+  // Public visitors get the marketing page. A signed-in admin gets the dashboard,
+  // which also lives at `/`.
+  if (pathname === '/' && request.cookies.get(ADMIN_SESSION_COOKIE)?.value !== '1') {
     url.pathname = '/landing-page';
     return NextResponse.rewrite(url);
   }

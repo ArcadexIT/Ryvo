@@ -2,6 +2,15 @@ import { apiFetch, apiMutate } from './api';
 
 const TOKEN_KEY = 'ryvo_admin_access_token';
 const REFRESH_KEY = 'ryvo_admin_refresh_token';
+const SESSION_COOKIE = 'ryvo_admin_session';
+
+function writeSessionCookie(present: boolean): void {
+  if (typeof document === 'undefined') return;
+  const secure = window.location.protocol === 'https:' ? '; Secure' : '';
+  document.cookie = present
+    ? `${SESSION_COOKIE}=1; Path=/; SameSite=Lax; Max-Age=2592000${secure}`
+    : `${SESSION_COOKIE}=; Path=/; Max-Age=0; SameSite=Lax${secure}`;
+}
 
 export interface AuthTokens {
   accessToken: string;
@@ -32,15 +41,21 @@ export function getRefreshToken(): string | null {
 export function setTokens(tokens: AuthTokens): void {
   localStorage.setItem(TOKEN_KEY, tokens.accessToken);
   localStorage.setItem(REFRESH_KEY, tokens.refreshToken);
+  writeSessionCookie(true);
 }
 
 export function clearTokens(): void {
   localStorage.removeItem(TOKEN_KEY);
   localStorage.removeItem(REFRESH_KEY);
+  writeSessionCookie(false);
 }
 
 export function isAuthenticated(): boolean {
   return !!getAccessToken();
+}
+
+export function ensureSessionCookie(): void {
+  if (isAuthenticated()) writeSessionCookie(true);
 }
 
 export async function login(phone: string, password: string): Promise<AuthTokens> {
