@@ -8,6 +8,7 @@ import { Header } from '@/components/layout/header';
 import { PageContent } from '@/components/layout/page-content';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { StatusBadge } from '@/components/ui/badge';
+import { KeyValueList } from '@/components/ui/key-value-list';
 import { Avatar } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { ConfirmDeleteDialog } from '@/components/ui/confirm-delete-dialog';
@@ -126,58 +127,34 @@ export default function CustomerDetailPage() {
               ]}
             />
 
-            {tab === 'overview' && (
-              <div className="grid gap-6 lg:grid-cols-2">
-                <Card>
-                  <CardHeader>
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        <Avatar name={data.user.fullName} size="lg" />
-                        <div>
-                          <CardTitle>{data.user.fullName}</CardTitle>
-                          <p className="mt-0.5 text-xs text-muted">Customer since {formatDate(data.createdAt)}</p>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Button
-                          variant={isActive ? 'destructive' : 'default'}
-                          size="sm"
-                          disabled={statusMutation.isPending}
-                          onClick={() => statusMutation.mutate(isActive ? 'suspended' : 'active')}
-                        >
-                          {isActive ? 'Suspend' : 'Activate'}
-                        </Button>
-                        <Button
-                          variant="destructive"
-                          size="sm"
-                          onClick={() => setConfirmDelete(true)}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                          Delete
-                        </Button>
-                      </div>
-                    </div>
-                  </CardHeader>
-                  <CardContent className="space-y-3 text-sm">
-                    <div className="flex items-center justify-between border-b border-border pb-3">
-                      <span className="text-secondary">Phone</span>
-                      <span className="font-mono text-[13px] text-primary">{data.user.phone}</span>
-                    </div>
-                    <div className="flex items-center justify-between border-b border-border pb-3">
-                      <span className="text-secondary">Email</span>
-                      <span className="text-primary">{data.user.email ?? '—'}</span>
-                    </div>
-                    <div className="flex items-center justify-between border-b border-border pb-3">
-                      <span className="text-secondary">Status</span>
-                      <StatusBadge status={data.user.status} />
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-secondary">Joined</span>
-                      <span className="font-mono text-[13px] text-primary">{formatDate(data.createdAt)}</span>
-                    </div>
-                  </CardContent>
-                </Card>
+            <section className="flex flex-col gap-4 rounded-lg border border-hairline bg-card p-4 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex items-center gap-3">
+                <Avatar name={data.user.fullName} size="lg" />
+                <div>
+                  <h2 className="text-xl font-semibold tracking-tight text-primary">{data.user.fullName}</h2>
+                  <div className="mt-1">
+                    <StatusBadge status={data.user.status} />
+                  </div>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant={isActive ? 'destructive' : 'default'}
+                  size="sm"
+                  disabled={statusMutation.isPending}
+                  onClick={() => statusMutation.mutate(isActive ? 'suspended' : 'active')}
+                >
+                  {isActive ? 'Suspend' : 'Activate'}
+                </Button>
+                <Button variant="destructive" size="sm" onClick={() => setConfirmDelete(true)} aria-label="Delete rider">
+                  <Trash2 strokeWidth={1.75} />
+                  Delete
+                </Button>
+              </div>
+            </section>
 
+            {tab === 'overview' && (
+              <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_280px]">
                 <Card>
                   <CardHeader>
                     <CardTitle>Wallet</CardTitle>
@@ -216,6 +193,22 @@ export default function CustomerDetailPage() {
                         Adjust Wallet
                       </Button>
                     </div>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Details</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <KeyValueList
+                      items={[
+                        { label: 'Phone', value: data.user.phone },
+                        { label: 'Email', value: data.user.email ?? '—' },
+                        { label: 'Status', value: <StatusBadge status={data.user.status} /> },
+                        { label: 'Joined', value: formatDate(data.createdAt) },
+                        { label: 'Trips', value: data.jobs?.length ?? 0 },
+                      ]}
+                    />
                   </CardContent>
                 </Card>
               </div>

@@ -7,7 +7,9 @@ import { login } from '@/lib/auth';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ThemeToggle } from '@/components/layout/theme-toggle';
+import Image from 'next/image';
 import { BrandWordmark } from '@/components/brand-wordmark';
+import { useTheme } from '@/hooks/use-theme';
 
 const FEATURES = [
   { icon: BarChart3, text: 'Real-time operations & revenue insights' },
@@ -25,6 +27,7 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const { theme } = useTheme();
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -44,47 +47,58 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="relative flex min-h-screen bg-canvas p-3 lg:p-4">
-      <div className="absolute right-6 top-6 z-20">
+    <div className="relative flex min-h-screen bg-canvas p-2">
+      <div className="absolute right-5 top-5 z-20">
         <ThemeToggle />
       </div>
 
-      <div className="relative hidden w-[46%] flex-col justify-between overflow-hidden rounded-[28px] bg-[#111111] p-12 text-white xl:p-16 lg:flex">
-        <div className="pointer-events-none absolute -left-16 top-10 h-64 w-64 rounded-full bg-[#ff5500]/30 blur-3xl" />
+      <div className="relative hidden w-[46%] flex-col justify-between overflow-hidden rounded-xl bg-primary p-12 text-primary-fg lg:flex xl:p-16">
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-0 opacity-40"
+          style={{
+            backgroundImage:
+              'linear-gradient(var(--hairline) 1px, transparent 1px), linear-gradient(90deg, var(--hairline) 1px, transparent 1px)',
+            backgroundSize: '28px 28px',
+          }}
+        />
         <div className="relative">
-          <BrandWordmark className="h-8 brightness-0 invert" priority />
+          <Image
+            src={theme === 'dark' ? '/logo-wordmark.png' : '/logo-wordmark-light.png'}
+            alt="Ryvo"
+            width={1415}
+            height={360}
+            priority
+            className="h-8 w-auto"
+          />
         </div>
         <div className="relative">
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#ff5500]">Operations</p>
-          <h1 className="mt-4 max-w-md text-5xl font-semibold leading-[1.02] tracking-[-0.045em]">
-            Run your platform with clarity.
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-emphasis">Operations</p>
+          <h1 className="mt-4 max-w-md text-4xl font-semibold leading-[1.05] tracking-tight">
+            Run the network from one console.
           </h1>
-          <p className="mt-4 max-w-sm text-white/60">
-            Everything you need to manage jobs, providers, and payments — in one operations
-            console.
-          </p>
           <ul className="mt-10 space-y-4">
             {FEATURES.map(({ icon: Icon, text }) => (
               <li key={text} className="flex items-center gap-3">
-                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white/10 text-[#ff5500]">
-                  <Icon className="h-[18px] w-[18px]" />
+                <span className="grid size-9 shrink-0 place-items-center rounded-full bg-primary-fg/10">
+                  <Icon className="size-4" strokeWidth={1.75} />
                 </span>
-                <span className="text-sm text-white/75">{text}</span>
+                <span className="text-sm text-primary-fg/80">{text}</span>
               </li>
             ))}
           </ul>
         </div>
-        <p className="relative text-xs text-white/40">© {new Date().getFullYear()} Ryvo Platform. All rights reserved.</p>
+        <p className="relative text-xs text-primary-fg/50">© {new Date().getFullYear()} Ryvo</p>
       </div>
 
       <div className="flex w-full flex-col items-center justify-center px-6 py-12 lg:w-[54%]">
-        <div className="w-full max-w-sm animate-fade-in-up">
-          <div className="mb-8 flex flex-col items-center text-center lg:items-start lg:text-left">
-            <div className="mb-6 flex h-14 w-auto items-center justify-center rounded-2xl bg-elevated px-4 shadow-md ring-1 ring-border lg:hidden">
+        <div className="w-full max-w-sm">
+          <div className="mb-8">
+            <div className="mb-6 lg:hidden">
               <BrandWordmark className="h-7" priority />
             </div>
-            <h2 className="font-display text-2xl font-semibold text-primary">Welcome back</h2>
-            <p className="mt-2 text-sm text-secondary">Sign in to the Ryvo operations dashboard</p>
+            <h2 className="page-title">Welcome back</h2>
+            <p className="mt-2 text-sm text-muted">Sign in to the Ryvo operations dashboard</p>
           </div>
 
           <Button
@@ -102,75 +116,58 @@ export default function LoginPage() {
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
-              <label htmlFor="phone" className="text-sm font-medium text-secondary">
+              <label htmlFor="phone" className="text-sm font-medium text-primary">
                 Phone number
               </label>
-              <div className="relative">
-                <Phone className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
-                <Input
-                  id="phone"
-                  type="tel"
-                  placeholder="01754713136"
-                  value={phone}
-                  onChange={(e) => setPhone(e.target.value)}
-                  className="pl-10"
-                  required
-                  autoComplete="tel"
-                />
-              </div>
+              <Input
+                id="phone"
+                type="tel"
+                placeholder="01754713136"
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                leading={<Phone strokeWidth={1.75} />}
+                required
+                autoComplete="tel"
+              />
             </div>
 
             <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <label htmlFor="password" className="text-sm font-medium text-secondary">
-                  Password
-                </label>
-              </div>
-              <div className="relative">
-                <Lock className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
-                <Input
-                  id="password"
-                  type={showPassword ? 'text' : 'password'}
-                  placeholder="••••••••"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="pl-10 pr-10"
-                  required
-                  autoComplete="current-password"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword((v) => !v)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted transition-colors hover:text-secondary"
-                  aria-label={showPassword ? 'Hide password' : 'Show password'}
-                  tabIndex={-1}
-                >
-                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                </button>
-              </div>
+              <label htmlFor="password" className="text-sm font-medium text-primary">
+                Password
+              </label>
+              <Input
+                id="password"
+                type={showPassword ? 'text' : 'password'}
+                placeholder="Password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                leading={<Lock strokeWidth={1.75} />}
+                trailing={
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword((v) => !v)}
+                    className="text-muted hover:text-primary"
+                    aria-label={showPassword ? 'Hide password' : 'Show password'}
+                  >
+                    {showPassword ? <EyeOff className="size-4" strokeWidth={1.75} /> : <Eye className="size-4" strokeWidth={1.75} />}
+                  </button>
+                }
+                required
+                autoComplete="current-password"
+              />
             </div>
 
-            {error && (
-              <div className="flex items-start gap-2 rounded-md border border-danger/20 bg-danger/10 px-3 py-2.5 text-sm text-danger animate-fade-in-up">
-                <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+            {error ? (
+              <div className="flex items-start gap-2 rounded-md bg-danger/10 px-3 py-2.5 text-sm text-danger">
+                <AlertCircle className="mt-0.5 size-4 shrink-0" strokeWidth={1.75} />
                 <span>{error}</span>
               </div>
-            )}
+            ) : null}
 
-            <Button
-              type="submit"
-              className="w-full bg-gradient-to-r from-orange-500 to-accent text-white shadow-md hover:brightness-105"
-              size="lg"
-              loading={loading}
-            >
-              Sign In
+            <Button type="submit" variant="emphasis" className="w-full" size="lg" loading={loading}>
+              Sign in
             </Button>
           </form>
-
-          <p className="mt-8 text-center text-xs text-muted lg:text-left">
-            Protected by enterprise-grade security. Contact your administrator if you need
-            access.
-          </p>
         </div>
       </div>
     </div>

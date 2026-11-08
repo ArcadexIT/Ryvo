@@ -18,9 +18,6 @@ interface RevenueChartProps {
   days?: number;
 }
 
-const REVENUE = '#1fa855';
-const JOBS = '#8b5cf6';
-
 function fillDays(data: { date: string; jobs: number; revenue: number }[], days: number) {
   const map = new Map(data.map((item) => [item.date.slice(0, 10), item]));
   const start = new Date();
@@ -50,10 +47,10 @@ function ChartTooltip({
   if (!active || !payload?.length) return null;
   const point = payload[0].payload;
   return (
-    <div className="rounded-xl border border-border bg-white px-3 py-2 text-xs shadow-md">
+    <div className="rounded-lg border border-hairline bg-sheet px-3 py-2 text-xs shadow-popover">
       <p className="font-medium text-primary">{point.label}</p>
-      <p className="mt-1 text-secondary">Jobs {point.jobs}</p>
-      <p className="text-secondary">Revenue {formatCurrency(point.revenue)}</p>
+      <p className="num mt-1 text-muted">Trips {point.jobs}</p>
+      <p className="num text-muted">Revenue {formatCurrency(point.revenue)}</p>
     </div>
   );
 }
@@ -61,29 +58,42 @@ function ChartTooltip({
 export function RevenueChart({ data, days = 7 }: RevenueChartProps) {
   const theme = useChartTheme();
   const series = fillDays(data, days);
+  if (series.every((point) => point.jobs === 0 && point.revenue === 0)) {
+    return <p className="flex h-[250px] items-center justify-center text-sm text-muted">No trips in this range.</p>;
+  }
 
   return (
     <ResponsiveContainer width="100%" height={250}>
       <ComposedChart data={series} margin={{ top: 8, right: 8, left: -18, bottom: 0 }}>
-        <defs>
-          <linearGradient id="jobsFill" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor={JOBS} stopOpacity={0.22} />
-            <stop offset="100%" stopColor={JOBS} stopOpacity={0} />
-          </linearGradient>
-          <linearGradient id="revenueFill" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor={REVENUE} stopOpacity={0.2} />
-            <stop offset="100%" stopColor={REVENUE} stopOpacity={0} />
-          </linearGradient>
-        </defs>
         <CartesianGrid stroke={theme.grid} vertical={false} />
-        <XAxis dataKey="label" tick={{ fill: theme.text, fontSize: 11 }} axisLine={false} tickLine={false} />
-        <YAxis yAxisId="jobs" tick={{ fill: theme.text, fontSize: 11 }} axisLine={false} tickLine={false} allowDecimals={false} />
+        <XAxis dataKey="label" tick={{ fill: theme.text, fontSize: 12 }} axisLine={false} tickLine={false} />
+        <YAxis
+          yAxisId="jobs"
+          tick={{ fill: theme.text, fontSize: 12 }}
+          axisLine={false}
+          tickLine={false}
+          allowDecimals={false}
+        />
         <YAxis yAxisId="revenue" hide />
         <Tooltip content={<ChartTooltip />} />
-        <Area yAxisId="jobs" type="monotone" dataKey="jobs" stroke="none" fill="url(#jobsFill)" />
-        <Line yAxisId="jobs" type="monotone" dataKey="jobs" stroke={JOBS} strokeWidth={2.5} dot={false} />
-        <Area yAxisId="revenue" type="monotone" dataKey="revenue" stroke="none" fill="url(#revenueFill)" />
-        <Line yAxisId="revenue" type="monotone" dataKey="revenue" stroke={REVENUE} strokeWidth={2.5} dot={false} />
+        <Area
+          yAxisId="revenue"
+          type="monotone"
+          dataKey="revenue"
+          stroke="var(--success)"
+          strokeWidth={2}
+          fill="var(--success)"
+          fillOpacity={0.1}
+          dot={false}
+        />
+        <Line
+          yAxisId="jobs"
+          type="monotone"
+          dataKey="jobs"
+          stroke="var(--text-muted)"
+          strokeWidth={1.75}
+          dot={false}
+        />
       </ComposedChart>
     </ResponsiveContainer>
   );

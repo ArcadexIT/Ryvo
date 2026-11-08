@@ -345,9 +345,8 @@ export default function ProviderDetailPage() {
         {data && (
           <div className="space-y-6">
             {/* Profile header */}
-            <section className="relative overflow-hidden rounded-2xl border border-border bg-elevated shadow-sm">
-              <div className="pointer-events-none absolute inset-x-0 top-0 h-24 bg-[radial-gradient(ellipse_at_top_left,var(--accent-soft),transparent_55%),linear-gradient(90deg,transparent,color-mix(in_srgb,var(--info)_8%,transparent))]" />
-              <div className="relative flex flex-col gap-5 p-5 sm:p-6 lg:flex-row lg:items-center lg:justify-between">
+            <section className="rounded-lg border border-hairline bg-card">
+              <div className="flex flex-col gap-5 p-5 sm:p-6 lg:flex-row lg:items-center lg:justify-between">
                 <div className="flex items-start gap-4">
                   <SecureAvatar
                     name={data.user.fullName}

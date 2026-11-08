@@ -1,9 +1,15 @@
 'use client';
 
 import { Calendar } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { Button } from '@/components/ui/button';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 
-export type DateRange = '7d' | '30d' | '90d' | 'custom';
+export type DateRange = 'today' | '7d' | '30d' | '90d' | 'qtd' | 'custom';
 
 interface DateRangePickerProps {
   value: DateRange;
@@ -12,53 +18,51 @@ interface DateRangePickerProps {
 }
 
 const OPTIONS: { value: DateRange; label: string }[] = [
-  { value: '7d', label: '7 days' },
-  { value: '30d', label: '30 days' },
-  { value: '90d', label: '90 days' },
+  { value: 'today', label: 'Today' },
+  { value: '7d', label: '7d' },
+  { value: '30d', label: '30d' },
+  { value: 'qtd', label: 'QTD' },
+  { value: 'custom', label: 'Custom' },
 ];
 
 export function dateRangeToDays(range: DateRange): number {
+  const now = new Date();
   switch (range) {
+    case 'today':
+      return 1;
     case '7d':
       return 7;
     case '30d':
       return 30;
     case '90d':
       return 90;
+    case 'qtd': {
+      const start = new Date(now.getFullYear(), Math.floor(now.getMonth() / 3) * 3, 1);
+      return Math.max(1, Math.round((now.getTime() - start.getTime()) / 86_400_000) + 1);
+    }
     default:
-      return 7;
+      return 30;
   }
 }
 
 export function DateRangePicker({ value, onChange, className }: DateRangePickerProps) {
+  const current = OPTIONS.find((option) => option.value === value)?.label ?? 'Custom';
+
   return (
-    <div className={cn('inline-flex items-center gap-1 rounded-full bg-elevated p-1 shadow-sm ring-1 ring-border', className)}>
-      {OPTIONS.map((opt) => (
-        <button
-          key={opt.value}
-          type="button"
-          onClick={() => onChange(opt.value)}
-          className={cn(
-            'rounded-full px-3.5 py-1.5 text-xs font-medium transition-colors',
-            value === opt.value
-              ? 'bg-[#1fa855] text-white'
-              : 'text-secondary hover:text-primary',
-          )}
-        >
-          {opt.label}
-        </button>
-      ))}
-      <button
-        type="button"
-        onClick={() => onChange('custom')}
-        aria-label="Custom range"
-        className={cn(
-          'grid h-8 w-8 place-items-center rounded-full transition-colors',
-          value === 'custom' ? 'bg-[#1fa855] text-white' : 'text-secondary hover:bg-surface hover:text-primary',
-        )}
-      >
-        <Calendar className="h-4 w-4" />
-      </button>
-    </div>
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button variant="secondary" className={className}>
+          <Calendar strokeWidth={1.75} />
+          {current}
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end">
+        {OPTIONS.map((option) => (
+          <DropdownMenuItem key={option.value} onClick={() => onChange(option.value)}>
+            {option.label}
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }

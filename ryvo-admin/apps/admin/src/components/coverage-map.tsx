@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { loadGoogleMaps } from '@/lib/google-maps';
+import { cssColor, opsMapStyles } from '@/lib/css-color';
 
 export interface CoverageZoneShape {
   id: string;
@@ -26,21 +27,10 @@ export interface DraftZone {
   radiusKm: number;
 }
 
-const MAP_STYLES: google.maps.MapTypeStyle[] = [
-  { elementType: 'geometry', stylers: [{ color: '#14151a' }] },
-  { elementType: 'labels.text.fill', stylers: [{ color: '#9aa1b1' }] },
-  { elementType: 'labels.text.stroke', stylers: [{ color: '#0b0b0c' }] },
-  { featureType: 'poi', stylers: [{ visibility: 'off' }] },
-  { featureType: 'transit', stylers: [{ visibility: 'off' }] },
-  { featureType: 'road', elementType: 'geometry', stylers: [{ color: '#25262d' }] },
-  { featureType: 'road.highway', elementType: 'geometry', stylers: [{ color: '#33343d' }] },
-  { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#0c1420' }] },
-];
-
-const AUDIENCE_COLOR: Record<CoverageZoneShape['audience'], string> = {
-  both: '#14b8a6',
-  customer: '#38bdf8',
-  provider: '#a78bfa',
+const AUDIENCE_TOKEN: Record<CoverageZoneShape['audience'], string> = {
+  both: '--success',
+  customer: '--info',
+  provider: '--warning',
 };
 
 interface CoverageMapProps {
@@ -87,7 +77,7 @@ export function CoverageMap({
         zoomControl: true,
         zoomControlOptions: { position: google.maps.ControlPosition.RIGHT_BOTTOM },
         gestureHandling: 'greedy',
-        styles: MAP_STYLES,
+        styles: opsMapStyles(),
         clickableIcons: false,
       });
       map.addListener('click', (event: google.maps.MapMouseEvent) => {
@@ -109,9 +99,9 @@ export function CoverageMap({
         map,
         center: { lat: draft.lat, lng: draft.lng },
         radius: draft.radiusKm * 1000,
-        strokeColor: '#ff5500',
+        strokeColor: cssColor('--warning'),
         strokeWeight: 2,
-        fillColor: '#ff5500',
+        fillColor: cssColor('--warning'),
         fillOpacity: 0.16,
         clickable: false,
       });
@@ -152,7 +142,7 @@ export function CoverageMap({
     zoneCirclesRef.current = zones
       .filter((zone) => zone.id !== selectedId)
       .map((zone) => {
-        const color = zone.isActive ? AUDIENCE_COLOR[zone.audience] : '#6b7280';
+        const color = zone.isActive ? cssColor(AUDIENCE_TOKEN[zone.audience]) : cssColor('--text-muted');
         const circle = new google.maps.Circle({
           map,
           center: { lat: zone.centerLat, lng: zone.centerLng },
@@ -181,9 +171,9 @@ export function CoverageMap({
           icon: {
             path: google.maps.SymbolPath.CIRCLE,
             scale: 6,
-            fillColor: '#fb7185',
+            fillColor: cssColor('--danger'),
             fillOpacity: 1,
-            strokeColor: '#1c1305',
+            strokeColor: cssColor('--text'),
             strokeWeight: 1,
           },
         }),

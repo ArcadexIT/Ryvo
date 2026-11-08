@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { io, Socket } from 'socket.io-client';
 import { getApiBaseUrl, getSocketBaseUrl } from '@/lib/api';
 import { loadGoogleMaps } from '@/lib/google-maps';
+import { cssColor } from '@/lib/css-color';
 
 type Place = { address: string; lat: number; lng: number };
 
@@ -376,18 +377,18 @@ export function TrackTripView({ token }: { token: string }) {
         scale: 9,
         fillColor: color,
         fillOpacity: 1,
-        strokeColor: '#ffffff',
+        strokeColor: cssColor('--sheet'),
         strokeWeight: 2,
       });
 
       if (!pickupMarker.current) {
-        pickupMarker.current = new maps.maps.Marker({ map, title: 'Pickup', icon: dot('#2563eb') });
+        pickupMarker.current = new maps.maps.Marker({ map, title: 'Pickup', icon: dot(cssColor('--info')) });
       }
       pickupMarker.current.setPosition({ lat: liveTrip.pickup.lat, lng: liveTrip.pickup.lng });
 
       if (liveTrip.dropoff) {
         if (!dropoffMarker.current) {
-          dropoffMarker.current = new maps.maps.Marker({ map, title: 'Drop-off', icon: dot('#ef4444') });
+          dropoffMarker.current = new maps.maps.Marker({ map, title: 'Drop-off', icon: dot(cssColor('--danger')) });
         }
         dropoffMarker.current.setMap(map);
         dropoffMarker.current.setPosition({ lat: liveTrip.dropoff.lat, lng: liveTrip.dropoff.lng });
@@ -400,9 +401,9 @@ export function TrackTripView({ token }: { token: string }) {
           path: maps.maps.SymbolPath.FORWARD_CLOSED_ARROW,
           scale: 7,
           rotation: car.heading ?? 0,
-          fillColor: '#1fa855',
+          fillColor: cssColor('--success'),
           fillOpacity: 1,
-          strokeColor: '#ffffff',
+          strokeColor: cssColor('--sheet'),
           strokeWeight: 2,
         };
         if (!carMarker.current) {
@@ -424,7 +425,7 @@ export function TrackTripView({ token }: { token: string }) {
       if (!routeCasing.current) {
         routeCasing.current = new maps.maps.Polyline({
           map,
-          strokeColor: '#ffffff',
+          strokeColor: cssColor('--sheet'),
           strokeOpacity: 0.95,
           strokeWeight: 9,
           zIndex: 1,
@@ -433,7 +434,7 @@ export function TrackTripView({ token }: { token: string }) {
       if (!routeLine.current) {
         routeLine.current = new maps.maps.Polyline({
           map,
-          strokeColor: '#1fa855',
+          strokeColor: cssColor('--success'),
           strokeOpacity: 1,
           strokeWeight: 5,
           zIndex: 2,
@@ -536,7 +537,7 @@ export function TrackTripView({ token }: { token: string }) {
           ) : null}
           <div className="mt-4 space-y-2 text-sm">
             <p className="flex gap-2">
-              <span className="mt-1 h-2.5 w-2.5 shrink-0 rounded-full bg-[#2563eb]" />
+              <span className="mt-1 size-2.5 shrink-0 rounded-full bg-info" />
               <span>
                 <span className="text-secondary">Pickup · </span>
                 {trip.pickup.address}
@@ -544,7 +545,7 @@ export function TrackTripView({ token }: { token: string }) {
             </p>
             {trip.dropoff ? (
               <p className="flex gap-2">
-                <span className="mt-1 h-2.5 w-2.5 shrink-0 rounded-full bg-[#ef4444]" />
+                <span className="mt-1 size-2.5 shrink-0 rounded-full bg-danger" />
                 <span>
                   <span className="text-secondary">Drop-off · </span>
                   {trip.dropoff.address}

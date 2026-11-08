@@ -16,8 +16,8 @@ export function StripeHandoff({
         alignItems: 'center',
         justifyContent: 'center',
         padding: 24,
-        background: '#f7f7f5',
-        color: '#1c1c1a',
+        background: 'var(--canvas)',
+        color: 'var(--text)',
         fontFamily: 'Geist, ui-sans-serif, system-ui, sans-serif',
       }}
     >
@@ -32,26 +32,26 @@ export function StripeHandoff({
         style={{
           width: '100%',
           maxWidth: 420,
-          background: '#ffffff',
-          border: '1px solid #e6e5e1',
-          borderRadius: 16,
+          background: 'var(--sheet)',
+          border: '1px solid var(--hairline)',
+          borderRadius: 20,
           padding: 28,
-          boxShadow: '0 10px 20px -6px rgba(28, 28, 26, 0.09)',
+          boxShadow: 'var(--shadow-popover)',
         }}
       >
-        <p style={{ margin: '0 0 8px', fontSize: 13, fontWeight: 600, letterSpacing: '0.04em', color: '#0b1220' }}>
+        <p style={{ margin: '0 0 8px', fontSize: 13, fontWeight: 600, letterSpacing: '0.04em', color: 'var(--text)' }}>
           RYVO
         </p>
         <h1 style={{ margin: '0 0 12px', fontSize: 28, lineHeight: 1.2 }}>{title}</h1>
-        <p style={{ margin: 0, fontSize: 16, lineHeight: 1.5, color: '#6b6a65' }}>{body}</p>
+        <p style={{ margin: 0, fontSize: 16, lineHeight: 1.5, color: 'var(--text-muted)' }}>{body}</p>
         {appLink ? (
           <a
             href={appLink}
             style={{
               display: 'inline-block',
               marginTop: 20,
-              background: '#ff5500',
-              color: '#ffffff',
+              background: 'var(--emphasis)',
+              color: 'var(--emphasis-fg)',
               textDecoration: 'none',
               fontWeight: 600,
               borderRadius: 12,

@@ -2,6 +2,7 @@
 
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import { loadGoogleMaps, type MapMarker } from '@/lib/google-maps';
+import { opsMapStyles } from '@/lib/css-color';
 
 interface LiveMapProps {
   apiKey: string;
@@ -78,7 +79,7 @@ function createProviderMarkerClass(googleNs: typeof globalThis.google): Provider
           <div class="marker-arrow pointer-events-none absolute left-1/2 top-1/2 h-4 w-4 opacity-0" style="transition: opacity .2s;">
             <div class="h-full w-full" style="clip-path: polygon(50% 0%, 20% 100%, 80% 100%); background: var(--accent);"></div>
           </div>
-          <div class="marker-badge relative flex h-9 w-9 items-center justify-center rounded-full border-[2.5px] border-white bg-gradient-to-br from-accent to-accent-hover text-xs font-bold text-white shadow-[0_2px_8px_rgba(0,0,0,0.35)] transition-transform duration-200 ease-out group-hover:scale-110">
+          <div class="marker-badge relative flex h-9 w-9 items-center justify-center rounded-full border-[2.5px] border-sheet bg-success text-xs font-bold text-emphasis-fg transition-transform duration-200 ease-out">
             <span class="marker-badge-label">${escapeHtml(this.label)}</span>
           </div>
         </div>
@@ -206,20 +207,7 @@ export const LiveMap = forwardRef<LiveMapHandle, LiveMapProps>(function LiveMap(
           zoomControl: true,
           zoomControlOptions: { position: google.maps.ControlPosition.RIGHT_BOTTOM },
           gestureHandling: 'greedy',
-          styles: [
-            { elementType: 'geometry', stylers: [{ color: '#14151a' }] },
-            { elementType: 'labels.icon', stylers: [{ visibility: 'off' }] },
-            { elementType: 'labels.text.fill', stylers: [{ color: '#7c8394' }] },
-            { elementType: 'labels.text.stroke', stylers: [{ color: '#0b0b0c' }] },
-            { featureType: 'administrative', elementType: 'geometry', stylers: [{ color: '#26272e' }] },
-            { featureType: 'road', elementType: 'geometry', stylers: [{ color: '#25262d' }] },
-            { featureType: 'road', elementType: 'geometry.stroke', stylers: [{ color: '#1a1b20' }] },
-            { featureType: 'road.highway', elementType: 'geometry', stylers: [{ color: '#33343d' }] },
-            { featureType: 'road.arterial', elementType: 'labels.text.fill', stylers: [{ color: '#8b909d' }] },
-            { featureType: 'poi', stylers: [{ visibility: 'off' }] },
-            { featureType: 'transit', stylers: [{ visibility: 'off' }] },
-            { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#0c1420' }] },
-          ],
+          styles: opsMapStyles(),
         });
 
         markerCtorRef.current = createProviderMarkerClass(google);

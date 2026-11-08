@@ -164,13 +164,13 @@ function Toggle({
       onClick={onClick}
       className={cn(
         'relative h-6 w-11 shrink-0 rounded-full transition-colors duration-150',
-        checked ? 'bg-[#1fa855]' : 'bg-border',
+        checked ? 'bg-success' : 'bg-input',
         disabled && 'cursor-not-allowed opacity-40',
       )}
     >
       <span
         className={cn(
-          'absolute top-0.5 h-5 w-5 rounded-full bg-white shadow-sm transition-transform duration-150',
+          'absolute top-0.5 h-5 w-5 rounded-full bg-sheet transition-transform duration-150',
           checked ? 'translate-x-5' : 'translate-x-0.5',
         )}
       />
@@ -318,7 +318,7 @@ function SecurityTab() {
               alt="2FA QR code"
               width={160}
               height={160}
-              className="rounded-xl border border-border bg-white p-2"
+              className="rounded-xl border border-hairline bg-sheet p-2"
             />
             <div className="w-full max-w-xs space-y-3">
               <p className="text-sm text-secondary">Scan the code, then enter the 6 digits from the app.</p>
