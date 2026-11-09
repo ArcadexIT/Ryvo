@@ -186,81 +186,37 @@ class _WalletPageState extends ConsumerState<WalletPage> with WidgetsBindingObse
               )
             : SingleChildScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
-          padding: const EdgeInsets.all(24),
+          padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(24),
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [AppColors.primary.withOpacity(0.25), AppColors.surface],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: AppColors.primary.withOpacity(0.25)),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(AppLocalizations.of(context).availableToWithdraw, style: GoogleFonts.poppins(fontSize: 13, color: AppColors.textSecondary)),
-                    const SizedBox(height: 8),
-                    Text(
-                      formatMoney(available),
-                      style: GoogleFonts.poppins(fontSize: 40, fontWeight: FontWeight.w700, color: AppColors.textPrimary),
-                    ),
-                    const SizedBox(height: 16),
-                    Row(
-                      children: [
-                        _BalanceChip(
-                          label: AppLocalizations.of(context).inTransit,
-                          value: formatMoney(wallet?.pendingBalance ?? 0),
-                          color: AppColors.warning,
-                        ),
-                      ],
-                    ),
-                  ],
+              Text(
+                AppLocalizations.of(context).availableToWithdraw,
+                style: _walletText(size: 13, color: AppColors.textSecondary),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                formatMoney(available),
+                style: _walletText(
+                  size: 44,
+                  weight: FontWeight.w700,
+                  color: AppColors.textPrimary,
+                  spacing: -1.2,
+                  height: 1,
+                  tabular: true,
                 ),
               ),
-              const SizedBox(height: 16),
-              const _SubscriptionCard(),
-              const SizedBox(height: 16),
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(16),
-                margin: const EdgeInsets.only(bottom: 16),
-                decoration: BoxDecoration(
-                  color: AppColors.surface,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: AppColors.divider),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      _payoutsEnabled == true
-                          ? 'Stripe payouts are connected. Withdrawals are paid after RYVO approves the request.'
-                          : 'RYVO does not collect your bank details. Withdrawals are paid to a Stripe account after RYVO approves the request.',
-                      style: GoogleFonts.poppins(fontSize: 13, color: AppColors.textPrimary, height: 1.4),
-                    ),
-                    const SizedBox(height: 12),
-                    if (_payoutsEnabled == true)
-                      RyvoButton(
-                        label: 'Stripe payouts ready',
-                        prefixIcon: const Icon(Icons.check_circle_outline, size: 20, color: Colors.black),
-                        onPressed: null,
-                      )
-                    else
-                      RyvoButton(
-                        label: _stripeConnected == true ? 'Continue Stripe setup' : 'Set up Stripe payouts',
-                        variant: RyvoButtonVariant.outline,
-                        onPressed: _connectStripe,
-                      ),
-                  ],
+              const SizedBox(height: 10),
+              Text(
+                '${AppLocalizations.of(context).inTransit}  ${formatMoney(wallet?.pendingBalance ?? 0)}',
+                style: _walletText(
+                  size: 14,
+                  weight: FontWeight.w500,
+                  color: AppColors.textSecondary,
+                  tabular: true,
                 ),
               ),
+              const SizedBox(height: 24),
               RyvoButton(
                 label: available > 0
                     ? AppLocalizations.of(context).withdrawFunds
@@ -272,31 +228,43 @@ class _WalletPageState extends ConsumerState<WalletPage> with WidgetsBindingObse
                       }
                     : null,
               ),
-              const SizedBox(height: 28),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(AppLocalizations.of(context).recentPayouts, style: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.w600, color: AppColors.textPrimary)),
-                  if (payouts.hasValue && payouts.value!.isNotEmpty)
-                    Text('${payouts.value!.length} shown', style: GoogleFonts.poppins(fontSize: 12, color: AppColors.textHint)),
-                ],
+              const SizedBox(height: 16),
+              _StripeRow(
+                ready: _payoutsEnabled == true,
+                connected: _stripeConnected == true,
+                onSetup: _connectStripe,
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 28),
+              const _SubscriptionCard(),
+              const SizedBox(height: 28),
+              Text(
+                AppLocalizations.of(context).recentPayouts,
+                style: _walletText(size: 18, weight: FontWeight.w700, spacing: -0.4),
+              ),
+              const SizedBox(height: 8),
               if (loading || payouts.isLoading)
-                const ShimmerList(count: 4, itemHeight: 72)
+                const ShimmerList(count: 4, itemHeight: 64)
               else if (payouts.hasError || (payouts.value ?? []).isEmpty)
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.symmetric(vertical: 32),
-                  decoration: BoxDecoration(color: AppColors.surface, borderRadius: BorderRadius.circular(12)),
-                  child: Column(
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 28),
+                  child: SizedBox(
+                    width: double.infinity,
+                    child: Column(
                     children: [
-                      Icon(Icons.payments_outlined, color: AppColors.textSecondary.withOpacity(0.6), size: 40),
-                      const SizedBox(height: 12),
-                      Text(AppLocalizations.of(context).noPayoutsYet, style: GoogleFonts.poppins(fontSize: 14, fontWeight: FontWeight.w500, color: AppColors.textPrimary)),
+                      const Icon(Icons.payments_outlined, color: AppColors.textHint, size: 28),
+                      const SizedBox(height: 10),
+                      Text(
+                        AppLocalizations.of(context).noPayoutsYet,
+                        style: _walletText(size: 15, weight: FontWeight.w600),
+                      ),
                       const SizedBox(height: 4),
-                      Text(AppLocalizations.of(context).withdrawalsYouRequestWillAppearHere, style: GoogleFonts.poppins(fontSize: 12, color: AppColors.textSecondary)),
+                      Text(
+                        AppLocalizations.of(context).withdrawalsYouRequestWillAppearHere,
+                        textAlign: TextAlign.center,
+                        style: _walletText(size: 13, color: AppColors.textSecondary),
+                      ),
                     ],
+                    ),
                   ),
                 )
               else
@@ -314,25 +282,66 @@ class _WalletPageState extends ConsumerState<WalletPage> with WidgetsBindingObse
   }
 }
 
-class _BalanceChip extends StatelessWidget {
-  final String label;
-  final String value;
-  final Color color;
+TextStyle _walletText({
+  double size = 14,
+  FontWeight weight = FontWeight.w400,
+  Color? color,
+  double spacing = 0,
+  double? height,
+  bool tabular = false,
+}) {
+  return GoogleFonts.poppins(
+    fontSize: size,
+    fontWeight: weight,
+    color: color ?? AppColors.textPrimary,
+    letterSpacing: spacing,
+    height: height,
+    fontFeatures: tabular ? const [FontFeature.tabularFigures()] : null,
+  );
+}
 
-  const _BalanceChip({required this.label, required this.value, required this.color});
+class _StripeRow extends StatelessWidget {
+  const _StripeRow({
+    required this.ready,
+    required this.connected,
+    required this.onSetup,
+  });
+
+  final bool ready;
+  final bool connected;
+  final VoidCallback onSetup;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      decoration: BoxDecoration(color: color.withOpacity(0.12), borderRadius: BorderRadius.circular(8)),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
+    if (ready) {
+      return Row(
         children: [
-          Text('$label: ', style: GoogleFonts.poppins(fontSize: 12, color: AppColors.textSecondary)),
-          Text(value, style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.w600, color: color)),
+          const Icon(Icons.check_circle, size: 18, color: AppColors.success),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              'Stripe payouts are ready',
+              style: _walletText(size: 14, weight: FontWeight.w500),
+            ),
+          ),
         ],
-      ),
+      );
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Withdrawals are paid to Stripe after RYVO approves them. Bank details stay with Stripe.',
+          style: _walletText(size: 13, color: AppColors.textSecondary, height: 1.4),
+        ),
+        const SizedBox(height: 12),
+        RyvoButton(
+          label: connected ? 'Continue Stripe setup' : 'Set up Stripe payouts',
+          variant: RyvoButtonVariant.outline,
+          height: 48,
+          onPressed: onSetup,
+        ),
+      ],
     );
   }
 }
@@ -381,46 +390,95 @@ class _PayoutTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final color = _statusColor();
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.divider),
+    return DecoratedBox(
+      decoration: const BoxDecoration(
+        border: Border(bottom: BorderSide(color: AppColors.divider)),
       ),
-      child: Row(
-        children: [
-          Container(
-            width: 44,
-            height: 44,
-            decoration: BoxDecoration(color: color.withOpacity(0.12), borderRadius: BorderRadius.circular(10)),
-            child: Icon(Icons.arrow_outward_rounded, color: color, size: 22),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 14),
+        child: Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(bankLabel, style: _walletText(size: 15, weight: FontWeight.w600)),
+                  const SizedBox(height: 2),
+                  Text(date, style: _walletText(size: 12, color: AppColors.textSecondary)),
+                ],
+              ),
+            ),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
               children: [
-                Text(bankLabel, style: GoogleFonts.poppins(fontSize: 14, fontWeight: FontWeight.w600, color: AppColors.textPrimary)),
+                Text(
+                  '-${formatMoney(amount)}',
+                  style: _walletText(size: 15, weight: FontWeight.w700, tabular: true),
+                ),
                 const SizedBox(height: 2),
-                Text(date, style: GoogleFonts.poppins(fontSize: 12, color: AppColors.textSecondary)),
+                Text(
+                  _statusLabel(),
+                  style: _walletText(size: 12, weight: FontWeight.w600, color: color),
+                ),
               ],
             ),
-          ),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Text('-${formatMoney(amount)}', style: GoogleFonts.poppins(fontSize: 14, fontWeight: FontWeight.w700, color: AppColors.textPrimary)),
-              const SizedBox(height: 4),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                decoration: BoxDecoration(color: color.withOpacity(0.12), borderRadius: BorderRadius.circular(6)),
-                child: Text(_statusLabel(), style: GoogleFonts.poppins(fontSize: 10, fontWeight: FontWeight.w600, color: color)),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _PlanRow extends StatelessWidget {
+  const _PlanRow({
+    required this.name,
+    required this.price,
+    required this.onBuy,
+  });
+
+  final String name;
+  final String price;
+  final VoidCallback onBuy;
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: const BoxDecoration(
+        border: Border(bottom: BorderSide(color: AppColors.divider)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        child: Row(
+          children: [
+            Expanded(
+              child: Text(name, style: _walletText(size: 16, weight: FontWeight.w600)),
+            ),
+            Text(
+              price,
+              style: _walletText(size: 16, weight: FontWeight.w600, tabular: true),
+            ),
+            const SizedBox(width: 12),
+            Material(
+              color: AppColors.lime,
+              borderRadius: BorderRadius.circular(999),
+              child: InkWell(
+                onTap: onBuy,
+                borderRadius: BorderRadius.circular(999),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                  child: Text(
+                    'Buy',
+                    style: _walletText(
+                      size: 13,
+                      weight: FontWeight.w700,
+                      color: AppColors.obsidian,
+                    ),
+                  ),
+                ),
               ),
-            ],
-          ),
-        ],
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -496,38 +554,35 @@ class _SubscriptionCardState extends ConsumerState<_SubscriptionCard> {
     if (_loading) return const SizedBox.shrink();
     final required = _status?['required'] == true;
     final active = _status?['active'];
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.divider),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text('Driver plan', style: GoogleFonts.poppins(fontWeight: FontWeight.w700)),
-          const SizedBox(height: 4),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('Driver plan', style: _walletText(size: 18, weight: FontWeight.w700, spacing: -0.4)),
+        const SizedBox(height: 4),
+        Text(
+          required
+              ? 'A subscription is required to go online.'
+              : 'Commission stays on. A plan is optional.',
+          style: _walletText(size: 13, color: AppColors.textSecondary, height: 1.35),
+        ),
+        if (active is Map) ...[
+          const SizedBox(height: 8),
           Text(
-            required
-                ? 'A subscription is required to go online.'
-                : 'Commission mode is on. Subscriptions are optional.',
-            style: GoogleFonts.poppins(fontSize: 12, color: AppColors.textSecondary),
-          ),
-          if (active is Map) ...[
-            const SizedBox(height: 8),
-            Text('Active until ${active['expiresAt'] ?? ''}', style: GoogleFonts.poppins(fontSize: 13)),
-          ],
-          ..._plans.map(
-            (plan) => ListTile(
-              contentPadding: EdgeInsets.zero,
-              title: Text('${plan['name']} · ${plan['price']}'),
-              trailing: TextButton(onPressed: () => _buy('${plan['id']}'), child: const Text('Buy')),
-            ),
+            'Active until ${active['expiresAt'] ?? ''}',
+            style: _walletText(size: 13, weight: FontWeight.w600),
           ),
         ],
-      ),
+        const SizedBox(height: 8),
+        ..._plans.map((plan) {
+          final raw = plan['price'];
+          final amount = raw is num ? raw.toDouble() : double.tryParse('$raw');
+          return _PlanRow(
+            name: '${plan['name'] ?? 'Plan'}',
+            price: amount == null ? '$raw' : formatMoney(amount),
+            onBuy: () => _buy('${plan['id']}'),
+          );
+        }),
+      ],
     );
   }
 }

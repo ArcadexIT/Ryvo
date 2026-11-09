@@ -115,7 +115,7 @@ export class PublicCmsController {
 
   @Get('faqs')
   async faqs(@Query('category') category?: string) {
-    return successResponse(await this.cms.listFaqs(true, category));
+    return successResponse(await this.cms.listCustomerFaqs(category));
   }
 }
 

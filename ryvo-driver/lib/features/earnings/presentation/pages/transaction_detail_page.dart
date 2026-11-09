@@ -64,6 +64,8 @@ class TransactionDetailPage extends ConsumerWidget {
               const SizedBox(height: 24),
               _LineItem(label: AppLocalizations.of(context).grossEarnings, value: formatMoney(t.gross)),
               _LineItem(label: AppLocalizations.of(context).platformFee, value: '-${formatMoney(t.platformFee)}', isNegative: true),
+              if (t.tip > 0)
+                _LineItem(label: AppLocalizations.of(context).tip, value: formatMoney(t.tip)),
               const Divider(color: AppColors.divider, height: 32),
               _LineItem(label: AppLocalizations.of(context).netPayout, value: formatMoney(t.net), isBold: true),
               const SizedBox(height: 24),

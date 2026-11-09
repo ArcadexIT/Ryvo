@@ -34,6 +34,7 @@ class EarningsRemoteDataSource {
       title: data['title'] as String? ?? 'Job payout',
       gross: _toD(data['gross']),
       platformFee: _toD(data['platformFee']),
+      tip: _toD(data['tip']),
       net: _toD(data['net']),
       date: DateTime.tryParse(data['date'] as String? ?? '') ?? DateTime.now(),
     );
@@ -51,6 +52,7 @@ class EarningsRemoteDataSource {
         title: sc?['name'] as String? ?? job?['jobNumber'] as String? ?? 'Job payout',
         gross: _toD(e['grossAmount']),
         platformFee: _toD(e['platformFee']),
+        tip: _toD(e['tipAmount']),
         net: _toD(e['netAmount']),
         date: DateTime.tryParse(
                 (job?['completedAt'] ?? e['createdAt']) as String? ?? '') ??

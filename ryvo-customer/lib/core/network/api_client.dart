@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:dio/dio.dart';
@@ -10,7 +11,7 @@ import 'api_exception.dart';
 import 'token_storage.dart';
 
 class ApiClient {
-  ApiClient({TokenStorage? tokenStorage})
+  ApiClient({TokenStorage? tokenStorage, this.onSessionExpired})
       : _tokenStorage = tokenStorage ?? TokenStorage() {
     _dio = Dio(
       BaseOptions(
@@ -56,6 +57,12 @@ class ApiClient {
 
   late final Dio _dio;
   final TokenStorage _tokenStorage;
+  final void Function()? onSessionExpired;
+
+  /// One refresh at a time. A second caller used to send the same refresh
+  /// token after the server had already rotated it, get a 401, and wipe the
+  /// new session. That showed up as a logout about 15 minutes after sign-in.
+  Future<bool>? _refreshing;
 
   Dio get dio => _dio;
   TokenStorage get tokenStorage => _tokenStorage;
@@ -63,9 +70,19 @@ class ApiClient {
   /// Refresh access token using the stored refresh token (startup / silent renew).
   Future<bool> refreshSession() => _refreshToken();
 
-  Future<bool> _refreshToken() async {
+  Future<bool> _refreshToken() {
+    final inFlight = _refreshing;
+    if (inFlight != null) return inFlight;
+    final run = _refreshTokenOnce();
+    _refreshing = run;
+    return run.whenComplete(() {
+      if (identical(_refreshing, run)) _refreshing = null;
+    });
+  }
+
+  Future<bool> _refreshTokenOnce() async {
     final refreshToken = await _tokenStorage.getRefreshToken();
-    if (refreshToken == null) return false;
+    if (refreshToken == null || refreshToken.isEmpty) return false;
 
     try {
       final refreshDio = Dio(
@@ -78,17 +95,34 @@ class ApiClient {
       );
 
       final data = _unwrap(response.data);
-      if (data is! Map<String, dynamic>) return false;
+      if (data is! Map) return false;
+      final tokens = Map<String, dynamic>.from(data);
+      final accessToken = tokens['accessToken'];
+      final nextRefresh = tokens['refreshToken'];
+      if (accessToken is! String ||
+          accessToken.isEmpty ||
+          nextRefresh is! String ||
+          nextRefresh.isEmpty) {
+        return false;
+      }
 
       await _tokenStorage.saveTokens(
-        accessToken: data['accessToken'] as String,
-        refreshToken: data['refreshToken'] as String,
+        accessToken: accessToken,
+        refreshToken: nextRefresh,
       );
       return true;
     } on DioException catch (e) {
-      // Only wipe the session when the refresh token is rejected — not on network blips.
-      if (e.response?.statusCode == 401) {
-        await _tokenStorage.clear();
+      // Only wipe the session when this exact refresh token is rejected and
+      // the access token is already dead. A network failure, a phone-verify
+      // response, or a 401 for a token another refresh already replaced must
+      // leave the stored session alone.
+      if (e.response?.statusCode == 401 && _rejectsStoredSession(e)) {
+        final current = await _tokenStorage.getRefreshToken();
+        final access = await _tokenStorage.getAccessToken();
+        if (current == refreshToken && !accessTokenIsCurrent(access)) {
+          await _tokenStorage.clear();
+          onSessionExpired?.call();
+        }
       }
       return false;
     } catch (_) {
@@ -216,6 +250,33 @@ void _attachLogger(Dio dio) {
       maxWidth: 90,
     ),
   );
+}
+
+bool _rejectsStoredSession(DioException error) {
+  final message = serverErrorMessage(error.response?.data)?.toLowerCase() ?? '';
+  return !message.contains('verify your phone');
+}
+
+/// True while the access JWT still has at least [skew] before `exp`.
+bool accessTokenIsCurrent(
+  String? token, {
+  Duration skew = const Duration(seconds: 60),
+}) {
+  if (token == null || token.isEmpty) return false;
+  try {
+    final parts = token.split('.');
+    if (parts.length < 2) return false;
+    final payload = jsonDecode(
+      utf8.decode(base64Url.decode(base64Url.normalize(parts[1]))),
+    );
+    if (payload is! Map) return false;
+    final exp = payload['exp'];
+    if (exp is! num) return false;
+    final expiry = DateTime.fromMillisecondsSinceEpoch(exp.toInt() * 1000);
+    return expiry.isAfter(DateTime.now().add(skew));
+  } catch (_) {
+    return false;
+  }
 }
 
 int? _statusCode(dynamic value) {

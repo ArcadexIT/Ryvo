@@ -303,7 +303,7 @@ export function DataTable<T extends { id?: string }>({
           onAction={onEmptyAction}
         />
       ) : (
-        <div className="overflow-hidden rounded-lg border border-hairline bg-sheet">
+        <div className="panel-card overflow-hidden">
           <Table>
             <TableHeader>
               <TableRow className="hover:bg-transparent">

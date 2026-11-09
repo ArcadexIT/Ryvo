@@ -163,17 +163,12 @@ function Toggle({
       disabled={disabled}
       onClick={onClick}
       className={cn(
-        'relative h-6 w-11 shrink-0 rounded-full transition-colors duration-150',
-        checked ? 'bg-success' : 'bg-input',
+        'inline-flex h-6 w-11 shrink-0 items-center rounded-full p-0.5 transition-colors duration-150',
+        checked ? 'justify-end bg-success' : 'justify-start bg-input',
         disabled && 'cursor-not-allowed opacity-40',
       )}
     >
-      <span
-        className={cn(
-          'absolute top-0.5 h-5 w-5 rounded-full bg-sheet transition-transform duration-150',
-          checked ? 'translate-x-5' : 'translate-x-0.5',
-        )}
-      />
+      <span className="pointer-events-none block h-5 w-5 rounded-full bg-sheet shadow-sm ring-1 ring-hairline" />
     </button>
   );
 }
@@ -190,7 +185,7 @@ function Panel({
   children: ReactNode;
 }) {
   return (
-    <section className="overflow-hidden rounded-2xl border border-border bg-elevated shadow-sm">
+    <section className="panel-card overflow-hidden">
       <div className="flex items-start gap-3 border-b border-border px-5 py-4">
         <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-accent-soft text-accent">
           <Icon className="h-4 w-4" />

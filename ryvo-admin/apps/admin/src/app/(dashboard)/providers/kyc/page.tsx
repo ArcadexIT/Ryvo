@@ -311,7 +311,7 @@ export default function KycQueuePage() {
               return (
                 <section
                   key={group.provider.id}
-                  className="overflow-hidden rounded-2xl border border-border bg-elevated shadow-sm"
+                  className="panel-card overflow-hidden"
                 >
                   <button
                     type="button"

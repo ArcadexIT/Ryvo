@@ -252,6 +252,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get platformFee => 'Platform Fee';
 
   @override
+  String get tip => 'Tip';
+
+  @override
   String get jobDetails => 'Job Details';
 
   @override
@@ -774,6 +777,24 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get typeAMessage => 'Type a message...';
+
+  @override
+  String get quickReplyArrived => 'I\'ve arrived';
+
+  @override
+  String get quickReplyOnMyWay => 'I\'m on my way';
+
+  @override
+  String get quickReplyWhereAreYou => 'Where are you?';
+
+  @override
+  String get quickReplyImOutside => 'I\'m outside';
+
+  @override
+  String get quickReplyComeOutside => 'Please come outside';
+
+  @override
+  String get quickReplyOk => 'OK';
 
   @override
   String get oneOrMoreDocumentsWereRejectedTapReUploadOnEachR =>

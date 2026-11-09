@@ -8,6 +8,6 @@ export function PageContent({
   className?: string;
 }) {
   return (
-    <div className={cn('flex-1 overflow-y-auto p-4 lg:p-6', className)}>{children}</div>
+    <div className={cn('flex-1 overflow-y-auto px-5 py-4 lg:px-6', className)}>{children}</div>
   );
 }

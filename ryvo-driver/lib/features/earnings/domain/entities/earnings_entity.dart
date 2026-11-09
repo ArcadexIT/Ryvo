@@ -17,6 +17,7 @@ class TransactionEntity {
   final String title;
   final double gross;
   final double platformFee;
+  final double tip;
   final double net;
   final DateTime date;
 
@@ -25,6 +26,7 @@ class TransactionEntity {
     required this.title,
     required this.gross,
     required this.platformFee,
+    this.tip = 0,
     required this.net,
     required this.date,
   });

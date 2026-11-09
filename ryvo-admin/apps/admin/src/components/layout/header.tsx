@@ -30,15 +30,15 @@ export function Header({ title, description, actions, breadcrumb = true }: Heade
     <div
       ref={ref}
       className={cn(
-        'sticky top-0 z-20 shrink-0 bg-sheet px-5 py-4 transition-colors duration-150',
+        'z-20 shrink-0 bg-canvas px-5 py-4 transition-colors duration-150 lg:px-6',
         scrolled && 'border-b border-hairline',
       )}
     >
       {showCrumb ? <Breadcrumb className="mb-2 text-xs" /> : null}
-      <div className="flex items-start justify-between gap-4">
+      <div className="flex items-center justify-between gap-4">
         <div className="min-w-0">
-          <h1 className="page-title truncate">{title}</h1>
-          {description ? <p className="mt-1 truncate text-sm text-muted">{description}</p> : null}
+          <h1 className="truncate text-[1.65rem] font-bold leading-none tracking-[-0.04em] text-primary">{title}</h1>
+          {description ? <p className="mt-1.5 truncate text-sm text-muted">{description}</p> : null}
         </div>
         {actions ? <div className="flex shrink-0 items-center gap-2">{actions}</div> : null}
       </div>

@@ -115,6 +115,12 @@ class AuthRepository {
     return refresh != null && refresh.isNotEmpty;
   }
 
+  /// True when the stored access token can still authorize requests.
+  Future<bool> accessTokenStillValid() async {
+    final token = await _tokenStorage.getAccessToken();
+    return accessTokenIsCurrent(token);
+  }
+
   /// Proactively refresh the access token when a refresh token is stored.
   Future<bool> refreshAccessToken() async {
     if (!await hasSession()) return false;
@@ -140,15 +146,33 @@ class ProfileRepository {
   Future<UserProfile> updateProfile({
     String? fullName,
     String? email,
+    String? avatarUrl,
+    bool clearAvatar = false,
   }) async {
     await _api.patch(
       '/customer/profile',
       data: {
         if (fullName != null) 'fullName': fullName,
         if (email != null) 'email': email,
+        if (clearAvatar) 'avatarUrl': '',
+        if (!clearAvatar && avatarUrl != null) 'avatarUrl': avatarUrl,
       },
     );
     return getProfile();
+  }
+
+  /// Upload a profile photo and return its stored URL.
+  Future<String> uploadAvatar(File file) async {
+    final result = await _api.uploadFile(
+      '/customer/files/upload',
+      file,
+      'avatars',
+    );
+    final url = result['fileUrl'] as String?;
+    if (url == null || url.isEmpty) {
+      throw Exception('Upload failed: no fileUrl returned');
+    }
+    return url;
   }
 }
 
@@ -567,6 +591,21 @@ class PaymentRepository {
         '/customer/payments/intent',
         data: {'jobId': jobId, 'amount': amount},
         parser: (json) => json as Map<String, dynamic>,
+      );
+
+  Future<Map<String, dynamic>> createTipIntent(String jobId, double amount) =>
+      _api.post(
+        '/customer/payments/tip-intent',
+        data: {'jobId': jobId, 'amount': amount},
+        parser: (json) => json as Map<String, dynamic>,
+      );
+
+  Future<void> confirmTip(String jobId, {String? paymentIntentId}) => _api.post(
+        '/customer/payments/tip/confirm',
+        data: {
+          'jobId': jobId,
+          if (paymentIntentId != null) 'paymentIntentId': paymentIntentId,
+        },
       );
 }
 

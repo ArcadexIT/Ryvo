@@ -562,6 +562,12 @@ abstract class AppLocalizations {
   /// **'Platform Fee'**
   String get platformFee;
 
+  /// No description provided for @tip.
+  ///
+  /// In en, this message translates to:
+  /// **'Tip'**
+  String get tip;
+
   /// No description provided for @jobDetails.
   ///
   /// In en, this message translates to:
@@ -1581,6 +1587,42 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Type a message...'**
   String get typeAMessage;
+
+  /// No description provided for @quickReplyArrived.
+  ///
+  /// In en, this message translates to:
+  /// **'I\'ve arrived'**
+  String get quickReplyArrived;
+
+  /// No description provided for @quickReplyOnMyWay.
+  ///
+  /// In en, this message translates to:
+  /// **'I\'m on my way'**
+  String get quickReplyOnMyWay;
+
+  /// No description provided for @quickReplyWhereAreYou.
+  ///
+  /// In en, this message translates to:
+  /// **'Where are you?'**
+  String get quickReplyWhereAreYou;
+
+  /// No description provided for @quickReplyImOutside.
+  ///
+  /// In en, this message translates to:
+  /// **'I\'m outside'**
+  String get quickReplyImOutside;
+
+  /// No description provided for @quickReplyComeOutside.
+  ///
+  /// In en, this message translates to:
+  /// **'Please come outside'**
+  String get quickReplyComeOutside;
+
+  /// No description provided for @quickReplyOk.
+  ///
+  /// In en, this message translates to:
+  /// **'OK'**
+  String get quickReplyOk;
 
   /// No description provided for @oneOrMoreDocumentsWereRejectedTapReUploadOnEachR.
   ///

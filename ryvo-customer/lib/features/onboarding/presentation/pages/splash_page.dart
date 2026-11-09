@@ -43,7 +43,12 @@ class _SplashPageState extends ConsumerState<SplashPage>
     try {
       await bootstrapAuth(ref).timeout(const Duration(seconds: 8));
     } catch (_) {
-      ref.read(isAuthenticatedProvider.notifier).state = false;
+      // The timeout does not cancel the refresh. A stored session stays
+      // signed in; only a missing refresh token goes to onboarding.
+      final signedIn = await ref.read(authRepositoryProvider).hasSession();
+      if (mounted) {
+        ref.read(isAuthenticatedProvider.notifier).state = signedIn;
+      }
     }
     await Future.delayed(const Duration(seconds: 2));
     if (!mounted) return;

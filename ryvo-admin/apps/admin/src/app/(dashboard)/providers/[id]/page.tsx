@@ -456,7 +456,7 @@ export default function ProviderDetailPage() {
               ].map((stat) => (
                 <div
                   key={stat.label}
-                  className="rounded-xl border border-border bg-elevated px-4 py-4 shadow-sm transition-colors hover:border-border-strong"
+                  className="rounded-[18px] border border-hairline bg-sheet px-4 py-4 transition-colors hover:bg-input"
                 >
                   <div className="flex items-center justify-between gap-3">
                     <div>

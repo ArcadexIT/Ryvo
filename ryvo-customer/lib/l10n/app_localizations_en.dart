@@ -579,6 +579,24 @@ class AppLocalizationsEn extends AppLocalizations {
   String get typeAMessage => 'Type a message...';
 
   @override
+  String get quickReplyImHere => 'I\'m here';
+
+  @override
+  String get quickReplyWhereAreYou => 'Where are you?';
+
+  @override
+  String get quickReplyOnMyWay => 'I\'m on my way';
+
+  @override
+  String get quickReplyPleaseWait => 'Please wait for me';
+
+  @override
+  String get quickReplyCantSeeYou => 'I can\'t see you';
+
+  @override
+  String get quickReplyOkThanks => 'OK, thanks';
+
+  @override
   String get editVehicle => 'Edit Vehicle';
 
   @override
@@ -1050,6 +1068,9 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get shareTrip => 'Share trip';
+
+  @override
+  String get headingTo => 'Heading to';
 
   @override
   String get followMyRyvoTrip => 'Follow my Ryvo trip';

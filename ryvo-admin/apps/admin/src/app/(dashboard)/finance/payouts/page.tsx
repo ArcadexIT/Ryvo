@@ -246,21 +246,21 @@ function PayoutsPageContent() {
               setStatusFilter('pending');
               setPage(1);
             }}
-            className="rounded-xl border border-border bg-elevated p-4 text-left transition-colors hover:border-warning/50"
+            className="stat-wash-amber rounded-[18px] border border-white/70 p-4 text-left transition-colors hover:border-hairline"
           >
-            <p className="text-sm text-secondary">Waiting for review</p>
-            <p className="mt-1 text-2xl font-bold text-warning">{summary?.pending.count ?? 0}</p>
-            <p className="text-sm text-secondary">{formatCurrency(summary?.pending.amount ?? 0)}</p>
+            <p className="text-sm text-muted">Waiting for review</p>
+            <p className="num mt-1 text-[26px] font-bold leading-none text-primary">{summary?.pending.count ?? 0}</p>
+            <p className="mt-1 text-sm text-muted">{formatCurrency(summary?.pending.amount ?? 0)}</p>
           </button>
-          <div className="rounded-xl border border-border bg-elevated p-4">
-            <p className="text-sm text-secondary">Processing</p>
-            <p className="mt-1 text-2xl font-bold text-primary">{summary?.processing.count ?? 0}</p>
-            <p className="text-sm text-secondary">{formatCurrency(summary?.processing.amount ?? 0)}</p>
+          <div className="stat-wash-sky rounded-[18px] border border-white/70 p-4">
+            <p className="text-sm text-muted">Processing</p>
+            <p className="num mt-1 text-[26px] font-bold leading-none text-primary">{summary?.processing.count ?? 0}</p>
+            <p className="mt-1 text-sm text-muted">{formatCurrency(summary?.processing.amount ?? 0)}</p>
           </div>
-          <div className="rounded-xl border border-border bg-elevated p-4">
-            <p className="text-sm text-secondary">Paid (all time)</p>
-            <p className="mt-1 text-2xl font-bold text-success">{summary?.paid.count ?? 0}</p>
-            <p className="text-sm text-secondary">{formatCurrency(summary?.paid.amount ?? 0)}</p>
+          <div className="stat-wash-emerald rounded-[18px] border border-white/70 p-4">
+            <p className="text-sm text-muted">Paid (all time)</p>
+            <p className="num mt-1 text-[26px] font-bold leading-none text-primary">{summary?.paid.count ?? 0}</p>
+            <p className="mt-1 text-sm text-muted">{formatCurrency(summary?.paid.amount ?? 0)}</p>
           </div>
         </div>
 

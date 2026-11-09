@@ -67,6 +67,23 @@ const config: Config = {
         danger: mix('--danger'),
         warning: mix('--warning'),
         info: mix('--info'),
+        chart: {
+          1: mix('--chart-1'),
+          2: mix('--chart-2'),
+          3: mix('--chart-3'),
+          4: mix('--chart-4'),
+          5: mix('--chart-5'),
+          6: mix('--chart-6'),
+          teal: mix('--chart-teal'),
+        },
+        nav: {
+          DEFAULT: 'var(--nav)',
+          end: 'var(--nav-end)',
+          fg: 'var(--nav-fg)',
+          muted: 'var(--nav-muted)',
+          icon: 'var(--nav-icon)',
+          active: 'var(--nav-active)',
+        },
       },
       backgroundColor: {
         primary: {
@@ -94,7 +111,7 @@ const config: Config = {
         nav: '40px',
       },
       width: {
-        sidebar: '240px',
+        sidebar: '220px',
         'sidebar-collapsed': '64px',
       },
       transitionDuration: {

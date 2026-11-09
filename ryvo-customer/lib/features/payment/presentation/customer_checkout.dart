@@ -440,6 +440,78 @@ class CustomerCheckout {
     return setup.paymentMethodId;
   }
 
+  /// Charges [amount] as a second payment for a completed trip.
+  /// Returns false when the rider dismisses the sheet or the charge fails.
+  Future<bool> payTip({
+    required BuildContext context,
+    required String jobId,
+    required double amount,
+  }) async {
+    try {
+      final config = await _loadConfig();
+      await configureStripeFromAppConfig(config);
+      final intentData = await _ref.read(paymentRepositoryProvider).createTipIntent(
+            jobId,
+            amount,
+          );
+      if (intentData['alreadyPaid'] == true) return true;
+      final clientSecret = intentData['clientSecret'] as String?;
+      if (clientSecret == null || clientSecret.isEmpty) {
+        throw RyvoStripeConfigException(
+          'Card payments are unavailable on the server. Ensure STRIPE_SECRET_KEY is '
+          'set in apps/api/.env and restart the API.',
+        );
+      }
+      final customerId = intentData['customerId'] as String?;
+      final ephemeralKey = intentData['ephemeralKey'] as String?;
+      final canReuseCards = customerId != null &&
+          customerId.isNotEmpty &&
+          ephemeralKey != null &&
+          ephemeralKey.isNotEmpty;
+      if (!context.mounted) return false;
+      final l10n = AppLocalizations.of(context);
+      await Stripe.instance.initPaymentSheet(
+        paymentSheetParameters: SetupPaymentSheetParameters(
+          paymentIntentClientSecret: clientSecret,
+          customerId: canReuseCards ? customerId : null,
+          customerEphemeralKeySecret: canReuseCards ? ephemeralKey : null,
+          merchantDisplayName: l10n.ryvo,
+          primaryButtonLabel: 'Pay tip',
+          applePay: checkoutShowsApplePay(config)
+              ? const PaymentSheetApplePay(merchantCountryCode: 'GB')
+              : null,
+          googlePay: PaymentSheetGooglePay(
+            merchantCountryCode: 'GB',
+            currencyCode: config.currency.code,
+            testEnv: checkoutGooglePayTestEnv(config),
+            label: 'Ryvo',
+          ),
+          linkDisplayParams: const LinkDisplayParams(linkDisplay: LinkDisplay.never),
+          style: AppColors.isDark ? ThemeMode.dark : ThemeMode.light,
+          appearance: _sheetAppearance(),
+        ),
+      );
+      await Stripe.instance.presentPaymentSheet();
+      final paymentIntentId = clientSecret.split('_secret_').first;
+      await _ref.read(paymentRepositoryProvider).confirmTip(
+            jobId,
+            paymentIntentId: paymentIntentId,
+          );
+      return true;
+    } on StripeException catch (e) {
+      if (e.error.code != FailureCode.Canceled && context.mounted) {
+        showApiError(
+          context,
+          stripeSheetErrorText(e, e.error.localizedMessage ?? 'Could not pay the tip.'),
+        );
+      }
+      return false;
+    } catch (e) {
+      if (context.mounted) showApiError(context, e);
+      return false;
+    }
+  }
+
   /// Presents the Stripe sheet and keeps the saved card for later card payments.
   /// Returns null when the rider cancels or setup fails.
   Future<String?> saveCardForLater(BuildContext context) async {

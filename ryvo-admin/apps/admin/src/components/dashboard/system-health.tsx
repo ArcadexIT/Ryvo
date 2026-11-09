@@ -1,6 +1,7 @@
 'use client';
 
 import { useQuery } from '@tanstack/react-query';
+import { Shield } from 'lucide-react';
 import { apiFetch } from '@/lib/api';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
@@ -27,8 +28,13 @@ export function SystemHealth() {
     .sort((a, b) => ORDER.indexOf(a.name) - ORDER.indexOf(b.name));
 
   return (
-    <section className="rounded-lg border border-hairline bg-card p-4">
-      <h2 className="text-sm font-semibold text-primary">System health</h2>
+    <section className="panel-card p-4">
+      <h2 className="inline-flex items-center gap-2 text-sm font-semibold text-primary">
+        <span className="grid size-8 place-items-center rounded-lg bg-chart-1/15 text-chart-1">
+          <Shield className="size-4" strokeWidth={1.75} />
+        </span>
+        System health
+      </h2>
       {isLoading ? (
         <div className="mt-4 space-y-3">
           {ORDER.map((name) => (
@@ -51,7 +57,16 @@ export function SystemHealth() {
                   )}
                 />
                 <span className="flex-1 text-primary">{service.name}</span>
-                <span className="text-xs capitalize text-muted">{service.status}</span>
+                <span
+                  className={cn(
+                    'rounded-full border px-2 py-0.5 text-[11px] font-medium capitalize',
+                    service.status === 'operational' && 'border-success/40 text-success',
+                    service.status === 'degraded' && 'border-warning/50 text-warning',
+                    service.status === 'down' && 'border-danger/40 text-danger',
+                  )}
+                >
+                  {service.status}
+                </span>
               </li>
             ),
           )}

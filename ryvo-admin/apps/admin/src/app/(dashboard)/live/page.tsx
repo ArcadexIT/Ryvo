@@ -1,33 +1,34 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
 import { io, Socket } from 'socket.io-client';
-import { Header } from '@/components/layout/header';
-import { StatusBadge } from '@/components/ui/badge';
-import { Avatar } from '@/components/ui/avatar';
-import { EmptyState } from '@/components/ui/empty-state';
-import { Input } from '@/components/ui/input';
-import { Button } from '@/components/ui/button';
-import { SegmentedTabs } from '@/components/ui/segmented-tabs';
+import { CartesianGrid, Line, LineChart, ResponsiveContainer, XAxis, YAxis } from 'recharts';
+import {
+  ArrowUpRight,
+  Car,
+  CheckCircle2,
+  Circle,
+  CircleDollarSign,
+  Database,
+  Flame,
+  LocateFixed,
+  MapPin,
+  Minus,
+  Plus,
+  Radio,
+  Server,
+  Star,
+  Users,
+  Zap,
+} from 'lucide-react';
 import { apiFetch, getSocketBaseUrl } from '@/lib/api';
 import { useMapApiKey } from '@/hooks/use-map-api-key';
 import { LiveMap, type LiveMapHandle } from '@/components/live-map';
-import {
-  MapPin,
-  Radio,
-  WifiOff,
-  Navigation,
-  Users,
-  Briefcase,
-  RotateCw,
-  Maximize2,
-  Search,
-  ChevronRight,
-  Compass,
-} from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { StatWave } from '@/components/ui/sparkline';
+import { Skeleton } from '@/components/ui/skeleton';
+import { cn, formatCurrency } from '@/lib/utils';
 
 interface LiveProvider {
   providerId: string;
@@ -44,6 +45,7 @@ interface LiveJob {
   status: string;
   customer?: { user: { fullName: string } };
   provider?: { user: { fullName: string } };
+  serviceCategory?: { name: string } | null;
 }
 
 interface SnapshotProvider {
@@ -64,33 +66,131 @@ interface ProviderLocationEvent {
   lng: number;
   heading?: number;
   speed?: number;
-  jobId?: string;
 }
 
-function useRelativeTime(timestamp: number) {
-  const [, setTick] = useState(0);
+interface Kpis {
+  totalJobs: number;
+  activeJobs: number;
+  completedToday: number;
+  onlineProviders: number;
+  revenueToday: number;
+  trends?: { completedToday: number; revenueToday: number; totalJobs: number };
+}
 
-  useEffect(() => {
-    const interval = setInterval(() => setTick((t) => t + 1), 1000);
-    return () => clearInterval(interval);
-  }, []);
+interface Charts {
+  jobsByDay: { date: string; jobs: number; revenue: number }[];
+  statusBreakdown: Record<string, number>;
+}
 
-  if (!timestamp) return 'never';
-  const seconds = Math.max(0, Math.floor((Date.now() - timestamp) / 1000));
-  if (seconds < 5) return 'just now';
-  if (seconds < 60) return `${seconds}s ago`;
+interface TopProvider {
+  id: string;
+  name: string;
+  jobs: number;
+  rating: number;
+}
+
+interface HealthService {
+  name: string;
+  status: 'operational' | 'degraded' | 'down';
+}
+
+interface ActivityItem {
+  id: string;
+  type: 'customer' | 'job' | 'payout' | 'alert' | 'admin';
+  message: string;
+  timestamp: string;
+  href?: string;
+}
+
+type RangeKey = 'live' | 'today' | 'week' | 'month';
+type MapFilter = 'all' | 'drivers' | 'riders' | 'heatmap';
+
+const RANGES: { key: RangeKey; label: string }[] = [
+  { key: 'live', label: 'Live' },
+  { key: 'today', label: 'Today' },
+  { key: 'week', label: 'This Week' },
+  { key: 'month', label: 'This Month' },
+];
+
+const FILTERS: { key: MapFilter; label: string; icon: typeof Car }[] = [
+  { key: 'all', label: 'All', icon: Circle },
+  { key: 'drivers', label: 'Drivers', icon: Car },
+  { key: 'riders', label: 'Riders', icon: Users },
+  { key: 'heatmap', label: 'Heatmap', icon: Flame },
+];
+
+const HEALTH_ICONS: Record<string, typeof Zap> = {
+  API: Zap,
+  Database: Database,
+  Redis: Server,
+  'SMS (Twilio)': Radio,
+};
+
+function timeAgo(value: string) {
+  const seconds = Math.max(0, (Date.now() - new Date(value).getTime()) / 1000);
+  if (seconds < 60) return 'just now';
   const minutes = Math.floor(seconds / 60);
   if (minutes < 60) return `${minutes}m ago`;
-  return `${Math.floor(minutes / 60)}h ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  return `${Math.floor(hours / 24)}d ago`;
+}
+
+function fillDays(data: { date: string; jobs: number; revenue: number }[], days: number) {
+  const map = new Map(data.map((item) => [item.date.slice(0, 10), item]));
+  const start = new Date();
+  start.setHours(12, 0, 0, 0);
+  start.setDate(start.getDate() - (days - 1));
+  return Array.from({ length: days }, (_, index) => {
+    const day = new Date(start);
+    day.setDate(start.getDate() + index);
+    const key = day.toISOString().slice(0, 10);
+    const found = map.get(key);
+    return {
+      date: key,
+      label: day.toLocaleDateString('en-GB', { weekday: 'short' }),
+      jobs: found?.jobs ?? 0,
+      revenue: found?.revenue ?? 0,
+    };
+  });
+}
+
+function jobActivity(job: LiveJob) {
+  const rider = job.customer?.user.fullName;
+  const driver = job.provider?.user.fullName;
+  if (job.status === 'searching') {
+    return {
+      title: 'New ride request',
+      meta: [rider, job.serviceCategory?.name].filter(Boolean).join(' · ') || job.jobNumber,
+      pill: 'New',
+      tone: 'sky' as const,
+      icon: Users,
+    };
+  }
+  if (job.status === 'in_progress') {
+    return {
+      title: 'Trip in progress',
+      meta: job.jobNumber,
+      pill: 'On trip',
+      tone: 'emerald' as const,
+      icon: Car,
+    };
+  }
+  return {
+    title: 'Driver on the way',
+    meta: [driver ?? rider, job.jobNumber].filter(Boolean).join(' · '),
+    pill: 'En Route',
+    tone: 'emerald' as const,
+    icon: Car,
+  };
 }
 
 export default function LiveOpsPage() {
   const router = useRouter();
   const [connected, setConnected] = useState(false);
   const [socketProviders, setSocketProviders] = useState<LiveProvider[]>([]);
-  const [tab, setTab] = useState<'providers' | 'jobs'>('providers');
-  const [providerSearch, setProviderSearch] = useState('');
-  const [jobSearch, setJobSearch] = useState('');
+  const [range, setRange] = useState<RangeKey>('live');
+  const [mapFilter, setMapFilter] = useState<MapFilter>('all');
   const [selectedProviderId, setSelectedProviderId] = useState<string | null>(null);
   const socketRef = useRef<Socket | null>(null);
   const mapRef = useRef<LiveMapHandle>(null);
@@ -98,7 +198,7 @@ export default function LiveOpsPage() {
 
   const { data: mapApiKey, isLoading: mapKeyLoading } = useMapApiKey();
 
-  const { data, isLoading, error, dataUpdatedAt, refetch, isFetching } = useQuery({
+  const { data, isLoading, error } = useQuery({
     queryKey: ['live-snapshot'],
     queryFn: async () => {
       const res = await apiFetch<LiveSnapshot>('/admin/dashboard/live');
@@ -107,20 +207,57 @@ export default function LiveOpsPage() {
     refetchInterval: 30_000,
   });
 
-  const relativeUpdated = useRelativeTime(dataUpdatedAt);
+  const { data: kpis } = useQuery({
+    queryKey: ['dashboard-kpis'],
+    queryFn: async () => {
+      const res = await apiFetch<Kpis>('/admin/dashboard/kpis');
+      return res.data!;
+    },
+  });
+
+  const { data: charts } = useQuery({
+    queryKey: ['dashboard-charts', 30],
+    queryFn: async () => {
+      const res = await apiFetch<Charts>('/admin/dashboard/charts?days=30');
+      return res.data!;
+    },
+  });
+
+  const { data: topProviders } = useQuery({
+    queryKey: ['dashboard-top-providers'],
+    queryFn: async () => {
+      const res = await apiFetch<TopProvider[]>('/admin/dashboard/top-providers?limit=20');
+      return res.data ?? [];
+    },
+  });
+
+  const { data: health } = useQuery({
+    queryKey: ['dashboard-health'],
+    queryFn: async () => {
+      const res = await apiFetch<{ services: HealthService[] }>('/admin/dashboard/health');
+      return res.data!;
+    },
+    refetchInterval: 60_000,
+  });
+
+  const { data: activity } = useQuery({
+    queryKey: ['dashboard-activity'],
+    queryFn: async () => {
+      const res = await apiFetch<ActivityItem[]>('/admin/dashboard/activity?limit=6');
+      return res.data ?? [];
+    },
+    refetchInterval: 30_000,
+  });
 
   useEffect(() => {
     const socket = io(socketUrl, { transports: ['websocket'] });
     socketRef.current = socket;
-
     socket.on('connect', () => {
       setConnected(true);
       socket.emit('admin:live-map:subscribe');
     });
-
     socket.on('disconnect', () => setConnected(false));
     socket.on('connect_error', () => setConnected(false));
-
     socket.on('provider:location', (payload: ProviderLocationEvent) => {
       setSocketProviders((prev) => {
         const idx = prev.findIndex((p) => p.providerId === payload.providerId);
@@ -139,7 +276,6 @@ export default function LiveOpsPage() {
         return [...prev, entry];
       });
     });
-
     return () => {
       socket.disconnect();
     };
@@ -156,265 +292,310 @@ export default function LiveOpsPage() {
 
   const providers = socketProviders.length > 0 ? socketProviders : snapshotProviders;
   const activeJobs = data?.activeJobs ?? [];
+  const series = useMemo(() => fillDays(charts?.jobsByDay ?? [], range === 'month' ? 30 : 7), [charts, range]);
+  const week = useMemo(() => fillDays(charts?.jobsByDay ?? [], 7), [charts]);
 
-  const filteredProviders = useMemo(() => {
-    const q = providerSearch.trim().toLowerCase();
-    if (!q) return providers;
-    return providers.filter((p) => (p.fullName ?? p.providerId).toLowerCase().includes(q));
-  }, [providers, providerSearch]);
+  const rangeJobs = series.reduce((sum, day) => sum + day.jobs, 0);
+  const rangeRevenue = series.reduce((sum, day) => sum + day.revenue, 0);
+  const activeDrivers = Math.max(providers.length, kpis?.onlineProviders ?? 0);
+  const activeRides = range === 'live' ? activeJobs.length : range === 'today' ? (kpis?.completedToday ?? 0) : rangeJobs;
+  const revenue = range === 'live' || range === 'today' ? (kpis?.revenueToday ?? 0) : rangeRevenue;
+  const trackedBase = Math.max(kpis?.onlineProviders ?? 0, providers.length);
+  const trackingPct = trackedBase === 0 ? 0 : Math.round((providers.length / trackedBase) * 100);
 
-  const filteredJobs = useMemo(() => {
-    const q = jobSearch.trim().toLowerCase();
-    if (!q) return activeJobs;
-    return activeJobs.filter((j) =>
-      [j.jobNumber, j.customer?.user.fullName, j.provider?.user.fullName]
-        .filter(Boolean)
-        .some((v) => v!.toLowerCase().includes(q)),
-    );
-  }, [activeJobs, jobSearch]);
+  const rated = (topProviders ?? []).filter((provider) => provider.rating > 0);
+  const avgRating = rated.length ? rated.reduce((sum, provider) => sum + provider.rating, 0) / rated.length : 0;
+  const breakdown = charts?.statusBreakdown ?? {};
+  const breakdownTotal = Object.values(breakdown).reduce((sum, count) => sum + count, 0);
+  const completion = breakdownTotal === 0 ? 0 : Math.round(((breakdown.completed ?? 0) / breakdownTotal) * 100);
 
-  const mapMarkers = providers.map((p) => ({
-    id: p.providerId,
-    lat: p.lat,
-    lng: p.lng,
-    title: p.fullName ?? p.providerId,
-    label: p.fullName?.charAt(0).toUpperCase(),
-    heading: p.heading,
-  }));
+  const services = (health?.services ?? []).filter((service) => service.name !== 'Live Tracking');
+  const allOperational = services.length > 0 && services.every((service) => service.status === 'operational');
 
-  function focusProvider(id: string) {
-    setSelectedProviderId(id);
-    mapRef.current?.focusOn(id);
-  }
+  const mapMarkers =
+    mapFilter === 'riders'
+      ? []
+      : providers.map((provider) => ({
+          id: provider.providerId,
+          lat: provider.lat,
+          lng: provider.lng,
+          title: provider.fullName ?? 'Driver',
+          label: '',
+          heading: provider.heading,
+        }));
 
-  function selectProviderFromMap(id: string) {
-    setTab('providers');
-    setSelectedProviderId(id);
-  }
+  const liveRows = activeJobs.slice(0, 5).map((job) => ({ id: job.id, href: `/jobs/${job.id}`, ago: connected ? 'live' : '', ...jobActivity(job) }));
 
   return (
-    <>
-      <Header title="Live map" description="Real-time driver tracking and active rides" />
-      <div className="flex-1 overflow-y-auto p-4 lg:p-6">
-        {/* Control bar */}
-        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-3">
-            {connected ? (
-              <span className="inline-flex items-center gap-1.5 rounded-full border border-success/20 bg-success/15 px-2.5 py-0.5 text-xs font-medium text-success">
-                <Radio className="h-3 w-3 animate-pulse" />
-                Live
-              </span>
-            ) : (
-              <span className="inline-flex items-center gap-1.5 rounded-full border border-danger/20 bg-danger/15 px-2.5 py-0.5 text-xs font-medium text-danger">
-                <WifiOff className="h-3 w-3" />
-                Reconnecting…
-              </span>
-            )}
-            <span className="text-xs text-muted">Synced {relativeUpdated}</span>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <div className="flex items-center gap-1.5 rounded-full border border-border bg-elevated px-3 py-1 text-xs font-medium text-secondary shadow-xs">
-              <Users className="h-3.5 w-3.5 text-info" />
-              <span className="font-tabular text-primary">{providers.length}</span> online
-            </div>
-            <div className="flex items-center gap-1.5 rounded-full border border-border bg-elevated px-3 py-1 text-xs font-medium text-secondary shadow-xs">
-              <Briefcase className="h-3.5 w-3.5 text-accent" />
-              <span className="font-tabular text-primary">{activeJobs.length}</span> active
-            </div>
-            <Button
-              variant="outline"
-              size="icon"
-              className="h-8 w-8"
-              onClick={() => refetch()}
-              aria-label="Refresh"
-            >
-              <RotateCw className={cn('h-3.5 w-3.5', isFetching && 'animate-spin')} />
-            </Button>
+    <div className="flex-1 overflow-y-auto px-5 py-4 lg:px-6">
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <div className="flex items-center gap-3">
+          <span className="grid size-11 place-items-center rounded-full bg-chart-1/15 text-chart-1">
+            <MapPin className="size-5" strokeWidth={1.75} />
+          </span>
+          <div>
+            <h1 className="text-[1.65rem] font-bold leading-none tracking-[-0.04em] text-primary">Live Map</h1>
+            <p className="mt-1.5 text-sm text-muted">Real-time driver tracking and active rides</p>
           </div>
         </div>
-
-        {/* Map + live console */}
-        <div className="grid gap-6 lg:grid-cols-3">
-          <div className="relative overflow-hidden rounded-xl border border-border bg-elevated shadow-sm lg:col-span-2">
-            <div className="h-[420px] lg:h-[560px]">
-              {mapKeyLoading ? (
-                <div className="skeleton-shimmer h-full w-full" />
-              ) : mapApiKey ? (
-                <LiveMap
-                  ref={mapRef}
-                  apiKey={mapApiKey}
-                  markers={mapMarkers}
-                  activeId={selectedProviderId}
-                  onMarkerClick={selectProviderFromMap}
-                />
-              ) : (
-                <div className="flex h-full flex-col items-center justify-center bg-surface px-6 text-center">
-                  <div className="mb-3 flex h-14 w-14 items-center justify-center rounded-full bg-accent-soft">
-                    <MapPin className="h-7 w-7 text-accent" />
-                  </div>
-                  <p className="text-sm font-medium text-primary">No map API key configured</p>
-                  <p className="mt-1 max-w-xs text-xs text-secondary">
-                    Go to Settings → Google Maps API Key to enable the live map.
-                  </p>
-                  <p className="font-mono mt-3 text-xs text-muted">
-                    Tracking {providers.length} provider(s) via Socket.IO
-                  </p>
-                </div>
+        <div className="flex items-center gap-1 rounded-full border border-hairline bg-sheet p-1">
+          {RANGES.map((item) => (
+            <button
+              key={item.key}
+              type="button"
+              onClick={() => setRange(item.key)}
+              className={cn(
+                'h-8 rounded-full px-3 text-sm font-medium transition-colors',
+                range === item.key ? 'bg-nav-active text-white' : 'text-muted hover:text-primary',
               )}
-            </div>
-
-            {/* Floating overlay chrome */}
-            {mapApiKey && !mapKeyLoading && (
-              <>
-                <div className="pointer-events-none absolute left-4 top-4 flex items-center gap-2 rounded-full border border-border/60 bg-overlay/90 px-3 py-1.5 shadow-lg backdrop-blur-md">
-                  <span className="relative flex h-2 w-2">
-                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-success opacity-75" />
-                    <span className="relative inline-flex h-2 w-2 rounded-full bg-success" />
-                  </span>
-                  <span className="font-tabular text-xs font-medium text-primary">
-                    {providers.length} provider{providers.length === 1 ? '' : 's'} live
-                  </span>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => mapRef.current?.fitAll()}
-                  className="absolute right-4 top-4 flex h-8 w-8 items-center justify-center rounded-full border border-border/60 bg-overlay/90 text-secondary shadow-lg backdrop-blur-md transition-colors duration-150 hover:text-primary"
-                  aria-label="Fit all markers"
-                >
-                  <Maximize2 className="h-3.5 w-3.5" />
-                </button>
-              </>
-            )}
-          </div>
-
-          {/* Live console */}
-          <div className="flex h-[420px] flex-col overflow-hidden rounded-xl border border-border bg-elevated shadow-sm lg:h-[560px]">
-            <div className="flex items-center justify-between gap-2 border-b border-border p-3">
-              <SegmentedTabs
-                items={[
-                  { value: 'providers', label: 'Drivers', icon: Users, count: providers.length },
-                  { value: 'jobs', label: 'Rides', icon: Briefcase, count: activeJobs.length },
-                ]}
-                value={tab}
-                onChange={(v) => setTab(v as 'providers' | 'jobs')}
-              />
-            </div>
-
-            <div className="border-b border-border p-3">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted" />
-                <Input
-                  value={tab === 'providers' ? providerSearch : jobSearch}
-                  onChange={(e) =>
-                    tab === 'providers'
-                      ? setProviderSearch(e.target.value)
-                      : setJobSearch(e.target.value)
-                  }
-                  placeholder={tab === 'providers' ? 'Search drivers...' : 'Search jobs...'}
-                  className="h-8 pl-8 text-xs"
-                />
-              </div>
-            </div>
-
-            <div className="flex-1 overflow-y-auto p-2">
-              {isLoading ? (
-                <div className="space-y-1.5 p-1">
-                  {Array.from({ length: 5 }).map((_, i) => (
-                    <div key={i} className="skeleton-shimmer h-14 rounded-lg" />
-                  ))}
-                </div>
-              ) : error ? (
-                <p className="p-3 text-sm text-danger">Failed to load live snapshot</p>
-              ) : tab === 'providers' ? (
-                filteredProviders.length === 0 ? (
-                  <EmptyState
-                    title={providers.length === 0 ? 'No drivers online' : 'No matches'}
-                    description={
-                      providers.length === 0
-                        ? 'Drivers will appear here once they go online.'
-                        : 'Try a different search term.'
-                    }
-                    className="border-none bg-transparent py-10"
-                  />
-                ) : (
-                  <ul className="space-y-1">
-                    {filteredProviders.map((p) => (
-                      <li key={p.providerId}>
-                        <button
-                          type="button"
-                          onClick={() => focusProvider(p.providerId)}
-                          className={cn(
-                            'group flex w-full items-center gap-3 rounded-lg px-2 py-2 text-left transition-colors duration-150 hover:bg-surface',
-                            selectedProviderId === p.providerId && 'bg-accent-soft',
-                          )}
-                        >
-                          <Avatar name={p.fullName ?? p.providerId} size="sm" />
-                          <div className="min-w-0 flex-1">
-                            <p className="truncate text-sm font-medium text-primary">
-                              {p.fullName ?? p.providerId.slice(0, 8)}
-                            </p>
-                            <p className="font-mono flex items-center gap-1 text-xs text-muted">
-                              <Navigation className="h-3 w-3" />
-                              {p.lat.toFixed(4)}, {p.lng.toFixed(4)}
-                            </p>
-                          </div>
-                          <span className="h-2 w-2 shrink-0 rounded-full bg-success" />
-                          <ChevronRight
-                            className="h-3.5 w-3.5 shrink-0 text-muted opacity-0 transition-opacity group-hover:opacity-100"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              router.push(`/providers/${p.providerId}`);
-                            }}
-                          />
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                )
-              ) : filteredJobs.length === 0 ? (
-                <EmptyState
-                  title={activeJobs.length === 0 ? 'No active jobs right now' : 'No matches'}
-                  description={
-                    activeJobs.length === 0
-                      ? 'Active jobs will show up here in real time as customers book services.'
-                      : 'Try a different search term.'
-                  }
-                  className="border-none bg-transparent py-10"
-                />
-              ) : (
-                <ul className="space-y-1">
-                  {filteredJobs.map((job) => (
-                    <li key={job.id}>
-                      <button
-                        type="button"
-                        onClick={() => router.push(`/jobs/${job.id}`)}
-                        className="flex w-full items-center justify-between gap-3 rounded-lg px-3 py-2.5 text-left transition-colors duration-150 hover:bg-surface"
-                      >
-                        <div className="min-w-0">
-                          <p className="font-mono text-[13px] font-medium text-primary">
-                            {job.jobNumber}
-                          </p>
-                          <p className="mt-0.5 truncate text-xs text-secondary">
-                            {job.customer?.user.fullName ?? '—'} →{' '}
-                            {job.provider?.user.fullName ?? 'Unassigned'}
-                          </p>
-                        </div>
-                        <StatusBadge status={job.status} />
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-
-            <div className="flex items-center gap-1.5 border-t border-border px-3 py-2 text-[11px] text-muted">
-              <Compass className="h-3 w-3" />
-              <span className="font-mono truncate">{socketUrl}</span>
-            </div>
-          </div>
+            >
+              {item.label}
+            </button>
+          ))}
         </div>
       </div>
-    </>
+
+      <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <LiveStat label="Active Drivers" value={activeDrivers} tone="emerald" icon={Car} delta={kpis?.trends?.totalJobs} />
+        <LiveStat label={range === 'live' ? 'Active Rides' : 'Trips'} value={activeRides} tone="sky" icon={MapPin} delta={kpis?.trends?.completedToday} />
+        <LiveStat label={range === 'month' || range === 'week' ? 'Revenue' : "Today's Revenue"} value={formatCurrency(revenue)} tone="violet" icon={CircleDollarSign} delta={kpis?.trends?.revenueToday} />
+        <LiveStat label="Live Tracking" value={`${trackingPct}%`} tone="amber" icon={CheckCircle2} />
+      </div>
+
+      <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-12">
+        <section className="panel-card relative h-[520px] overflow-hidden p-0 xl:col-span-8">
+          {mapKeyLoading || isLoading ? (
+            <Skeleton className="h-full w-full rounded-none" />
+          ) : mapApiKey ? (
+            <LiveMap
+              ref={mapRef}
+              apiKey={mapApiKey}
+              markers={mapMarkers}
+              activeId={selectedProviderId}
+              showZoomControl={false}
+              className="h-full min-h-0 rounded-none"
+              onMarkerClick={(id) => {
+                setSelectedProviderId(id);
+                mapRef.current?.focusOn(id);
+              }}
+            />
+          ) : (
+            <div className="flex h-full flex-col items-center justify-center px-6 text-center">
+              <MapPin className="mb-3 size-8 text-chart-1" />
+              <p className="text-sm font-medium text-primary">No map API key configured</p>
+              <p className="mt-1 max-w-xs text-xs text-muted">Add a Google Maps key in Settings to show the live map.</p>
+            </div>
+          )}
+
+          <div className="absolute left-3 top-3 flex items-center gap-1 rounded-full border border-hairline bg-sheet p-1 shadow-sm">
+            {FILTERS.map((item) => {
+              const Icon = item.icon;
+              const active = mapFilter === item.key;
+              return (
+                <button
+                  key={item.key}
+                  type="button"
+                  onClick={() => setMapFilter(item.key)}
+                  className={cn(
+                    'inline-flex h-8 items-center gap-1.5 rounded-full px-3 text-xs font-medium',
+                    active ? 'bg-nav-active text-white' : 'text-muted hover:text-primary',
+                  )}
+                >
+                  <Icon className="size-3.5" strokeWidth={1.75} />
+                  {item.label}
+                </button>
+              );
+            })}
+          </div>
+          <div className="absolute right-3 top-3 inline-flex items-center gap-2 rounded-full border border-hairline bg-sheet px-3 py-1.5 text-xs font-medium text-primary">
+            <span className={cn('size-2 rounded-full', connected ? 'bg-nav-active' : 'bg-danger')} />
+            {connected ? 'Live' : 'Offline'} · {providers.length} online
+          </div>
+          {mapFilter === 'riders' ? (
+            <p className="absolute bottom-4 left-4 rounded-full bg-sheet px-3 py-1 text-xs text-muted">Rider locations are not shared on the live map.</p>
+          ) : null}
+          {mapApiKey ? (
+            <div className="absolute bottom-4 right-4 flex flex-col gap-2">
+              <button type="button" aria-label="Zoom in" onClick={() => mapRef.current?.zoomBy(1)} className="grid size-9 place-items-center rounded-xl border border-hairline bg-sheet text-primary">
+                <Plus className="size-4" />
+              </button>
+              <button type="button" aria-label="Zoom out" onClick={() => mapRef.current?.zoomBy(-1)} className="grid size-9 place-items-center rounded-xl border border-hairline bg-sheet text-primary">
+                <Minus className="size-4" />
+              </button>
+              <button type="button" aria-label="Fit drivers" onClick={() => mapRef.current?.fitAll()} className="grid size-9 place-items-center rounded-xl border border-hairline bg-sheet text-primary">
+                <LocateFixed className="size-4" />
+              </button>
+            </div>
+          ) : null}
+          {error ? <p className="absolute bottom-4 left-4 text-sm text-danger">Failed to load live snapshot</p> : null}
+        </section>
+
+        <section className="panel-card flex h-[520px] flex-col p-4 xl:col-span-4">
+          <div className="flex items-center justify-between">
+            <h2 className="inline-flex items-center gap-2 text-sm font-semibold text-primary">
+              <span className="grid size-8 place-items-center rounded-lg bg-chart-1/15 text-chart-1">
+                <Radio className="size-4" strokeWidth={1.75} />
+              </span>
+              Live Activity
+            </h2>
+            <button type="button" onClick={() => router.push('/jobs')} className="inline-flex items-center gap-1 text-xs font-medium text-chart-1">
+              View all <ArrowUpRight className="size-3.5" />
+            </button>
+          </div>
+          <ul className="mt-4 flex-1 space-y-3 overflow-y-auto">
+            {liveRows.length === 0 ? (
+              <li className="text-sm text-muted">No active rides right now.</li>
+            ) : (
+              liveRows.map((row) => {
+                const Icon = row.icon;
+                return (
+                  <li key={row.id}>
+                    <button type="button" onClick={() => router.push(row.href)} className="flex w-full items-start gap-3 text-left">
+                      <span className={cn('grid size-9 shrink-0 place-items-center rounded-full', row.tone === 'sky' ? 'bg-chart-2/15 text-chart-2' : 'bg-chart-1/15 text-chart-1')}>
+                        <Icon className="size-4" strokeWidth={1.75} />
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-sm font-medium text-primary">{row.title}</span>
+                        <span className="block truncate text-xs text-muted">{row.meta}</span>
+                      </span>
+                      <span className={cn('rounded-full px-2 py-0.5 text-[11px] font-medium', row.tone === 'sky' ? 'bg-chart-2/15 text-chart-2' : 'bg-chart-1/15 text-chart-1')}>
+                        {row.pill}
+                      </span>
+                    </button>
+                  </li>
+                );
+              })
+            )}
+          </ul>
+        </section>
+      </div>
+
+      <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-3">
+        <section className="panel-card p-4">
+          <div className="flex items-center justify-between">
+            <h2 className="text-sm font-semibold text-primary">Driver Performance</h2>
+            <span className="text-xs text-muted">Last 7 days</span>
+          </div>
+          <div className="mt-4 grid grid-cols-3 gap-2">
+            <Metric value={avgRating.toFixed(1)} label="Avg Rating" icon={<Star className="size-3.5 fill-chart-3 text-chart-3" />} />
+            <Metric value={kpis?.totalJobs ?? 0} label="Total Trips" />
+            <Metric value={`${completion}%`} label="Completion Rate" />
+          </div>
+          <div className="mt-2 h-[140px]">
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={week} margin={{ top: 12, right: 8, left: -18, bottom: 0 }}>
+                <CartesianGrid stroke="var(--hairline)" vertical={false} />
+                <XAxis dataKey="label" tick={{ fill: 'var(--text-muted)', fontSize: 11 }} axisLine={false} tickLine={false} />
+                <YAxis allowDecimals={false} tick={{ fill: 'var(--text-muted)', fontSize: 11 }} axisLine={false} tickLine={false} />
+                <Line type="monotone" dataKey="jobs" stroke="var(--chart-1)" strokeWidth={2.5} dot={{ r: 3, fill: 'var(--chart-1)', strokeWidth: 0 }} />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        </section>
+
+        <section className="panel-card p-4">
+          <div className="flex items-center justify-between gap-2">
+            <h2 className="text-sm font-semibold text-primary">System Health</h2>
+            <span className={cn('rounded-full px-2 py-0.5 text-[11px] font-medium', allOperational ? 'bg-chart-1/15 text-chart-1' : 'bg-chart-3/15 text-chart-3')}>
+              {allOperational ? 'All Systems Operational' : 'Needs attention'}
+            </span>
+          </div>
+          <ul className="mt-5 grid grid-cols-4 gap-2">
+            {(services.length ? services : ['API', 'Database', 'Redis', 'SMS (Twilio)'].map((name) => ({ name, status: 'operational' as const }))).map((service) => {
+              const Icon = HEALTH_ICONS[service.name] ?? Radio;
+              const ok = service.status === 'operational';
+              return (
+                <li key={service.name} className="text-center">
+                  <span className={cn('mx-auto grid size-12 place-items-center rounded-full', ok ? 'bg-chart-1/15 text-chart-1' : 'bg-chart-3/15 text-chart-3')}>
+                    <Icon className="size-5" strokeWidth={1.75} />
+                  </span>
+                  <p className="mt-2 text-xs font-medium text-primary">{service.name.replace(' (Twilio)', '')}</p>
+                  <p className={cn('text-[11px] capitalize', ok ? 'text-chart-1' : 'text-chart-3')}>{service.status}</p>
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+
+        <section className="panel-card p-4">
+          <div className="flex items-center justify-between">
+            <h2 className="text-sm font-semibold text-primary">Recent Activity</h2>
+            <button type="button" onClick={() => router.push('/audit')} className="inline-flex items-center gap-1 text-xs font-medium text-chart-1">
+              View all <ArrowUpRight className="size-3.5" />
+            </button>
+          </div>
+          <ul className="mt-4 space-y-3">
+            {(activity ?? []).slice(0, 5).map((item) => (
+              <li key={item.id} className="flex items-start gap-3">
+                <span className={cn('mt-1.5 size-2 shrink-0 rounded-full', item.type === 'alert' ? 'bg-chart-3' : item.type === 'payout' ? 'bg-chart-2' : 'bg-chart-1')} />
+                <div className="min-w-0">
+                  <p className="truncate text-sm text-primary">{item.message}</p>
+                  <p className="text-xs text-muted">{timeAgo(item.timestamp)}</p>
+                </div>
+              </li>
+            ))}
+            {(activity ?? []).length === 0 ? <li className="text-sm text-muted">No recent activity.</li> : null}
+          </ul>
+        </section>
+      </div>
+    </div>
+  );
+}
+
+function Metric({ value, label, icon }: { value: string | number; label: string; icon?: ReactNode }) {
+  return (
+    <div>
+      <p className="num inline-flex items-center gap-1 text-xl font-bold tracking-tight text-primary">
+        {value}
+        {icon}
+      </p>
+      <p className="text-[11px] text-muted">{label}</p>
+    </div>
+  );
+}
+
+function LiveStat({
+  label,
+  value,
+  tone,
+  icon: Icon,
+  delta,
+}: {
+  label: string;
+  value: string | number;
+  tone: 'emerald' | 'sky' | 'violet' | 'amber';
+  icon: typeof Car;
+  delta?: number | null;
+}) {
+  const tones = {
+    emerald: { wash: 'stat-wash-emerald', ink: 'text-chart-1', wave: 'var(--chart-1)', variant: 0 },
+    sky: { wash: 'stat-wash-sky', ink: 'text-chart-2', wave: 'var(--chart-2)', variant: 1 },
+    violet: { wash: 'stat-wash-violet', ink: 'text-chart-4', wave: 'var(--chart-4)', variant: 2 },
+    amber: { wash: 'stat-wash-amber', ink: 'text-chart-3', wave: 'var(--chart-3)', variant: 0 },
+  }[tone];
+  const up = (delta ?? 0) > 0;
+  return (
+    <div className={cn('relative h-[118px] overflow-hidden rounded-[18px] border border-white/70 p-4', tones.wash)}>
+      <div className="relative z-10 flex items-start justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <span className={cn('grid size-10 place-items-center rounded-full bg-white/85', tones.ink)}>
+            <Icon className="size-[18px]" strokeWidth={1.75} />
+          </span>
+          <div>
+            <p className="num text-[26px] font-bold leading-none tracking-tight text-primary">{value}</p>
+            <p className="mt-1 text-xs text-muted">{label}</p>
+          </div>
+        </div>
+        {delta ? (
+          <span className={cn('inline-flex items-center gap-0.5 text-xs font-semibold', up ? 'text-chart-1' : 'text-chart-5')}>
+            <ArrowUpRight className={cn('size-3.5', !up && 'rotate-90')} />
+            {Math.abs(delta)}%
+          </span>
+        ) : null}
+      </div>
+      <div className={cn('pointer-events-none absolute inset-x-0 bottom-0 h-12', tones.ink)}>
+        <StatWave color={tones.wave} variant={tones.variant} />
+      </div>
+    </div>
   );
 }

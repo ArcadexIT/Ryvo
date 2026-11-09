@@ -159,11 +159,15 @@ class _HomeMapPageState extends ConsumerState<HomeMapPage>
     if (!await _guardNewRequest()) return;
     final covered = await _promptIfOutsideCoverage(force: true);
     if (!covered || !mounted) return;
-    await showPickupLocationPicker(
+    final applied = await showPickupLocationPicker(
       context: context,
       autofocusSearch: true,
       forDropoff: true,
     );
+    if (!applied || !mounted || !_hasDropoff(ref.read(jobDraftProvider))) {
+      return;
+    }
+    context.push('/service-request');
   }
 
   Future<void> _selectRecentDestination(_RecentPlace place) async {
@@ -367,6 +371,10 @@ class _HomeMapPageState extends ConsumerState<HomeMapPage>
               polylines: homeMapPolylinesProvider,
               camera: homeMapCameraProvider,
               showLiveLocation: true,
+              userLocation: jobDraftProvider.select((draft) {
+                if (!draft.locationResolved) return null;
+                return LatLng(draft.pickupLat, draft.pickupLng);
+              }),
               padding: const EdgeInsets.only(top: 120),
               paddingListenable: _mapPadding,
               onMapCreated: (controller) => _mapController = controller,
@@ -923,10 +931,10 @@ class _PickupPill extends StatelessWidget {
                             color: AppColors.primary,
                           ),
                         )
-                      : Icon(
+                      : const Icon(
                           Icons.my_location_rounded,
-                          color: AppColors.textSecondary,
-                          size: 18,
+                          color: AppColors.primary,
+                          size: 20,
                         ),
                 ),
               ),
@@ -957,7 +965,8 @@ class _MapControls extends StatelessWidget {
     return Column(
       children: [
         _RoundMapButton(
-          icon: Icons.navigation_rounded,
+          icon: Icons.my_location_rounded,
+          iconColor: AppColors.primary,
           busy: locating,
           onTap: onLocate,
         ),
@@ -1003,11 +1012,13 @@ class _RoundMapButton extends StatelessWidget {
   const _RoundMapButton({
     required this.icon,
     required this.onTap,
+    this.iconColor,
     this.busy = false,
   });
 
   final IconData icon;
   final VoidCallback? onTap;
+  final Color? iconColor;
   final bool busy;
 
   @override
@@ -1037,7 +1048,7 @@ class _RoundMapButton extends StatelessWidget {
                     child: CircularProgressIndicator(
                         strokeWidth: 2, color: AppColors.primary),
                   )
-                : Icon(icon, color: AppColors.textPrimary, size: 18),
+                : Icon(icon, color: iconColor ?? AppColors.textPrimary, size: 18),
           ),
         ],
       ),

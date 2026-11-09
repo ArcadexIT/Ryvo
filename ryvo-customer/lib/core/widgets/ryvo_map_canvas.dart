@@ -90,6 +90,7 @@ class RyvoMapCanvas extends ConsumerStatefulWidget {
     this.padding = EdgeInsets.zero,
     this.paddingListenable,
     this.showLiveLocation = false,
+    this.userLocation,
     this.boundsPadding = 48,
     this.initialTarget,
     this.initialZoom = 16,
@@ -126,6 +127,10 @@ class RyvoMapCanvas extends ConsumerStatefulWidget {
   /// Places a flat marker on the device GPS coordinate. The platform blue
   /// dot stays off so this marker is the only current-location mark.
   final bool showLiveLocation;
+
+  /// Shown until [liveUserLocationProvider] emits a fix, so the puck is on
+  /// the map as soon as a pickup is known.
+  final ProviderListenable<LatLng?>? userLocation;
   final double boundsPadding;
 
   /// Where the platform map is created. Pass the real pickup when [camera]
@@ -288,11 +293,15 @@ class _RyvoMapCanvasState extends ConsumerState<RyvoMapCanvas>
     // markers, and polylines are updated in place, never recreated.
     final style = RyvoMapCanvas.styleFor(Theme.of(context).brightness);
     final driverMarkers = _driverMarkers();
-    final you = widget.showLiveLocation
+    final live = widget.showLiveLocation
         ? ref.watch(
             liveUserLocationProvider.select((async) => async.valueOrNull),
           )
         : null;
+    final fallback = widget.userLocation == null
+        ? null
+        : ref.watch(widget.userLocation!.select((value) => value));
+    final you = live ?? fallback;
     final youIcon = _youIcon;
 
     Widget buildMap(EdgeInsets padding) {

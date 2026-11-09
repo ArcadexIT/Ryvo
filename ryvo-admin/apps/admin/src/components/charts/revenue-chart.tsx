@@ -2,9 +2,9 @@
 
 import {
   Area,
+  Bar,
   CartesianGrid,
   ComposedChart,
-  Line,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -49,8 +49,8 @@ function ChartTooltip({
   return (
     <div className="rounded-lg border border-hairline bg-sheet px-3 py-2 text-xs shadow-popover">
       <p className="font-medium text-primary">{point.label}</p>
-      <p className="num mt-1 text-muted">Trips {point.jobs}</p>
-      <p className="num text-muted">Revenue {formatCurrency(point.revenue)}</p>
+      <p className="num mt-1 text-chart-2">Trips {point.jobs}</p>
+      <p className="num text-chart-1">Revenue {formatCurrency(point.revenue)}</p>
     </div>
   );
 }
@@ -58,43 +58,55 @@ function ChartTooltip({
 export function RevenueChart({ data, days = 7 }: RevenueChartProps) {
   const theme = useChartTheme();
   const series = fillDays(data, days);
-  if (series.every((point) => point.jobs === 0 && point.revenue === 0)) {
-    return <p className="flex h-[250px] items-center justify-center text-sm text-muted">No trips in this range.</p>;
-  }
+  const empty = series.every((point) => point.jobs === 0 && point.revenue === 0);
 
   return (
-    <ResponsiveContainer width="100%" height={250}>
-      <ComposedChart data={series} margin={{ top: 8, right: 8, left: -18, bottom: 0 }}>
-        <CartesianGrid stroke={theme.grid} vertical={false} />
-        <XAxis dataKey="label" tick={{ fill: theme.text, fontSize: 12 }} axisLine={false} tickLine={false} />
-        <YAxis
-          yAxisId="jobs"
-          tick={{ fill: theme.text, fontSize: 12 }}
-          axisLine={false}
-          tickLine={false}
-          allowDecimals={false}
-        />
-        <YAxis yAxisId="revenue" hide />
-        <Tooltip content={<ChartTooltip />} />
-        <Area
-          yAxisId="revenue"
-          type="monotone"
-          dataKey="revenue"
-          stroke="var(--success)"
-          strokeWidth={2}
-          fill="var(--success)"
-          fillOpacity={0.1}
-          dot={false}
-        />
-        <Line
-          yAxisId="jobs"
-          type="monotone"
-          dataKey="jobs"
-          stroke="var(--text-muted)"
-          strokeWidth={1.75}
-          dot={false}
-        />
-      </ComposedChart>
-    </ResponsiveContainer>
+    <div className="relative">
+      <ResponsiveContainer width="100%" height={280}>
+        <ComposedChart data={series} margin={{ top: 8, right: 8, left: -12, bottom: 0 }}>
+          <CartesianGrid stroke={theme.grid} vertical={false} />
+          <XAxis
+            dataKey="label"
+            tick={{ fill: theme.text, fontSize: 11 }}
+            axisLine={false}
+            tickLine={false}
+            interval="preserveStartEnd"
+            minTickGap={24}
+          />
+          <YAxis
+            yAxisId="jobs"
+            tick={{ fill: theme.text, fontSize: 11 }}
+            axisLine={false}
+            tickLine={false}
+            allowDecimals={false}
+            width={32}
+          />
+          <YAxis yAxisId="revenue" orientation="right" hide />
+          <Tooltip content={<ChartTooltip />} cursor={{ fill: 'var(--input)' }} />
+          <Bar
+            yAxisId="jobs"
+            dataKey="jobs"
+            fill="var(--chart-2)"
+            radius={[5, 5, 0, 0]}
+            maxBarSize={28}
+          />
+          <Area
+            yAxisId="revenue"
+            type="monotone"
+            dataKey="revenue"
+            stroke="var(--chart-1)"
+            strokeWidth={2.5}
+            fill="var(--chart-1)"
+            fillOpacity={0.18}
+            dot={false}
+          />
+        </ComposedChart>
+      </ResponsiveContainer>
+      {empty ? (
+        <p className="pointer-events-none absolute inset-0 flex items-center justify-center text-sm text-muted">
+          No trips in this range.
+        </p>
+      ) : null}
+    </div>
   );
 }

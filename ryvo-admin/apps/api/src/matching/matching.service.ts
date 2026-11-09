@@ -24,11 +24,15 @@ import {
   providerTravelToPickup,
 } from '../ops/geo';
 import { SmsService } from '../sms/sms.service';
+import { DriveLeg, RoadEtaService } from '../ops/road-eta.service';
 import { JobOfferStatus } from '@ryvo/database';
 
 const PROVIDER_GEO_KEY = 'provider:online';
 
 const EXPIRE_OFFERS_INTERVAL_MS = 10_000;
+
+/** Straight-line nearest drivers that get a road-ETA ranking. One of them is offered. */
+const ROAD_RANK_LIMIT = 5;
 
 const OPEN_JOB_STATUSES = [
   'matched',
@@ -59,6 +63,7 @@ export class MatchingService implements OnModuleInit, OnModuleDestroy {
     private payments: PaymentsService,
     private coverage: CoverageService,
     private sms: SmsService,
+    private roadEta: RoadEtaService,
   ) {}
 
   onModuleInit() {
@@ -130,72 +135,114 @@ export class MatchingService implements OnModuleInit, OnModuleDestroy {
       return this.sendBidRequests(jobId, providerIds);
     }
 
-    const timeoutSec = await this.settings.getOfferTimeoutSec();
-    const expiresAt = new Date(Date.now() + timeoutSec * 1000);
+    const release = await this.acquireDispatchLock(jobId);
+    if (!release) {
+      return { offers: [], message: 'Dispatch in progress' };
+    }
+    try {
+      return await this.dispatchExclusiveOffer(job, providerIds);
+    } finally {
+      await release();
+    }
+  }
 
-    let targets = providerIds;
-    if (!targets?.length) {
-      const nearby = await this.findNearbyProviders(
-        Number(job.pickupLat),
-        Number(job.pickupLng),
-      );
-      targets = nearby.slice(0, 8).map((p) => p.id);
+  /**
+   * Exclusive dispatch: rank a few nearby drivers by road ETA and offer the
+   * job to one of them. Decline and expiry leave that driver out, and the
+   * next call offers the following driver until the search window ends.
+   */
+  private async dispatchExclusiveOffer(
+    job: {
+      id: string;
+      createdAt: Date;
+      serviceCategoryId: string;
+      pickupLat: unknown;
+      pickupLng: unknown;
+      excludedProviderIds: string[];
+    },
+    providerIds?: string[],
+  ) {
+    const jobId = job.id;
+    const live = await this.prisma.jobOffer.findFirst({
+      where: { jobId, status: 'sent', expiresAt: { gt: new Date() } },
+    });
+    if (live) {
+      return { offers: [live], expiresAt: live.expiresAt };
     }
 
-    const excluded = new Set(job.excludedProviderIds ?? []);
-    const nearbyIds = targets.filter((id) => !excluded.has(id));
-    targets = await this.providerIdsForRideClass(job.serviceCategoryId, nearbyIds);
-    if (!providerIds?.length) {
-      targets = await this.preferFinishingDriver(job, targets, excluded);
+    const priorOffers = await this.prisma.jobOffer.findMany({
+      where: { jobId },
+      select: { providerId: true },
+    });
+    const excluded = new Set<string>([
+      ...(job.excludedProviderIds ?? []),
+      ...priorOffers.map((row) => row.providerId),
+    ]);
+
+    let orderedIds: string[] = [];
+    if (providerIds?.length) {
+      orderedIds = providerIds.filter((id) => !excluded.has(id));
+    } else {
+      const nearby = await this.findNearbyProviders(Number(job.pickupLat), Number(job.pickupLng));
+      orderedIds = nearby.map((provider) => provider.id).filter((id) => !excluded.has(id));
     }
-    if (nearbyIds.length && !targets.length) {
+
+    const eligible = await this.providerIdsForRideClass(job.serviceCategoryId, orderedIds);
+    if (orderedIds.length && !eligible.length) {
       this.logger.warn(
-        `Ride ${jobId} has ${nearbyIds.length} nearby driver(s) but none serve ${job.serviceCategoryId}`,
+        `Ride ${jobId} has ${orderedIds.length} nearby driver(s) but none serve ${job.serviceCategoryId}`,
       );
     }
 
-    if (!targets.length) {
-      // No eligible provider right now. Give up only once the admin-configured
-      // search window has elapsed; otherwise keep the job in `searching` and let
-      // the periodic retry scan try again shortly (a provider may come online /
-      // move in range). The window starts when searching begins (after payment),
-      // not when the unpaid job row was created.
-      const searchWindowMs = (await this.settings.getSearchTimeoutSec()) * 1000;
-      const startedAt = await this.searchingSince(jobId, job.createdAt);
-      if (Date.now() - startedAt.getTime() >= searchWindowMs) {
+    const target = await this.pickNextDriver(job, eligible, excluded, !providerIds?.length);
+    const searchWindowMs = (await this.settings.getSearchTimeoutSec()) * 1000;
+    const startedAt = await this.searchingSince(jobId, job.createdAt);
+    const remainingMs = searchWindowMs - (Date.now() - startedAt.getTime());
+    if (!target || remainingMs <= 0) {
+      if (remainingMs <= 0) {
         await this.markNoProviderFound(jobId);
         return { offers: [], message: 'No drivers found nearby' };
       }
       return { offers: [], message: 'No drivers available yet, still searching' };
     }
 
-    const offers = await this.prisma.$transaction(async (tx) => {
-      const created = [];
-      for (const providerId of targets!) {
-        const existing = await tx.jobOffer.findFirst({
-          where: { jobId, providerId },
-        });
-        if (existing) {
-          created.push(
-            await tx.jobOffer.update({
-              where: { id: existing.id },
-              data: { expiresAt, status: 'sent', respondedAt: null },
-            }),
-          );
-        } else {
-          created.push(
-            await tx.jobOffer.create({
-              data: { jobId, providerId, expiresAt, status: 'sent' },
-            }),
-          );
-        }
-      }
-      return created;
+    const timeoutSec = await this.settings.getOfferTimeoutSec();
+    const offerMs = Math.min(Math.max(timeoutSec, 1) * 1000, remainingMs);
+    const expiresAt = new Date(Date.now() + offerMs);
+
+    const created = await this.prisma.$transaction(async (tx) => {
+      const open = await tx.jobOffer.findFirst({
+        where: { jobId, status: 'sent', expiresAt: { gt: new Date() } },
+      });
+      if (open) return null;
+      const existing = await tx.jobOffer.findFirst({
+        where: { jobId, providerId: target },
+      });
+      if (existing) return null;
+      return tx.jobOffer.create({
+        data: { jobId, providerId: target, expiresAt, status: 'sent' },
+      });
     });
+    if (!created) {
+      return { offers: [], message: 'No drivers available yet, still searching' };
+    }
 
-    await this.broadcastOffers(jobId, offers, expiresAt);
+    await this.broadcastOffers(jobId, [created], expiresAt);
+    return { offers: [created], expiresAt };
+  }
 
-    return { offers, expiresAt };
+  private async acquireDispatchLock(jobId: string): Promise<(() => Promise<void>) | null> {
+    const key = `dispatch:lock:${jobId}`;
+    try {
+      const ok = await this.redis.getClient().set(key, '1', 'EX', 15, 'NX');
+      if (ok !== 'OK') return null;
+    } catch (err) {
+      this.logger.warn(`Dispatch lock unavailable for job ${jobId}`, err);
+      return async () => undefined;
+    }
+    return async () => {
+      await this.redis.getClient().del(key).catch(() => undefined);
+    };
   }
 
   /** Broadcast an open bid request to nearby drivers (not exclusive JobOffers). */
@@ -546,10 +593,21 @@ export class MatchingService implements OnModuleInit, OnModuleDestroy {
       throw new BadRequestException('Offer is no longer available');
     }
 
-    return this.prisma.jobOffer.update({
+    const updated = await this.prisma.jobOffer.update({
       where: { id: offerId },
       data: { status: 'rejected', respondedAt: new Date() },
     });
+
+    const job = await this.prisma.job.findUnique({
+      where: { id: offer.jobId },
+      select: { status: true, jobType: true },
+    });
+    if (job?.status === 'searching' && job.jobType !== 'bidding') {
+      await this.sendOffers(offer.jobId).catch((err) => {
+        this.logger.warn(`Next offer after reject failed for job ${offer.jobId}`, err);
+      });
+    }
+    return updated;
   }
 
   async expireOffers() {
@@ -703,46 +761,87 @@ export class MatchingService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
-   * Uber-style chain: a driver in the last few minutes of a trip is matched
-   * from the dropoff, and only when that arrival beats every free driver.
+   * Lowest road ETA among the nearest idle drivers. A driver finishing a
+   * nearby trip wins only when that arrival is strictly sooner. Missing road
+   * legs fall back to straight-line minutes.
    */
-  private async preferFinishingDriver(
+  private async pickNextDriver(
     job: { serviceCategoryId: string; pickupLat: unknown; pickupLng: unknown },
-    idleIds: string[],
+    idleIdsInOrder: string[],
     excluded: Set<string>,
+    allowChain: boolean,
   ) {
-    const finishing = await this.findFinishingDrivers(
-      Number(job.pickupLat),
-      Number(job.pickupLng),
-      job.serviceCategoryId,
-      excluded,
-    );
+    const idleIds = idleIdsInOrder.slice(0, ROAD_RANK_LIMIT);
+    const pickupLat = Number(job.pickupLat);
+    const pickupLng = Number(job.pickupLng);
+    const finishing = allowChain
+      ? await this.findFinishingDrivers(pickupLat, pickupLng, job.serviceCategoryId, excluded)
+      : [];
     const bestFinish = finishing[0];
-    if (!bestFinish) return idleIds;
 
-    const bestIdle = await this.bestIdleEta(idleIds, job.pickupLat, job.pickupLng);
-    if (bestIdle != null && bestFinish.etaMinutes >= bestIdle) return idleIds;
-    return [bestFinish.providerId];
-  }
+    const providers = idleIds.length
+      ? await this.prisma.provider.findMany({
+          where: { id: { in: idleIds } },
+          select: { id: true, currentLat: true, currentLng: true },
+        })
+      : [];
+    const byId = new Map(providers.map((provider) => [provider.id, provider]));
 
-  private async bestIdleEta(providerIds: string[], pickupLat: unknown, pickupLng: unknown) {
-    if (!providerIds.length) return null;
-    const providers = await this.prisma.provider.findMany({
-      where: { id: { in: providerIds } },
-      select: { currentLat: true, currentLng: true },
-    });
-    let best: number | null = null;
-    for (const provider of providers) {
+    const legs: DriveLeg[] = [];
+    const idleFallback = new Map<string, number>();
+    for (const id of idleIds) {
+      const provider = byId.get(id);
       const travel = providerTravelToPickup(
-        provider.currentLat,
-        provider.currentLng,
+        provider?.currentLat,
+        provider?.currentLng,
         pickupLat,
         pickupLng,
       );
-      if (!travel) continue;
-      if (best == null || travel.etaMinutes < best) best = travel.etaMinutes;
+      if (!travel || provider?.currentLat == null || provider.currentLng == null) continue;
+      idleFallback.set(id, travel.etaMinutes);
+      legs.push({
+        key: `idle:${id}`,
+        originLat: Number(provider.currentLat),
+        originLng: Number(provider.currentLng),
+        destLat: pickupLat,
+        destLng: pickupLng,
+      });
     }
-    return best;
+    if (bestFinish) {
+      legs.push(
+        {
+          key: `remain:${bestFinish.providerId}`,
+          originLat: bestFinish.currentLat,
+          originLng: bestFinish.currentLng,
+          destLat: bestFinish.dropoffLat,
+          destLng: bestFinish.dropoffLng,
+        },
+        {
+          key: `hop:${bestFinish.providerId}`,
+          originLat: bestFinish.dropoffLat,
+          originLng: bestFinish.dropoffLng,
+          destLat: pickupLat,
+          destLng: pickupLng,
+        },
+      );
+    }
+
+    const road = await this.roadEta.measure(legs);
+    const scores: { id: string; eta: number }[] = [];
+    for (const id of idleIds) {
+      const eta = road.get(`idle:${id}`)?.etaMinutes ?? idleFallback.get(id);
+      if (eta == null) continue;
+      scores.push({ id, eta });
+    }
+    if (bestFinish) {
+      const remain =
+        road.get(`remain:${bestFinish.providerId}`)?.etaMinutes ?? bestFinish.remainingMin;
+      const hopMin =
+        road.get(`hop:${bestFinish.providerId}`)?.etaMinutes ?? etaMinutesFromKm(bestFinish.hopKm);
+      scores.push({ id: bestFinish.providerId, eta: remain + hopMin });
+    }
+    scores.sort((a, b) => a.eta - b.eta);
+    return scores[0]?.id ?? null;
   }
 
   private async findFinishingDrivers(
@@ -786,7 +885,16 @@ export class MatchingService implements OnModuleInit, OnModuleDestroy {
     );
     const eligibleSet = new Set(eligible);
 
-    const ranked: { providerId: string; etaMinutes: number }[] = [];
+    const ranked: {
+      providerId: string;
+      etaMinutes: number;
+      remainingMin: number;
+      hopKm: number;
+      currentLat: number;
+      currentLng: number;
+      dropoffLat: number;
+      dropoffLng: number;
+    }[] = [];
     for (const trip of trips) {
       const providerId = trip.providerId;
       const provider = trip.provider;
@@ -822,6 +930,12 @@ export class MatchingService implements OnModuleInit, OnModuleDestroy {
       ranked.push({
         providerId,
         etaMinutes: remainingMin + etaMinutesFromKm(hopKm),
+        remainingMin,
+        hopKm,
+        currentLat: Number(provider.currentLat),
+        currentLng: Number(provider.currentLng),
+        dropoffLat: Number(trip.dropoffLat),
+        dropoffLng: Number(trip.dropoffLng),
       });
     }
 

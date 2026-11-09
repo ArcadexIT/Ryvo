@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../../core/theme/app_colors.dart';
@@ -6,6 +7,59 @@ import '../../../../shared/providers/app_providers.dart';
 import '../../../../shared/providers/di_providers.dart';
 import '../../../../shared/widgets/chat_bubble.dart';
 import 'package:ryvo_driver/l10n/app_localizations.dart';
+
+class _QuickReplies extends StatelessWidget {
+  const _QuickReplies({
+    required this.replies,
+    required this.onTap,
+    required this.enabled,
+  });
+
+  final List<String> replies;
+  final ValueChanged<String> onTap;
+  final bool enabled;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 44,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+        itemCount: replies.length,
+        separatorBuilder: (_, __) => const SizedBox(width: 8),
+        itemBuilder: (context, index) {
+          final label = replies[index];
+          return Material(
+            color: AppColors.surface,
+            shape: const StadiumBorder(
+              side: BorderSide(color: AppColors.divider),
+            ),
+            child: InkWell(
+              customBorder: const StadiumBorder(),
+              onTap: enabled ? () => onTap(label) : null,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                child: Center(
+                  child: Text(
+                    label,
+                    style: GoogleFonts.poppins(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: enabled
+                          ? AppColors.textPrimary
+                          : AppColors.textSecondary,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
 
 class ChatPage extends ConsumerStatefulWidget {
   final String jobId;
@@ -36,12 +90,21 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     ref.read(providerSocketProvider).subscribeJob(widget.jobId);
   }
 
-  Future<void> _send() async {
-    final text = _controller.text.trim();
-    if (text.isEmpty) return;
-    _controller.clear();
+  Future<void> _sendText(String raw, {bool clearField = false}) async {
+    final text = raw.trim();
+    final sending =
+        ref.read(chatNotifierProvider(widget.jobId)).value?.isSending ?? false;
+    if (text.isEmpty || sending) return;
+    if (clearField) _controller.clear();
     await ref.read(chatNotifierProvider(widget.jobId).notifier).sendMessage(text);
     _scrollToBottom();
+  }
+
+  Future<void> _send() => _sendText(_controller.text, clearField: true);
+
+  void _sendQuickReply(String text) {
+    HapticFeedback.selectionClick();
+    _sendText(text);
   }
 
   void _scrollToBottom() {
@@ -65,11 +128,21 @@ class _ChatPageState extends ConsumerState<ChatPage> {
 
   String _time(DateTime t) => '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
 
+  List<String> _quickReplies(AppLocalizations l10n) => [
+        l10n.quickReplyArrived,
+        l10n.quickReplyOnMyWay,
+        l10n.quickReplyWhereAreYou,
+        l10n.quickReplyImOutside,
+        l10n.quickReplyComeOutside,
+        l10n.quickReplyOk,
+      ];
+
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     final chat = ref.watch(chatNotifierProvider(widget.jobId));
     final activeJob = ref.watch(activeJobProvider);
-    final title = activeJob?.customerName ?? AppLocalizations.of(context).customer;
+    final title = activeJob?.customerName ?? l10n.customer;
     final jobRef = activeJob?.jobRef;
     final messages = chat.value?.messages ?? const [];
     final isSending = chat.value?.isSending ?? false;
@@ -88,7 +161,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
           children: [
             Text(title, style: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.w600)),
             Text(
-              jobRef != null && jobRef.isNotEmpty ? 'Job $jobRef' : AppLocalizations.of(context).liveChat,
+              jobRef != null && jobRef.isNotEmpty ? 'Job $jobRef' : l10n.liveChat,
               style: GoogleFonts.poppins(fontSize: 11, color: AppColors.textSecondary),
             ),
           ],
@@ -102,7 +175,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                 : messages.isEmpty
                     ? Center(
                         child: Text(
-                          AppLocalizations.of(context).noMessagesYetSayHiToYourCustomer,
+                          l10n.noMessagesYetSayHiToYourCustomer,
                           textAlign: TextAlign.center,
                           style: GoogleFonts.poppins(fontSize: 13, color: AppColors.textSecondary, height: 1.5),
                         ),
@@ -122,6 +195,11 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                         },
                       ),
           ),
+          _QuickReplies(
+            replies: _quickReplies(l10n),
+            enabled: !isSending,
+            onTap: _sendQuickReply,
+          ),
           Container(
             padding: const EdgeInsets.all(16),
             decoration: const BoxDecoration(
@@ -138,7 +216,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                       enabled: !isSending,
                       style: GoogleFonts.poppins(color: AppColors.textPrimary),
                       decoration: InputDecoration(
-                        hintText: AppLocalizations.of(context).typeAMessage,
+                        hintText: l10n.typeAMessage,
                         hintStyle: GoogleFonts.poppins(color: AppColors.textHint),
                         filled: true,
                         fillColor: AppColors.background,

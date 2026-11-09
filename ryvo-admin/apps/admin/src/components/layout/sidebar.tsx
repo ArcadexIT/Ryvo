@@ -13,7 +13,6 @@ import { hasPermission } from '@/lib/permissions';
 import { ADMIN_ROLE_LABELS } from '@/lib/permissions';
 import { Avatar } from '@/components/ui/avatar';
 import { Drawer } from '@/components/ui/drawer';
-import { useTheme } from '@/hooks/use-theme';
 import {
   Tooltip,
   TooltipContent,
@@ -23,7 +22,7 @@ import {
 import { apiFetch, buildQuery } from '@/lib/api';
 import { cn } from '@/lib/utils';
 
-function LogoMark({ collapsed, dark }: { collapsed: boolean; dark: boolean }) {
+function LogoMark({ collapsed }: { collapsed: boolean }) {
   if (collapsed) {
     return (
       <Image
@@ -38,16 +37,26 @@ function LogoMark({ collapsed, dark }: { collapsed: boolean; dark: boolean }) {
   }
 
   return (
-    <span className="flex min-w-0 flex-col gap-1 overflow-hidden">
+    <span className="flex min-w-0 items-center gap-2 overflow-hidden">
       <Image
-        src={dark ? '/logo-wordmark-light.png' : '/logo-wordmark.png'}
-        alt="Ryvo"
-        width={1415}
-        height={360}
+        src="/logo-mark.png"
+        alt=""
+        width={1085}
+        height={895}
         priority
-        className="h-7 w-auto"
+        className="h-9 w-9 object-contain"
       />
-      <span className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted">Admin</span>
+      <span className="flex min-w-0 flex-col">
+        <Image
+          src="/logo-wordmark-light.png"
+          alt="Ryvo"
+          width={1415}
+          height={360}
+          priority
+          className="h-[18px] w-[78px] object-cover object-right"
+        />
+        <span className="mt-0.5 text-[9px] font-semibold uppercase tracking-[0.28em] text-nav-muted">Admin</span>
+      </span>
     </span>
   );
 }
@@ -56,7 +65,6 @@ export function Sidebar() {
   const pathname = usePathname();
   const { collapsed, toggleCollapsed, mobileOpen, setMobileOpen } = useSidebar();
   const { user, permissions } = useAuth();
-  const { theme } = useTheme();
   const isMobile = useMediaQuery('(max-width: 1023px)');
 
   const filteredNavigation = navigation
@@ -127,7 +135,7 @@ export function Sidebar() {
     <>
       <div className={cn('flex h-16 items-center', rail ? 'justify-center px-2' : 'px-4')}>
         <Link href="/" aria-label="Ryvo Admin" onClick={() => isMobile && setMobileOpen(false)}>
-          <LogoMark collapsed={rail} dark={theme === 'dark'} />
+          <LogoMark collapsed={rail} />
         </Link>
       </div>
 
@@ -135,7 +143,7 @@ export function Sidebar() {
         {filteredNavigation.map((group, gi) => (
           <div key={group.title || `group-${gi}`} className={cn(gi > 0 && 'mt-5')}>
             {group.title && !rail && (
-              <p className="mb-1 px-3 text-[11px] font-semibold uppercase tracking-[0.14em] text-muted">
+              <p className="mb-1 px-3 text-[11px] font-semibold uppercase tracking-[0.14em] text-nav-muted">
                 {group.title}
               </p>
             )}
@@ -157,12 +165,12 @@ export function Sidebar() {
                     className={cn(
                       'relative flex h-10 items-center gap-3 rounded-full px-3 text-sm transition-colors duration-150',
                       active
-                        ? 'bg-primary font-medium text-primary-fg'
-                        : 'text-muted hover:bg-input hover:text-primary',
+                        ? 'nav-item-active font-semibold'
+                        : 'text-nav-icon hover:bg-white/10 hover:text-white',
                       rail && 'justify-center px-2',
                     )}
                   >
-                    <Icon className="size-4 shrink-0" strokeWidth={1.75} />
+                    <Icon className="size-[18px] shrink-0" strokeWidth={1.75} />
                     {!rail && (
                       <>
                         <span className="flex-1 truncate">{item.label}</span>
@@ -170,7 +178,7 @@ export function Sidebar() {
                           <span
                             className={cn(
                               'num grid h-5 min-w-5 place-items-center rounded-full px-1.5 text-[11px] font-medium',
-                              active ? 'bg-primary-fg/15 text-primary-fg' : 'bg-input text-primary',
+                              active ? 'bg-black/10 text-current' : 'bg-white/10 text-nav-fg',
                             )}
                           >
                             {badge > 99 ? '99+' : badge}
@@ -204,14 +212,17 @@ export function Sidebar() {
         ))}
       </nav>
 
-      <div className={cn('border-t border-hairline p-3', rail && 'px-2')}>
+      <div className={cn('border-t border-white/10 p-3', rail && 'px-2')}>
         <div className={cn('flex items-center gap-2', rail && 'flex-col')}>
           <div className={cn('flex min-w-0 flex-1 items-center gap-2', rail && 'justify-center')}>
-            <Avatar name={displayName} size="sm" />
+            <span className="relative">
+              <Avatar name={displayName} size="sm" className="nav-avatar h-8 w-8" />
+              <span className="absolute -bottom-0.5 -right-0.5 size-2.5 rounded-full border-2 border-nav bg-nav-active" />
+            </span>
             {!rail && (
               <div className="min-w-0">
-                <p className="truncate text-sm font-medium text-primary">{displayName}</p>
-                <p className="truncate text-xs text-muted">{displayRole}</p>
+                <p className="truncate text-sm font-medium text-nav-fg">{displayName}</p>
+                <p className="truncate text-xs text-nav-muted">{displayRole}</p>
               </div>
             )}
           </div>
@@ -220,7 +231,7 @@ export function Sidebar() {
               type="button"
               onClick={toggleCollapsed}
               aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-              className="grid size-8 place-items-center rounded-md text-muted transition-colors duration-150 hover:bg-input hover:text-primary"
+              className="grid size-8 place-items-center rounded-md text-nav-muted transition-colors duration-150 hover:bg-white/10 hover:text-white"
             >
               <PanelLeft className={cn('size-4', collapsed && 'rotate-180')} strokeWidth={1.75} />
             </button>
@@ -239,7 +250,7 @@ export function Sidebar() {
           title="Menu"
           side="left"
           hideHeader
-          className="max-w-[280px]"
+          className="nav-surface max-w-[280px] border-0 bg-nav text-nav-fg"
         >
           <div className="flex h-full flex-col">{sidebarContent}</div>
         </Drawer>
@@ -252,7 +263,7 @@ export function Sidebar() {
     <TooltipProvider delayDuration={0}>
       <aside
         className={cn(
-          'hidden h-full shrink-0 flex-col overflow-hidden bg-canvas transition-[width] duration-200 ease-out lg:flex',
+          'nav-surface hidden h-full shrink-0 flex-col overflow-hidden bg-nav text-nav-fg transition-[width] duration-200 ease-out lg:flex',
           collapsed ? 'w-sidebar-collapsed' : 'w-sidebar',
         )}
       >

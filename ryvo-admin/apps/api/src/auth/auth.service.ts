@@ -16,6 +16,13 @@ import { SettingsService } from '../settings/settings.service';
 /** Fixed code for the driver app so registration and password reset work without SMS. */
 const DEMO_DRIVER_OTP = '123456';
 
+/**
+ * A refresh that already rotated can be presented again for this long.
+ * The previous response is sometimes lost (restart, overlapping calls), and
+ * rejecting it signed the rider out.
+ */
+const REFRESH_REUSE_MS = 60_000;
+
 @Injectable()
 export class AuthService {
   constructor(
@@ -259,32 +266,51 @@ export class AuthService {
   }
 
   async refresh(refreshToken: string) {
+    const payload = this.readRefreshPayload(refreshToken);
+    const tokenHash = hashToken(refreshToken);
+    const now = new Date();
+    const stored = await this.prisma.refreshToken.findFirst({
+      where: { tokenHash, userId: payload.sub },
+    });
+    if (!stored || stored.expiresAt <= now) {
+      throw new UnauthorizedException('Invalid refresh token');
+    }
+    const revokedAt = stored.revokedAt?.getTime();
+    if (revokedAt != null && now.getTime() - revokedAt > REFRESH_REUSE_MS) {
+      throw new UnauthorizedException('Invalid refresh token');
+    }
+
+    const user = await this.prisma.user.findUnique({
+      where: { id: payload.sub },
+      include: { adminUser: true, customer: true, provider: true },
+    });
+    if (!user) throw new UnauthorizedException('Invalid refresh token');
+    if (payload.role === UserRole.CUSTOMER && !user.phoneVerifiedAt) {
+      throw new UnauthorizedException('Verify your phone number to finish registration');
+    }
+
+    if (stored.revokedAt == null) {
+      await this.prisma.refreshToken.update({
+        where: { id: stored.id },
+        data: { revokedAt: now },
+      });
+    }
+    return this.issueTokens(user.id, this.resolveTokenRole(payload.role, user));
+  }
+
+  private readRefreshPayload(refreshToken: string) {
     try {
       const payload = this.jwt.verify(refreshToken, { secret: this.refreshSecret }) as {
-        sub: string;
-        type: string;
+        sub?: string;
+        type?: string;
         role?: string;
       };
-      if (payload.type !== 'refresh') throw new UnauthorizedException();
-
-      const tokenHash = hashToken(refreshToken);
-      const stored = await this.prisma.refreshToken.findFirst({
-        where: { tokenHash, userId: payload.sub, revokedAt: null, expiresAt: { gt: new Date() } },
-      });
-      if (!stored) throw new UnauthorizedException('Invalid refresh token');
-
-      const user = await this.prisma.user.findUnique({
-        where: { id: payload.sub },
-        include: { adminUser: true, customer: true, provider: true },
-      });
-      if (!user) throw new UnauthorizedException();
-      if (payload.role === UserRole.CUSTOMER && !user.phoneVerifiedAt) {
-        throw new UnauthorizedException('Verify your phone number to finish registration');
+      if (payload.type !== 'refresh' || !payload.sub) {
+        throw new UnauthorizedException('Invalid refresh token');
       }
-
-      await this.prisma.refreshToken.update({ where: { id: stored.id }, data: { revokedAt: new Date() } });
-      return this.issueTokens(user.id, this.resolveTokenRole(payload.role, user));
-    } catch {
+      return payload as { sub: string; type: string; role?: string };
+    } catch (err) {
+      if (err instanceof UnauthorizedException) throw err;
       throw new UnauthorizedException('Invalid refresh token');
     }
   }

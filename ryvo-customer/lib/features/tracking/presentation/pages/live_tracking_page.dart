@@ -30,17 +30,19 @@ class LiveTrackingPage extends ConsumerStatefulWidget {
 }
 
 class _LiveTrackingPageState extends ConsumerState<LiveTrackingPage> {
-  static const double _snapPeek = 0.35;
-  static const double _snapMax = 0.85;
-  static const List<double> _snaps = [_snapPeek, _snapMax];
-
-  /// Handle and the gaps around it. The collapsed HUD fills whatever is left
-  /// of the peek height so trip details stay below the fold.
-  static const double _sheetChrome = 20;
   static const Duration _socketStaleAfter = Duration(seconds: 12);
 
   final DrivingRouteService _routes = DrivingRouteService();
-  final ValueNotifier<double> _sheetExtent = ValueNotifier<double>(_snapPeek);
+  final DraggableScrollableController _sheetController =
+      DraggableScrollableController();
+  final ValueNotifier<double> _sheetExtent = ValueNotifier<double>(0.52);
+
+  /// Resting height of the card, as a fraction of the screen. Updated once
+  /// the trip details have been laid out so the sheet does not open into
+  /// empty space.
+  double _fitExtent = 0.52;
+  List<double>? _snapCache;
+  double? _snapCacheExtent;
   StreamSubscription<JobLocation>? _locSub;
   StreamSubscription<Map<String, dynamic>>? _statusSub;
   Timer? _pollTimer;
@@ -230,12 +232,59 @@ class _LiveTrackingPageState extends ConsumerState<LiveTrackingPage> {
   void didChangeDependencies() {
     super.didChangeDependencies();
     _container ??= ProviderScope.containerOf(context, listen: false);
-    final bottom = MediaQuery.sizeOf(context).height * _snapPeek;
+    _syncMapPadding();
+  }
+
+  /// How far the card can collapse while the map stays usable. When the
+  /// content is already short, the card has a single resting size.
+  double get _peekExtent {
+    final peek = _fitExtent - 0.18;
+    if (peek < 0.30) return _fitExtent;
+    return peek;
+  }
+
+  List<double> get _sheetSnaps {
+    final cached = _snapCache;
+    if (cached != null && _snapCacheExtent == _fitExtent) return cached;
+    final peek = _peekExtent;
+    final snaps = (_fitExtent - peek).abs() < 0.04
+        ? <double>[_fitExtent]
+        : <double>[peek, _fitExtent];
+    _snapCache = snaps;
+    _snapCacheExtent = _fitExtent;
+    return snaps;
+  }
+
+  void _syncMapPadding() {
+    final bottom = MediaQuery.sizeOf(context).height * _fitExtent;
     final next = EdgeInsets.only(top: 88, bottom: bottom);
     final padding = _mapPadding;
     if (padding == null) {
       _mapPadding = ValueNotifier(next);
+    } else if (padding.value != next) {
+      padding.value = next;
     }
+  }
+
+  void _onContentHeight(double height) {
+    if (!mounted) return;
+    final screen = MediaQuery.sizeOf(context).height;
+    if (screen <= 0) return;
+    final inset = MediaQuery.paddingOf(context).bottom;
+    final fit = ((height + inset) / screen).clamp(0.40, 0.64);
+    if ((fit - _fitExtent).abs() < 0.008) return;
+    final previous = _fitExtent;
+    _fitExtent = fit;
+    _syncMapPadding();
+    setState(() {});
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_sheetController.isAttached) return;
+      final size = _sheetController.size;
+      final restingOpen = (size - previous).abs() < 0.03 || size > _fitExtent;
+      if (restingOpen && (size - _fitExtent).abs() > 0.012) {
+        _sheetController.jumpTo(_fitExtent);
+      }
+    });
   }
 
   @override
@@ -245,6 +294,7 @@ class _LiveTrackingPageState extends ConsumerState<LiveTrackingPage> {
     _statusSub?.cancel();
     _pollTimer?.cancel();
     _mapPadding?.dispose();
+    _sheetController.dispose();
     _sheetExtent.dispose();
     _releaseSocketRoom();
     super.dispose();
@@ -389,8 +439,9 @@ class _LiveTrackingPageState extends ConsumerState<LiveTrackingPage> {
   int _nearestSnap(double extent) {
     var best = 0;
     var distance = double.infinity;
-    for (var i = 0; i < _snaps.length; i++) {
-      final gap = (extent - _snaps[i]).abs();
+    final snaps = _sheetSnaps;
+    for (var i = 0; i < snaps.length; i++) {
+      final gap = (extent - snaps[i]).abs();
       if (gap < distance) {
         distance = gap;
         best = i;
@@ -459,16 +510,9 @@ class _LiveTrackingPageState extends ConsumerState<LiveTrackingPage> {
     final pickup = job?.pickupAddress.trim() ?? '';
     final dropoff = job?.dropoffAddress?.trim() ?? '';
     final otp = job?.jobType == 'parcel' ? (job?.recipientOtp ?? '') : '';
-    final primaryMinHeight = math.max(
-      0.0,
-      MediaQuery.sizeOf(context).height * _snapPeek -
-          _sheetChrome -
-          MediaQuery.paddingOf(context).bottom,
-    );
 
     final sheet = _EnRouteBody(
       etaHeadline: etaHeadline,
-      primaryMinHeight: primaryMinHeight,
       name: providerName,
       avatarUrl: provider?.avatarUrl,
       ratingLabel:
@@ -511,11 +555,12 @@ class _LiveTrackingPageState extends ConsumerState<LiveTrackingPage> {
             child: NotificationListener<DraggableScrollableNotification>(
               onNotification: _onSheet,
               child: DraggableScrollableSheet(
-                initialChildSize: _snapPeek,
-                minChildSize: _snapPeek,
-                maxChildSize: _snapMax,
-                snap: true,
-                snapSizes: _snaps,
+                controller: _sheetController,
+                initialChildSize: _fitExtent,
+                minChildSize: _peekExtent,
+                maxChildSize: _fitExtent,
+                snap: _sheetSnaps.length > 1,
+                snapSizes: _sheetSnaps.length > 1 ? _sheetSnaps : null,
                 builder: (context, controller) {
                   return DecoratedBox(
                     decoration: BoxDecoration(
@@ -536,19 +581,26 @@ class _LiveTrackingPageState extends ConsumerState<LiveTrackingPage> {
                         top: Radius.circular(20),
                       ),
                       clipBehavior: Clip.antiAlias,
-                      child: SafeArea(
-                        top: false,
-                        child: ListView(
-                          controller: controller,
-                          primary: false,
-                          padding: EdgeInsets.zero,
-                          children: [
-                            const SizedBox(height: 8),
-                            const _SheetHandle(),
-                            const SizedBox(height: 8),
-                            sheet,
-                          ],
+                      child: ListView(
+                        controller: controller,
+                        primary: false,
+                        padding: EdgeInsets.only(
+                          bottom: MediaQuery.paddingOf(context).bottom,
                         ),
+                        children: [
+                          _HeightReporter(
+                            onHeight: _onContentHeight,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                const SizedBox(height: 6),
+                                const _SheetHandle(),
+                                const SizedBox(height: 8),
+                                sheet,
+                              ],
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   );
@@ -649,7 +701,6 @@ class _SheetHandle extends StatelessWidget {
 class _EnRouteBody extends StatelessWidget {
   const _EnRouteBody({
     required this.etaHeadline,
-    required this.primaryMinHeight,
     required this.name,
     required this.avatarUrl,
     required this.ratingLabel,
@@ -672,7 +723,6 @@ class _EnRouteBody extends StatelessWidget {
   });
 
   final String etaHeadline;
-  final double primaryMinHeight;
   final String name;
   final String? avatarUrl;
   final String ratingLabel;
@@ -696,98 +746,83 @@ class _EnRouteBody extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final showRoute = pickup.isNotEmpty || dropoff.isNotEmpty;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        ConstrainedBox(
-          constraints: BoxConstraints(minHeight: primaryMinHeight),
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(20, 4, 20, 8),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Text(
-                  etaHeadline,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: RyvoTypography.style(
-                    fontSize: 32,
-                    fontWeight: FontWeight.w800,
-                    color: AppColors.textPrimary,
-                    letterSpacing: -0.8,
-                    height: 1.05,
-                    tabular: true,
-                  ),
-                ),
-                const SizedBox(height: 16),
-                _DriverRow(
-                  name: name,
-                  avatarUrl: avatarUrl,
-                  ratingLabel: ratingLabel,
-                  vehicleLine: vehicleLine,
-                  plate: plate,
-                ),
-                const SizedBox(height: 16),
-                _ActionBar(
-                  messageLabel: messageLabel,
-                  callLabel: callLabel,
-                  jobId: jobId,
-                  onChat: onChat,
-                  onCall: onCall,
-                ),
-              ],
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 2, 20, 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            etaHeadline,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: RyvoTypography.style(
+              fontSize: 22,
+              fontWeight: FontWeight.w700,
+              color: AppColors.textPrimary,
+              letterSpacing: -0.6,
+              height: 1.15,
+              tabular: true,
             ),
           ),
-        ),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              if (showRoute) ...[
-                _RouteTimeline(pickup: pickup, dropoff: dropoff),
-                const SizedBox(height: 16),
-              ],
-              _PaymentTile(distance: distance, fare: fare),
-              if (otp.isNotEmpty) ...[
-                const SizedBox(height: 16),
-                Text(
-                  'Recipient OTP',
-                  style: RyvoTypography.style(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.textSecondary,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  otp,
-                  style: RyvoTypography.price(
-                    fontSize: 20,
-                    color: AppColors.textPrimary,
-                  ),
-                ),
-              ],
-              if (showOnTrip) ...[
-                const SizedBox(height: 12),
-                TextButton(
-                  onPressed: onTrip,
-                  child: Text(
-                    'On trip',
-                    style: RyvoTypography.style(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.textPrimary,
-                    ),
-                  ),
-                ),
-              ],
-              const SizedBox(height: 16),
-              _CancelTripButton(label: cancelLabel, onTap: onCancel),
-            ],
+          const SizedBox(height: 12),
+          _DriverRow(
+            name: name,
+            avatarUrl: avatarUrl,
+            ratingLabel: ratingLabel,
+            vehicleLine: vehicleLine,
+            plate: plate,
           ),
-        ),
-      ],
+          const SizedBox(height: 12),
+          _ActionBar(
+            messageLabel: messageLabel,
+            callLabel: callLabel,
+            jobId: jobId,
+            onChat: onChat,
+            onCall: onCall,
+          ),
+          if (showRoute) ...[
+            const SizedBox(height: 14),
+            _RouteTimeline(pickup: pickup, dropoff: dropoff),
+          ],
+          const SizedBox(height: 12),
+          _PaymentTile(distance: distance, fare: fare),
+          if (otp.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            Text(
+              'Recipient OTP',
+              style: RyvoTypography.style(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: AppColors.textSecondary,
+              ),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              otp,
+              style: RyvoTypography.price(
+                fontSize: 18,
+                color: AppColors.textPrimary,
+              ),
+            ),
+          ],
+          if (showOnTrip) ...[
+            const SizedBox(height: 8),
+            TextButton(
+              onPressed: onTrip,
+              child: Text(
+                'On trip',
+                style: RyvoTypography.style(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.textPrimary,
+                ),
+              ),
+            ),
+          ],
+          const SizedBox(height: 12),
+          _CancelTripButton(label: cancelLabel, onTap: onCancel),
+        ],
+      ),
     );
   }
 }
@@ -827,7 +862,7 @@ class _DriverRow extends StatelessWidget {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: RyvoTypography.style(
-                        fontSize: 16,
+                        fontSize: 15,
                         fontWeight: FontWeight.w700,
                         color: AppColors.textPrimary,
                         letterSpacing: -0.4,
@@ -876,26 +911,26 @@ class _DriverAvatar extends StatelessWidget {
     final initials = Text(
       _initials(name),
       style: RyvoTypography.heading(
-        fontSize: 18,
+        fontSize: 14,
         color: AppColors.white,
         letterSpacing: -0.4,
       ),
     );
     return Container(
-      width: 64,
-      height: 64,
+      width: 48,
+      height: 48,
       alignment: Alignment.center,
       clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
         color: AppColors.obsidian,
-        borderRadius: BorderRadius.circular(32),
+        borderRadius: BorderRadius.circular(24),
       ),
       child: photo.isEmpty
           ? initials
           : Image.network(
               photo,
-              width: 64,
-              height: 64,
+              width: 48,
+              height: 48,
               fit: BoxFit.cover,
               errorBuilder: (_, __, ___) => initials,
             ),
@@ -1013,28 +1048,28 @@ class _MessagePill extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: AppColors.primary,
+      color: AppColors.cta,
       borderRadius: BorderRadius.circular(999),
       child: InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.circular(999),
         child: SizedBox(
-          height: 48,
+          height: 44,
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Icon(
+              Icon(
                 Icons.chat_bubble_rounded,
-                size: 18,
-                color: AppColors.white,
+                size: 16,
+                color: AppColors.onCta,
               ),
               const SizedBox(width: 8),
               Text(
                 label,
                 style: RyvoTypography.style(
-                  fontSize: 15,
+                  fontSize: 14,
                   fontWeight: FontWeight.w700,
-                  color: AppColors.white,
+                  color: AppColors.onCta,
                   letterSpacing: -0.3,
                 ),
               ),
@@ -1063,11 +1098,11 @@ class _CallPill extends StatelessWidget {
           onTap: onTap,
           borderRadius: BorderRadius.circular(999),
           child: SizedBox(
-            height: 48,
-            width: 64,
+            height: 44,
+            width: 44,
             child: Icon(
               Icons.phone_rounded,
-              size: 20,
+              size: 18,
               color: AppColors.textPrimary,
             ),
           ),
@@ -1091,7 +1126,7 @@ class _PaymentTile extends StatelessWidget {
         borderRadius: BorderRadius.circular(16),
       ),
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
         child: Row(
           children: [
             Icon(
@@ -1107,7 +1142,7 @@ class _PaymentTile extends StatelessWidget {
                   Text(
                     'Payment',
                     style: RyvoTypography.style(
-                      fontSize: 15,
+                      fontSize: 14,
                       fontWeight: FontWeight.w600,
                       color: AppColors.textPrimary,
                       letterSpacing: -0.2,
@@ -1127,7 +1162,7 @@ class _PaymentTile extends StatelessWidget {
             Text(
               fare,
               style: RyvoTypography.price(
-                fontSize: 16,
+                fontSize: 15,
                 color: AppColors.textPrimary,
               ),
             ),
@@ -1153,13 +1188,13 @@ class _CancelTripButton extends StatelessWidget {
         onTap: onTap,
         borderRadius: BorderRadius.circular(14),
         child: SizedBox(
-          height: 48,
+          height: 44,
           width: double.infinity,
           child: Center(
             child: Text(
               label,
               style: RyvoTypography.style(
-                fontSize: 16,
+                fontSize: 15,
                 fontWeight: FontWeight.w700,
                 color: AppColors.dangerText,
                 letterSpacing: -0.2,
@@ -1254,10 +1289,10 @@ class _RouteStop extends StatelessWidget {
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
               style: RyvoTypography.style(
-                fontSize: 14,
+                fontSize: 13,
                 fontWeight: FontWeight.w600,
                 color: AppColors.textPrimary,
-                height: 1.3,
+                height: 1.25,
                 letterSpacing: -0.2,
               ),
             ),
@@ -1265,6 +1300,35 @@ class _RouteStop extends StatelessWidget {
         ),
       ],
     );
+  }
+}
+
+/// Reports the laid-out height of [child] after each frame where it changes.
+class _HeightReporter extends StatefulWidget {
+  const _HeightReporter({required this.onHeight, required this.child});
+
+  final ValueChanged<double> onHeight;
+  final Widget child;
+
+  @override
+  State<_HeightReporter> createState() => _HeightReporterState();
+}
+
+class _HeightReporterState extends State<_HeightReporter> {
+  final GlobalKey _key = GlobalKey();
+  double? _last;
+
+  @override
+  Widget build(BuildContext context) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final box = _key.currentContext?.findRenderObject() as RenderBox?;
+      if (!mounted || box == null || !box.hasSize) return;
+      final height = box.size.height;
+      if (_last != null && (height - _last!).abs() < 1) return;
+      _last = height;
+      widget.onHeight(height);
+    });
+    return KeyedSubtree(key: _key, child: widget.child);
   }
 }
 

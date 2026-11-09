@@ -23,6 +23,36 @@ function calcChangePercent(current: number, previous: number): number {
   return Math.round(((current - previous) / previous) * 100);
 }
 
+type EarningsListQuery = {
+  page?: number;
+  limit?: number;
+  providerId?: string;
+  status?: string;
+  search?: string;
+  from?: string;
+  to?: string;
+  sortBy?: string;
+  sortOrder?: 'asc' | 'desc';
+};
+
+const earningInclude = {
+  provider: { select: { id: true, user: { select: { fullName: true, phone: true } } } },
+  job: {
+    select: {
+      jobNumber: true,
+      pickupAddress: true,
+      dropoffAddress: true,
+      serviceCategory: { select: { name: true } },
+    },
+  },
+} satisfies Prisma.ProviderEarningInclude;
+
+function parseQueryDate(value?: string) {
+  if (!value) return undefined;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? undefined : date;
+}
+
 @Injectable()
 export class AdminService {
   constructor(
@@ -651,6 +681,7 @@ export class AdminService {
       page,
       limit,
       skip,
+      search: dto.search,
       entityType: dto.entityType,
       action: dto.action,
       from: dto.from,
@@ -988,24 +1019,90 @@ export class AdminService {
     return { items, meta: paginateMeta(page, limit, total) };
   }
 
-  async listEarnings(dto: PaginationDto & { providerId?: string }) {
+  async listEarnings(dto: EarningsListQuery) {
     const { page, limit, skip } = parsePagination(dto);
-    const where: Prisma.ProviderEarningWhereInput = dto.providerId ? { providerId: dto.providerId } : {};
+    const where = this.earningWhere(dto, true);
+    const sortField = ['createdAt', 'grossAmount', 'platformFee', 'netAmount'].includes(dto.sortBy ?? '')
+      ? dto.sortBy!
+      : 'createdAt';
 
     const [items, total] = await Promise.all([
       this.prisma.providerEarning.findMany({
         where,
         skip,
         take: limit,
-        orderBy: { createdAt: 'desc' },
-        include: {
-          provider: { include: { user: { select: { fullName: true } } } },
-          job: { select: { jobNumber: true } },
-        },
+        orderBy: { [sortField]: dto.sortOrder === 'asc' ? 'asc' : 'desc' },
+        include: earningInclude,
       }),
       this.prisma.providerEarning.count({ where }),
     ]);
     return { items, meta: paginateMeta(page, limit, total) };
+  }
+
+  async getEarningsSummary(dto: EarningsListQuery) {
+    const where = this.earningWhere(dto, false);
+    const [totals, groups] = await Promise.all([
+      this.prisma.providerEarning.aggregate({
+        where,
+        _count: { _all: true },
+        _sum: { grossAmount: true, platformFee: true, netAmount: true },
+      }),
+      this.prisma.providerEarning.groupBy({
+        by: ['payoutStatus'],
+        where,
+        _count: { _all: true },
+        _sum: { grossAmount: true, platformFee: true, netAmount: true },
+      }),
+    ]);
+
+    const empty = () => ({ count: 0, gross: 0, platformFee: 0, net: 0 });
+    const byStatus = {
+      pending: empty(),
+      processing: empty(),
+      paid: empty(),
+      rejected: empty(),
+    };
+
+    for (const group of groups) {
+      const bucket = byStatus[group.payoutStatus];
+      if (!bucket) continue;
+      bucket.count = group._count._all;
+      bucket.gross = Number(group._sum.grossAmount ?? 0);
+      bucket.platformFee = Number(group._sum.platformFee ?? 0);
+      bucket.net = Number(group._sum.netAmount ?? 0);
+    }
+
+    return {
+      all: {
+        count: totals._count._all,
+        gross: Number(totals._sum.grossAmount ?? 0),
+        platformFee: Number(totals._sum.platformFee ?? 0),
+        net: Number(totals._sum.netAmount ?? 0),
+      },
+      ...byStatus,
+    };
+  }
+
+  private earningWhere(dto: EarningsListQuery, includeStatus: boolean): Prisma.ProviderEarningWhereInput {
+    const where: Prisma.ProviderEarningWhereInput = {};
+    if (dto.providerId && dto.providerId !== 'all') where.providerId = dto.providerId;
+    if (includeStatus && dto.status && dto.status !== 'all') {
+      where.payoutStatus = dto.status as Prisma.EnumPayoutStatusFilter['equals'];
+    }
+    const search = dto.search?.trim();
+    if (search) {
+      where.OR = [
+        { provider: { user: { fullName: { contains: search, mode: 'insensitive' } } } },
+        { provider: { user: { phone: { contains: search } } } },
+        { job: { jobNumber: { contains: search, mode: 'insensitive' } } },
+        { job: { pickupAddress: { contains: search, mode: 'insensitive' } } },
+        { job: { dropoffAddress: { contains: search, mode: 'insensitive' } } },
+      ];
+    }
+    const from = parseQueryDate(dto.from);
+    const to = parseQueryDate(dto.to);
+    if (from || to) where.createdAt = { gte: from, lte: to };
+    return where;
   }
 
   async listPayouts(dto: PaginationDto & { providerId?: string; status?: string }) {
@@ -1141,11 +1238,11 @@ export class AdminService {
     return result;
   }
 
-  exportFinanceCsv(type: 'payments' | 'earnings' | 'payouts') {
-    return this.exportFinanceData(type);
+  exportFinanceCsv(type: 'payments' | 'earnings' | 'payouts', filters?: EarningsListQuery) {
+    return this.exportFinanceData(type, filters);
   }
 
-  private async exportFinanceData(type: 'payments' | 'earnings' | 'payouts') {
+  private async exportFinanceData(type: 'payments' | 'earnings' | 'payouts', filters?: EarningsListQuery) {
     const escape = (v: string | number | null | undefined) => {
       const s = String(v ?? '');
       return s.includes(',') || s.includes('"') ? `"${s.replace(/"/g, '""')}"` : s;
@@ -1172,21 +1269,24 @@ export class AdminService {
       ]);
     } else if (type === 'earnings') {
       const items = await this.prisma.providerEarning.findMany({
+        where: this.earningWhere(filters ?? {}, true),
         take: 5000,
         orderBy: { createdAt: 'desc' },
-        include: {
-          provider: { include: { user: { select: { fullName: true } } } },
-          job: { select: { jobNumber: true } },
-        },
+        include: earningInclude,
       });
-      headers = ['ID', 'Driver', 'Job', 'Gross', 'Platform Fee', 'Net', 'Created At'];
+      headers = ['ID', 'Driver', 'Phone', 'Job', 'Service', 'Pickup', 'Dropoff', 'Gross', 'Platform Fee', 'Net', 'Payout Status', 'Created At'];
       rows = items.map((e) => [
         e.id,
         e.provider.user.fullName,
+        e.provider.user.phone ?? '',
         e.job?.jobNumber ?? '',
+        e.job?.serviceCategory?.name ?? '',
+        e.job?.pickupAddress ?? '',
+        e.job?.dropoffAddress ?? '',
         String(e.grossAmount),
         String(e.platformFee),
         String(e.netAmount),
+        e.payoutStatus,
         e.createdAt.toISOString(),
       ]);
     } else {
@@ -1344,6 +1444,7 @@ export class AdminService {
         page: 1,
         limit,
         skip: 0,
+        search: filters.search as string | undefined,
         entityType: filters.entityType as string | undefined,
         action: filters.action as string | undefined,
         from: filters.from as string | undefined,

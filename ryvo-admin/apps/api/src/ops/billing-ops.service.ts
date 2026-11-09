@@ -128,11 +128,8 @@ export class BillingOpsService {
   async listAll() {
     return this.prisma.invoice.findMany({
       orderBy: { issuedAt: 'desc' },
-      take: 200,
-      include: {
-        customer: { include: { user: { select: { fullName: true, email: true, phone: true } } } },
-        job: { select: { jobNumber: true } },
-      },
+      take: 500,
+      include: customerInvoiceInclude,
     });
   }
 

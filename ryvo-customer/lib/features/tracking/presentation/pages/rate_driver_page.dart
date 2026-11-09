@@ -11,6 +11,7 @@ import '../../../../core/job/active_job_session.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../data/models/models.dart';
+import '../../../payment/presentation/customer_checkout.dart';
 import '../../../../shared/providers/app_providers.dart';
 import '../../../../shared/widgets/widgets.dart';
 
@@ -129,10 +130,8 @@ class _RateDriverPageState extends ConsumerState<RateDriverPage>
   String? _reviewComment() {
     final note = _commentController.text.trim();
     final tags = _compliments.join(', ');
-    final tip = _tip == null ? '' : 'Tip ${formatMoney(_tip!)}';
     final parts = [
       if (tags.isNotEmpty) tags,
-      if (tip.isNotEmpty) tip,
       if (note.isNotEmpty) note,
     ];
     if (parts.isEmpty) return null;
@@ -140,21 +139,34 @@ class _RateDriverPageState extends ConsumerState<RateDriverPage>
   }
 
   Future<void> _finish(String? jobId) async {
-    if (_rating > 0 && jobId != null && !_submitting) {
-      setState(() => _submitting = true);
-      try {
+    if (_submitting) return;
+    final tip = _tip;
+    setState(() => _submitting = true);
+    try {
+      if (tip != null && tip > 0) {
+        if (jobId == null) {
+          showApiError(context, 'This trip can no longer take a tip.');
+          return;
+        }
+        final paid = await CustomerCheckout(ref).payTip(
+          context: context,
+          jobId: jobId,
+          amount: tip,
+        );
+        if (!paid || !mounted) return;
+      }
+      if (_rating > 0 && jobId != null) {
         await ref.read(jobRepositoryProvider).rateJob(
               jobId,
               _rating,
               comment: _reviewComment(),
             );
-      } catch (e) {
-        if (mounted) {
-          setState(() => _submitting = false);
-          showApiError(context, e);
-          return;
-        }
       }
+    } catch (e) {
+      if (mounted) showApiError(context, e);
+      return;
+    } finally {
+      if (mounted) setState(() => _submitting = false);
     }
     if (!mounted) return;
     final container = ProviderScope.containerOf(context, listen: false);
@@ -251,6 +263,7 @@ class _RateDriverPageState extends ConsumerState<RateDriverPage>
                           tip: _tip,
                           isPreset: _tip == null ? false : _isPreset(_tip!),
                           onPreset: _selectTip,
+                          onNone: () => _selectTip(null),
                           onCustom: _onCustomTip,
                         ),
                         const SizedBox(height: 20),
@@ -276,7 +289,11 @@ class _RateDriverPageState extends ConsumerState<RateDriverPage>
                 child: Padding(
                   padding: const EdgeInsets.fromLTRB(20, 12, 20, 12),
                   child: RyvoButton(
-                    label: _submitting ? l10n.submitting : 'Done',
+                    label: _submitting
+                        ? l10n.submitting
+                        : _tip == null
+                            ? 'Done'
+                            : 'Pay ${formatMoney(_tip!)}',
                     isLoading: _submitting,
                     onPressed: _submitting ? null : () => _finish(job?.id),
                   ),
@@ -319,8 +336,13 @@ class _CustomTipSheetState extends State<_CustomTipSheet> {
 
   void _save() {
     final value = double.tryParse(_controller.text.trim());
-    if (value == null || value <= 0 || value > 500) return;
-    Navigator.of(context).pop(value);
+    if (value == null || value < 0.5 || value > 500) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Enter a tip from ${formatMoney(0.5)} to ${formatMoney(500)}')),
+      );
+      return;
+    }
+    Navigator.of(context).pop((value * 100).round() / 100);
   }
 
   @override
@@ -579,12 +601,14 @@ class _TipRow extends StatelessWidget {
     required this.tip,
     required this.isPreset,
     required this.onPreset,
+    required this.onNone,
     required this.onCustom,
   });
 
   final double? tip;
   final bool isPreset;
   final ValueChanged<double> onPreset;
+  final VoidCallback onNone;
   final VoidCallback onCustom;
 
   @override
@@ -594,6 +618,11 @@ class _TipRow extends StatelessWidget {
       spacing: 8,
       runSpacing: 8,
       children: [
+        _ChoicePill(
+          label: 'No tip',
+          selected: tip == null,
+          onTap: onNone,
+        ),
         for (final amount in _tipPresets)
           _ChoicePill(
             label: formatMoney(amount),

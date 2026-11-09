@@ -344,28 +344,32 @@ export default function ProvidersPage() {
                   label: 'Total drivers',
                   value: stats?.total ?? 0,
                   icon: Users,
-                  tone: 'bg-accent-soft text-accent',
+                  wash: 'stat-wash-emerald',
+                  ink: 'text-chart-1',
                 },
                 {
                   key: 'approved' as const,
                   label: 'Verified',
                   value: stats?.approved ?? 0,
                   icon: UserCheck,
-                  tone: 'bg-success/10 text-success',
+                  wash: 'stat-wash-sky',
+                  ink: 'text-chart-2',
                 },
                 {
                   key: 'pending' as const,
                   label: 'Pending Review',
                   value: stats?.pending ?? 0,
                   icon: FileCheck,
-                  tone: 'bg-warning/10 text-warning',
+                  wash: 'stat-wash-amber',
+                  ink: 'text-chart-3',
                 },
                 {
                   key: 'online' as const,
                   label: 'Online Now',
                   value: stats?.online ?? 0,
                   icon: Wifi,
-                  tone: 'bg-info/10 text-info',
+                  wash: 'stat-wash-teal',
+                  ink: 'text-chart-teal',
                 },
               ] as const
             ).map((stat) => {
@@ -376,30 +380,24 @@ export default function ProvidersPage() {
                   type="button"
                   onClick={() => applyStatFilter(stat.key)}
                   className={cn(
-                    'rounded-xl border bg-elevated px-4 py-4 text-left shadow-sm transition-all',
-                    active
-                      ? 'border-accent/40 ring-2 ring-accent/15'
-                      : 'border-border hover:border-border-strong hover:shadow-md',
+                    'rounded-[18px] border p-4 text-left transition-colors',
+                    stat.wash,
+                    active ? 'border-primary' : 'border-white/70 hover:border-hairline',
                   )}
                 >
-                  <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    <span className={cn('grid size-10 shrink-0 place-items-center rounded-full bg-white/85', stat.ink)}>
+                      <stat.icon className="size-[18px]" strokeWidth={1.75} />
+                    </span>
                     <div>
-                      <p className="text-xs font-medium text-secondary">{stat.label}</p>
+                      <p className="text-sm text-muted">{stat.label}</p>
                       {statsQuery.isLoading ? (
                         <Skeleton className="mt-2 h-7 w-12" />
                       ) : (
-                        <p className="font-tabular font-display mt-1 text-2xl text-primary">
+                        <p className="num mt-1 text-[26px] font-bold leading-none tracking-tight text-primary">
                           {stat.value}
                         </p>
                       )}
-                    </div>
-                    <div
-                      className={cn(
-                        'flex h-10 w-10 items-center justify-center rounded-lg',
-                        stat.tone,
-                      )}
-                    >
-                      <stat.icon className="h-5 w-5" />
                     </div>
                   </div>
                 </button>
@@ -435,7 +433,7 @@ export default function ProvidersPage() {
           )}
 
           {/* Toolbar + list */}
-          <section className="overflow-hidden rounded-2xl border border-border bg-elevated shadow-sm">
+          <section className="panel-card overflow-hidden">
             <div className="space-y-4 border-b border-border p-4 sm:p-5">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div className="relative min-w-[220px] max-w-md flex-1">

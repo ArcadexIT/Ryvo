@@ -1,7 +1,8 @@
 'use client';
 
-import { Calendar } from 'lucide-react';
+import { ChevronDown } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { cn } from '@/lib/utils';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -51,9 +52,9 @@ export function DateRangePicker({ value, onChange, className }: DateRangePickerP
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="secondary" className={className}>
-          <Calendar strokeWidth={1.75} />
+        <Button variant="outline" className={cn('h-10 rounded-xl bg-sheet px-3 shadow-sm', className)}>
           {current}
+          <ChevronDown className="size-4 text-muted" strokeWidth={1.75} />
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">

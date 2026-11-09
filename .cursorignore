@@ -1,7 +1,3 @@
-# Ignore other apps in monorepo while focusing on customer
-ryvo-admin/**
-# ryvo-driver/**
-# ryvo-customer/**
 
 # Ignore heavy build/generated artifacts
 **/build/**

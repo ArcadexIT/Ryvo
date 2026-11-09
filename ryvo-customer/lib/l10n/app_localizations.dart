@@ -1186,6 +1186,42 @@ abstract class AppLocalizations {
   /// **'Type a message...'**
   String get typeAMessage;
 
+  /// No description provided for @quickReplyImHere.
+  ///
+  /// In en, this message translates to:
+  /// **'I\'m here'**
+  String get quickReplyImHere;
+
+  /// No description provided for @quickReplyWhereAreYou.
+  ///
+  /// In en, this message translates to:
+  /// **'Where are you?'**
+  String get quickReplyWhereAreYou;
+
+  /// No description provided for @quickReplyOnMyWay.
+  ///
+  /// In en, this message translates to:
+  /// **'I\'m on my way'**
+  String get quickReplyOnMyWay;
+
+  /// No description provided for @quickReplyPleaseWait.
+  ///
+  /// In en, this message translates to:
+  /// **'Please wait for me'**
+  String get quickReplyPleaseWait;
+
+  /// No description provided for @quickReplyCantSeeYou.
+  ///
+  /// In en, this message translates to:
+  /// **'I can\'t see you'**
+  String get quickReplyCantSeeYou;
+
+  /// No description provided for @quickReplyOkThanks.
+  ///
+  /// In en, this message translates to:
+  /// **'OK, thanks'**
+  String get quickReplyOkThanks;
+
   /// No description provided for @editVehicle.
   ///
   /// In en, this message translates to:
@@ -2097,6 +2133,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Share trip'**
   String get shareTrip;
+
+  /// No description provided for @headingTo.
+  ///
+  /// In en, this message translates to:
+  /// **'Heading to'**
+  String get headingTo;
 
   /// No description provided for @followMyRyvoTrip.
   ///

@@ -29,7 +29,12 @@ final ukPlacesSearchProvider = Provider<UkPlacesSearch>((ref) {
 });
 
 final apiClientProvider = Provider<ApiClient>((ref) {
-  return ApiClient(tokenStorage: ref.watch(tokenStorageProvider));
+  return ApiClient(
+    tokenStorage: ref.watch(tokenStorageProvider),
+    onSessionExpired: () {
+      ref.read(isAuthenticatedProvider.notifier).state = false;
+    },
+  );
 });
 
 final legalRepositoryProvider = Provider<LegalRepository>((ref) {
@@ -419,11 +424,18 @@ Future<void> bootstrapAuth(WidgetRef ref) async {
     return;
   }
 
-  final refreshed = await auth.refreshAccessToken();
-  if (!refreshed) {
-    await auth.logout();
-    ref.read(isAuthenticatedProvider.notifier).state = false;
-    return;
+  // A still-valid access token must not rotate the refresh token. Restarting
+  // the app used to refresh every time, and a lost response signed the rider out.
+  if (!await auth.accessTokenStillValid()) {
+    final refreshed = await auth.refreshAccessToken();
+    if (!refreshed) {
+      // A rejected refresh token is already cleared. A network failure keeps
+      // the stored session so a slow start does not sign the rider out.
+      if (!await auth.hasSession()) {
+        ref.read(isAuthenticatedProvider.notifier).state = false;
+        return;
+      }
+    }
   }
 
   ref.read(isAuthenticatedProvider.notifier).state = true;

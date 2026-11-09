@@ -9,7 +9,7 @@ export function Card({
   return (
     <div
       className={cn(
-        'rounded-lg border border-hairline bg-card',
+        'panel-card',
         interactive && 'transition-colors duration-150 hover:bg-input',
         className,
       )}

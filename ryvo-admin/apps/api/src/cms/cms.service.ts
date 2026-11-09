@@ -73,6 +73,19 @@ export class CmsService implements OnModuleInit {
     });
   }
 
+  /** Rider help. Driver-only rows stay on the provider FAQ endpoint. */
+  async listCustomerFaqs(category?: string) {
+    return this.prisma.faq.findMany({
+      where: {
+        isActive: true,
+        ...(category
+          ? { category }
+          : { OR: [{ category: null }, { category: { not: 'provider' } }] }),
+      },
+      orderBy: [{ sortOrder: 'asc' }, { createdAt: 'desc' }],
+    });
+  }
+
   async getFaq(id: string) {
     const faq = await this.prisma.faq.findUnique({ where: { id } });
     if (!faq) throw new NotFoundException('FAQ not found');

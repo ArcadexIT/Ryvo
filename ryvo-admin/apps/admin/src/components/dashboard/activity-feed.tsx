@@ -2,9 +2,9 @@
 
 import { useQuery } from '@tanstack/react-query';
 import Link from 'next/link';
+import { Clock, Zap } from 'lucide-react';
 import { apiFetch } from '@/lib/api';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Timeline } from '@/components/ui/timeline';
 
 interface ActivityItem {
   id: string;
@@ -35,10 +35,15 @@ export function ActivityFeed() {
   });
 
   return (
-    <section className="flex h-full flex-col rounded-lg border border-hairline bg-card p-4">
+    <section className="panel-card flex h-full flex-col p-4">
       <div className="mb-3 flex items-center justify-between">
-        <h2 className="text-sm font-semibold text-primary">Recent activity</h2>
-        <Link href="/audit" className="text-xs font-medium text-success hover:underline">
+        <h2 className="inline-flex items-center gap-2 text-sm font-semibold text-primary">
+          <span className="grid size-8 place-items-center rounded-lg bg-chart-3/15 text-chart-3">
+            <Zap className="size-4" strokeWidth={1.75} />
+          </span>
+          Recent activity
+        </h2>
+        <Link href="/audit" className="text-xs font-medium text-chart-1 hover:underline">
           View all
         </Link>
       </div>
@@ -51,13 +56,17 @@ export function ActivityFeed() {
       ) : error ? (
         <p className="text-sm text-danger">Activity is unavailable.</p>
       ) : (
-        <Timeline
-          items={(data ?? []).map((item) => ({
-            id: item.id,
-            title: item.message,
-            meta: timeAgo(item.timestamp),
-          }))}
-        />
+        <ul className="space-y-3">
+          {(data ?? []).map((item) => (
+            <li key={item.id} className="flex items-start gap-3">
+              <Clock className="mt-0.5 size-4 shrink-0 text-muted" strokeWidth={1.75} />
+              <div className="min-w-0">
+                <p className="truncate text-sm text-primary">{item.message}</p>
+                <p className="text-xs text-muted">{timeAgo(item.timestamp)}</p>
+              </div>
+            </li>
+          ))}
+        </ul>
       )}
     </section>
   );

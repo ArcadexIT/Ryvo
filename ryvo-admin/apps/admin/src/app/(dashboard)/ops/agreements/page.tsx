@@ -383,7 +383,7 @@ export default function AgreementsPage() {
                 <div className="mb-3 flex items-center justify-center">
                   <span className="h-1.5 w-16 rounded-full bg-border-strong" />
                 </div>
-                <div className="rounded-2xl border border-border bg-elevated p-4">
+                <div className="panel-card p-4">
                   <h3 className="text-base font-semibold text-primary">{draft?.title || 'Untitled agreement'}</h3>
                   <p className="mt-3 whitespace-pre-wrap text-sm leading-relaxed text-secondary">
                     {draft?.body.trim() || 'Agreement text appears here.'}

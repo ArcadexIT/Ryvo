@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { SettingsModule } from '../settings/settings.module';
 import { CoverageService } from './coverage.service';
+import { RoadEtaService } from './road-eta.service';
 import { TrainingService } from './training.service';
 import { AgreementsService } from './agreements.service';
 import { BillingOpsService } from './billing-ops.service';
@@ -11,7 +12,7 @@ import { OpsController } from './ops.controller';
 @Module({
   imports: [NotificationsModule, SettingsModule],
   controllers: [OpsController],
-  providers: [CoverageService, TrainingService, AgreementsService, BillingOpsService, OpsBootstrap],
-  exports: [CoverageService, TrainingService, AgreementsService, BillingOpsService],
+  providers: [CoverageService, RoadEtaService, TrainingService, AgreementsService, BillingOpsService, OpsBootstrap],
+  exports: [CoverageService, RoadEtaService, TrainingService, AgreementsService, BillingOpsService],
 })
 export class OpsModule {}

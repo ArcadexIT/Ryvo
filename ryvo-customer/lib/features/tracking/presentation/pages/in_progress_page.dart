@@ -47,6 +47,9 @@ class _InProgressPageState extends ConsumerState<InProgressPage> {
   late final TrackingSocket _socket;
   ProviderContainer? _container;
   bool _closed = false;
+  final ValueNotifier<EdgeInsets> _mapPadding =
+      ValueNotifier(const EdgeInsets.only(top: 72, bottom: 340));
+  final GlobalKey _sheetKey = GlobalKey();
   DateTime? _lastSocketEventAt;
   static const Duration _socketStaleAfter = Duration(seconds: 12);
 
@@ -278,9 +281,17 @@ class _InProgressPageState extends ConsumerState<InProgressPage> {
       polylines: tripPolylinesProvider(TripMapScope.progress),
       camera: tripCameraProvider(TripMapScope.progress),
       driver: tripDriverProvider(TripMapScope.progress),
-      padding: const EdgeInsets.only(top: 72, bottom: 280),
-      boundsPadding: 96,
+      paddingListenable: _mapPadding,
+      boundsPadding: 72,
     );
+  }
+
+  void _syncMapPadding() {
+    final box = _sheetKey.currentContext?.findRenderObject() as RenderBox?;
+    if (box == null || !box.hasSize) return;
+    final next = EdgeInsets.only(top: 72, bottom: box.size.height);
+    if ((_mapPadding.value.bottom - next.bottom).abs() < 1) return;
+    _mapPadding.value = next;
   }
 
   static const _preArrivalStatuses = {
@@ -344,6 +355,7 @@ class _InProgressPageState extends ConsumerState<InProgressPage> {
     _pollTimer?.cancel();
     _statusSub?.cancel();
     _locSub?.cancel();
+    _mapPadding.dispose();
     _releaseSocketRoom();
     super.dispose();
   }
@@ -390,13 +402,17 @@ class _InProgressPageState extends ConsumerState<InProgressPage> {
     final rating = job?.provider?.ratingAvg;
     final service = job?.serviceCategory?.name ?? 'Ride';
     final vehicle = job?.vehicle;
-    final dropoffLabel = job?.dropoffAddress?.trim();
-    final street = (dropoffLabel == null || dropoffLabel.isEmpty)
-        ? 'dropoff'
-        : dropoffLabel.split(',').first.trim();
+    final l10n = AppLocalizations.of(context);
+    final dropoffLabel = job?.dropoffAddress?.trim() ?? '';
+    final parts = dropoffLabel.split(',');
+    final street = parts.first.trim();
+    final rest = parts.length > 1 ? parts.sublist(1).join(',').trim() : '';
     final minutes = meta.minutes ?? _routeMinutes;
     final vehicleLine =
         vehicle == null ? service : '${vehicle.make} ${vehicle.model}'.trim();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _syncMapPadding();
+    });
 
     return Scaffold(
       body: Stack(
@@ -426,79 +442,169 @@ class _InProgressPageState extends ConsumerState<InProgressPage> {
             ),
           ),
           Positioned(
-            right: 16,
-            bottom: 280,
-            child: Material(
-              color: AppColors.surface,
-              shape: const CircleBorder(),
-              elevation: 2,
-              child: InkWell(
-                customBorder: const CircleBorder(),
-                onTap: () => _publishCamera(_routePoints),
-                child: const SizedBox(
-                  width: 44,
-                  height: 44,
-                  child: Icon(Icons.center_focus_strong, size: 22),
-                ),
-              ),
-            ),
-          ),
-          Positioned(
             left: 0,
             right: 0,
             bottom: 0,
-            child: DriverTripCard(
-              name: providerName,
-              ratingLabel: rating == null || rating <= 0
-                  ? '—'
-                  : rating.toStringAsFixed(1),
-              plate: vehicle?.plateNumber,
-              vehicleLine: vehicleLine,
-              headline: 'Heading to $street',
-              subtitle: dropoffLabel,
-              onCall: () => dialPhone(context, job?.provider?.phone),
-              onChat: job?.id == null
-                  ? null
-                  : () => context.push('/chat/${job!.id}'),
-              footer: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Text(
-                    formatMoney(job?.displayFare ?? 0),
-                    style: RyvoTypography.price(
-                      fontSize: 22,
-                      color: AppColors.textPrimary,
+            child: Column(
+              key: _sheetKey,
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.only(right: 16, bottom: 12),
+                  child: Material(
+                    color: AppColors.modal,
+                    shape: CircleBorder(
+                      side: BorderSide(color: AppColors.divider),
                     ),
-                  ),
-                  if (job?.id != null) ...[
-                    const SizedBox(height: 12),
-                    Align(
-                      alignment: Alignment.centerLeft,
-                      child: ShareTripButton.action(jobId: job!.id),
-                    ),
-                  ],
-                  if (job?.jobType == 'parcel' &&
-                      (job?.recipientOtp ?? '').isNotEmpty) ...[
-                    const SizedBox(height: 12),
-                    Text(
-                      'Give this OTP to the recipient: ${job!.recipientOtp}',
-                      style: RyvoTypography.style(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.textPrimary,
+                    child: InkWell(
+                      customBorder: const CircleBorder(),
+                      onTap: () => _publishCamera(_routePoints),
+                      child: SizedBox(
+                        width: 44,
+                        height: 44,
+                        child: Icon(
+                          Icons.my_location_rounded,
+                          size: 20,
+                          color: AppColors.textPrimary,
+                        ),
                       ),
                     ),
-                  ],
-                  RyvoButton(
-                    label: AppLocalizations.of(context).cancelJob,
-                    variant: RyvoButtonVariant.ghost,
-                    onPressed: _cancelJob,
                   ),
-                ],
-              ),
+                ),
+                DriverTripCard(
+                  name: providerName,
+                  ratingLabel: rating == null || rating <= 0
+                      ? '—'
+                      : rating.toStringAsFixed(1),
+                  plate: vehicle?.plateNumber,
+                  vehicleLine: vehicleLine,
+                  kicker: l10n.headingTo,
+                  headline: street.isEmpty ? null : street,
+                  subtitle: rest,
+                  share: job?.id == null
+                      ? null
+                      : ShareTripButton.hud(jobId: job!.id),
+                  onCall: () => dialPhone(context, job?.provider?.phone),
+                  onChat: job?.id == null
+                      ? null
+                      : () => context.push('/chat/${job!.id}'),
+                  footer: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      _FareRow(
+                        label: l10n.estimatedFare,
+                        amount: formatMoney(job?.displayFare ?? 0),
+                      ),
+                      if (job?.jobType == 'parcel' &&
+                          (job?.recipientOtp ?? '').isNotEmpty) ...[
+                        const SizedBox(height: 10),
+                        Text(
+                          'Give this OTP to the recipient: ${job!.recipientOtp}',
+                          style: RyvoTypography.style(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: AppColors.textPrimary,
+                          ),
+                        ),
+                      ],
+                      const SizedBox(height: 10),
+                      _CancelTripButton(
+                        label: l10n.cancelJob,
+                        onTap: _cancelJob,
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _FareRow extends StatelessWidget {
+  const _FareRow({required this.label, required this.amount});
+
+  final String label;
+  final String amount;
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        child: Row(
+          children: [
+            Icon(
+              Icons.payments_outlined,
+              size: 18,
+              color: AppColors.textPrimary,
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: RyvoTypography.style(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.textPrimary,
+                  letterSpacing: -0.2,
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Text(
+              amount,
+              style: RyvoTypography.price(
+                fontSize: 18,
+                color: AppColors.textPrimary,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _CancelTripButton extends StatelessWidget {
+  const _CancelTripButton({required this.label, required this.onTap});
+
+  final String label;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: AppColors.dangerSurface,
+      borderRadius: BorderRadius.circular(14),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(14),
+        child: SizedBox(
+          height: 44,
+          width: double.infinity,
+          child: Center(
+            child: Text(
+              label,
+              style: RyvoTypography.style(
+                fontSize: 15,
+                fontWeight: FontWeight.w700,
+                color: AppColors.dangerText,
+                letterSpacing: -0.2,
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }

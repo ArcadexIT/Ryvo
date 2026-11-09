@@ -13,8 +13,10 @@ class UserLocationMarker {
   static const MarkerId id = MarkerId('current_location');
   static const Offset anchor = Offset(0.5, 0.5);
 
+  static const int _revision = 2;
   static BitmapDescriptor? _cache;
   static double? _cachedRatio;
+  static int? _cachedRevision;
 
   static double get _devicePixelRatio {
     final views = ui.PlatformDispatcher.instance.views;
@@ -24,24 +26,33 @@ class UserLocationMarker {
   static Future<BitmapDescriptor> load({double? devicePixelRatio}) async {
     final ratio = devicePixelRatio ?? _devicePixelRatio;
     final cached = _cache;
-    if (cached != null && _cachedRatio == ratio) return cached;
+    if (cached != null &&
+        _cachedRatio == ratio &&
+        _cachedRevision == _revision) {
+      return cached;
+    }
     final icon = await _build(ratio);
     _cache = icon;
     _cachedRatio = ratio;
+    _cachedRevision = _revision;
     return icon;
   }
 
   static Future<BitmapDescriptor> _build(double ratio) async {
-    const size = 16.0;
+    // Halo plus a white ring so the emerald core stays readable on both
+    // the light and carbon basemaps. The geographic point is the center.
+    const size = 40.0;
     final recorder = ui.PictureRecorder();
     final canvas = Canvas(recorder);
     canvas.scale(ratio);
     const center = Offset(size / 2, size / 2);
     final paint = Paint()..isAntiAlias = true;
+    paint.color = AppColors.primary.withValues(alpha: 0.22);
+    canvas.drawCircle(center, 16, paint);
     paint.color = AppColors.white;
-    canvas.drawCircle(center, 7, paint);
+    canvas.drawCircle(center, 8, paint);
     paint.color = AppColors.primary;
-    canvas.drawCircle(center, 4.5, paint);
+    canvas.drawCircle(center, 5.5, paint);
     final picture = recorder.endRecording();
     final image = await picture.toImage(
       (size * ratio).ceil(),

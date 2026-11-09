@@ -7,14 +7,15 @@ import { apiMutate } from '@/lib/api';
 interface ServerExportButtonProps {
   type: 'payments' | 'earnings' | 'payouts';
   disabled?: boolean;
+  params?: Record<string, string | number | boolean | undefined | null>;
 }
 
-export function ServerExportButton({ type, disabled }: ServerExportButtonProps) {
+export function ServerExportButton({ type, disabled, params }: ServerExportButtonProps) {
   async function handleExport() {
     const res = await apiMutate<{ filename: string; content: string }>(
       '/admin/finance/export',
       'POST',
-      { type },
+      { type, ...params },
     );
     if (!res.data?.content) return;
     const blob = new Blob([res.data.content], { type: 'text/csv;charset=utf-8;' });

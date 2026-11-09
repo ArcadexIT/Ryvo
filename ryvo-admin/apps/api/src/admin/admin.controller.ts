@@ -97,6 +97,25 @@ class UpdatePromoCodeDto {
 
 class FinanceExportDto {
   @IsIn(['payments', 'earnings', 'payouts']) type!: 'payments' | 'earnings' | 'payouts';
+  @IsOptional() @IsString() providerId?: string;
+  @IsOptional() @IsIn(['all', 'pending', 'processing', 'paid', 'rejected']) status?: string;
+  @IsOptional() @IsString() search?: string;
+  @IsOptional() @IsString() from?: string;
+  @IsOptional() @IsString() to?: string;
+}
+
+class AuditQueryDto extends PaginationDto {
+  @IsOptional() @IsString() entityType?: string;
+  @IsOptional() @IsString() action?: string;
+  @IsOptional() @IsString() from?: string;
+  @IsOptional() @IsString() to?: string;
+}
+
+class EarningsQueryDto extends PaginationDto {
+  @IsOptional() @IsString() providerId?: string;
+  @IsOptional() @IsIn(['all', 'pending', 'processing', 'paid', 'rejected']) status?: string;
+  @IsOptional() @IsString() from?: string;
+  @IsOptional() @IsString() to?: string;
 }
 
 class ListExportDto {
@@ -255,10 +274,13 @@ export class AdminController {
     return successResponse(result);
   }
 
+  @Get('audit-logs/summary')
+  async auditSummary(@Query() query: AuditQueryDto) {
+    return successResponse(await this.audit.summarize(query));
+  }
+
   @Get('audit-logs')
-  async auditLogs(
-    @Query() query: PaginationDto & { entityType?: string; action?: string; from?: string; to?: string },
-  ) {
+  async auditLogs(@Query() query: AuditQueryDto) {
     const result = await this.admin.listAuditLogs(query);
     return successResponse(result.items, undefined, result.meta);
   }
@@ -389,9 +411,15 @@ export class AdminController {
     return successResponse(result.items, undefined, result.meta);
   }
 
+  @Get('finance/earnings/summary')
+  @AdminRoles('super_admin', 'finance')
+  async earningsSummary(@Query() query: EarningsQueryDto) {
+    return successResponse(await this.admin.getEarningsSummary(query));
+  }
+
   @Get('finance/earnings')
   @AdminRoles('super_admin', 'finance')
-  async earnings(@Query() query: PaginationDto & { providerId?: string }) {
+  async earnings(@Query() query: EarningsQueryDto) {
     const result = await this.admin.listEarnings(query);
     return successResponse(result.items, undefined, result.meta);
   }
@@ -436,7 +464,7 @@ export class AdminController {
   @Post('finance/export')
   @AdminRoles('super_admin', 'finance')
   async exportFinance(@Body() dto: FinanceExportDto) {
-    return successResponse(await this.admin.exportFinanceCsv(dto.type));
+    return successResponse(await this.admin.exportFinanceCsv(dto.type, dto));
   }
 
   @Post('export/list')

@@ -12,11 +12,14 @@ interface LiveMapProps {
   /** Fired when a marker badge is clicked, so the caller can sync selection. */
   onMarkerClick?: (id: string) => void;
   className?: string;
+  /** Hide the built-in zoom control when the page draws its own. */
+  showZoomControl?: boolean;
 }
 
 export interface LiveMapHandle {
   fitAll: () => void;
   focusOn: (id: string) => void;
+  zoomBy: (delta: number) => void;
 }
 
 const DEFAULT_CENTER = { lat: 40.7128, lng: -74.006 };
@@ -79,8 +82,8 @@ function createProviderMarkerClass(googleNs: typeof globalThis.google): Provider
           <div class="marker-arrow pointer-events-none absolute left-1/2 top-1/2 h-4 w-4 opacity-0" style="transition: opacity .2s;">
             <div class="h-full w-full" style="clip-path: polygon(50% 0%, 20% 100%, 80% 100%); background: var(--accent);"></div>
           </div>
-          <div class="marker-badge relative flex h-9 w-9 items-center justify-center rounded-full border-[2.5px] border-sheet bg-success text-xs font-bold text-emphasis-fg transition-transform duration-200 ease-out">
-            <span class="marker-badge-label">${escapeHtml(this.label)}</span>
+          <div class="marker-badge relative flex h-9 w-9 items-center justify-center rounded-full border-[2.5px] border-white bg-success text-xs font-bold text-white shadow-sm transition-transform duration-200 ease-out">
+            ${badgeMarkup(this.label)}
           </div>
         </div>
       `;
@@ -124,8 +127,8 @@ function createProviderMarkerClass(googleNs: typeof globalThis.google): Provider
       this.label = label;
       this.title = title;
       if (this.div) this.div.title = title;
-      const labelEl = this.div?.querySelector('.marker-badge-label');
-      if (labelEl) labelEl.textContent = label;
+      const badge = this.div?.querySelector('.marker-badge');
+      if (badge) badge.innerHTML = badgeMarkup(label);
     }
 
     setHeading(heading?: number) {
@@ -171,12 +174,19 @@ function createProviderMarkerClass(googleNs: typeof globalThis.google): Provider
   return ProviderMarkerOverlay;
 }
 
+const CAR_ICON = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 17h2c.6 0 1-.4 1-1v-3c0-.9-.7-1.7-1.5-1.9C18.7 10.6 16 10 16 10s-1.3-1.4-2.2-2.3c-.5-.4-1.1-.7-1.8-.7H5c-.6 0-1.1.4-1.4.9l-1.4 2.9A3.7 3.7 0 0 0 2 12v4c0 .6.4 1 1 1h2"/><circle cx="7" cy="17" r="2"/><path d="M9 17h6"/><circle cx="17" cy="17" r="2"/></svg>`;
+
+function badgeMarkup(label: string) {
+  if (!label) return CAR_ICON;
+  return `<span class="marker-badge-label">${escapeHtml(label)}</span>`;
+}
+
 function escapeHtml(value: string): string {
   return value.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c] ?? c);
 }
 
 export const LiveMap = forwardRef<LiveMapHandle, LiveMapProps>(function LiveMap(
-  { apiKey, markers, activeId, onMarkerClick, className },
+  { apiKey, markers, activeId, onMarkerClick, className, showZoomControl = true },
   ref,
 ) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -204,7 +214,7 @@ export const LiveMap = forwardRef<LiveMapHandle, LiveMapProps>(function LiveMap(
           center,
           zoom: markers.length > 0 ? 12 : 10,
           disableDefaultUI: true,
-          zoomControl: true,
+          zoomControl: showZoomControl,
           zoomControlOptions: { position: google.maps.ControlPosition.RIGHT_BOTTOM },
           gestureHandling: 'greedy',
           styles: opsMapStyles(),
@@ -294,6 +304,11 @@ export const LiveMap = forwardRef<LiveMapHandle, LiveMapProps>(function LiveMap(
         map.panTo(marker.getLatLng());
         map.setZoom(15);
         marker.bounce();
+      },
+      zoomBy: (delta: number) => {
+        const map = mapRef.current;
+        if (!map) return;
+        map.setZoom((map.getZoom() ?? 12) + delta);
       },
     }),
     [markers],

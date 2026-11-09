@@ -499,14 +499,131 @@ async function main() {
     });
   }
 
-  // Sample FAQs
-  await prisma.faq.createMany({
-    skipDuplicates: true,
-    data: [
-      { question: 'How do I request roadside assistance?', answer: 'Open the app, select your service type, and tap Request.', category: 'general', sortOrder: 1 },
-      { question: 'What payment methods are accepted?', answer: 'We accept Stripe cards, wallet balance, and cash.', category: 'payment', sortOrder: 2 },
-    ],
+  // FAQs. Upsert by question so a re-seed does not duplicate rows.
+  await prisma.faq.deleteMany({
+    where: {
+      question: {
+        in: [
+          'How do I request roadside assistance?',
+          'What payment methods are accepted?',
+        ],
+      },
+    },
   });
+
+  const faqs = [
+    {
+      question: 'How much does a ride cost?',
+      answer:
+        'You see an estimate before you request, based on the ride class, distance, and time. The final fare is charged when the trip ends.',
+      category: 'customer',
+      sortOrder: 1,
+    },
+    {
+      question: 'Where is RYVO available?',
+      answer:
+        'RYVO runs inside active coverage zones. The app tells you if your pickup is covered before you request.',
+      category: 'customer',
+      sortOrder: 2,
+    },
+    {
+      question: 'How does a driver get my ride?',
+      answer:
+        'After you set pickup, dropoff, and a ride class, nearby online drivers see the offer. The first driver to accept is matched, and you can track them live.',
+      category: 'customer',
+      sortOrder: 3,
+    },
+    {
+      question: 'When do I pay?',
+      answer:
+        'You choose a card, wallet, or cash before the request, depending on what is enabled in your city. Nothing is charged until the driver ends the trip.',
+      category: 'customer',
+      sortOrder: 4,
+    },
+    {
+      question: 'Which ride types can I request?',
+      answer:
+        'Ryvo Go, Comfort, XL, Premium, Pet, Van, Assist, and Green. A driver only receives offers for the classes their vehicle is approved to serve.',
+      category: 'customer',
+      sortOrder: 5,
+    },
+    {
+      question: 'How do bids work?',
+      answer:
+        'Choose Bid, set your fare, and drivers can accept or counter within the bid window. You confirm the offer you want before the trip starts.',
+      category: 'customer',
+      sortOrder: 6,
+    },
+    {
+      question: 'How do I send a parcel?',
+      answer:
+        'Choose Parcel, add the pickup and dropoff, and share the delivery code with the recipient. The driver confirms the code at dropoff.',
+      category: 'customer',
+      sortOrder: 7,
+    },
+    {
+      question: 'Can I cancel a trip?',
+      answer:
+        'You can cancel from the trip screen. A fee may apply after a driver is matched or has arrived, based on the cancellation rules for your city.',
+      category: 'customer',
+      sortOrder: 8,
+    },
+    {
+      question: 'How do I go online and receive trips?',
+      answer:
+        'Turn on the Online switch on the home map. Nearby trip offers appear with a timer to accept or decline.',
+      category: 'provider',
+      sortOrder: 1,
+    },
+    {
+      question: 'When do I get paid?',
+      answer:
+        'Earnings are added to your wallet after each completed trip. You can withdraw to a bank account you have added in the app.',
+      category: 'provider',
+      sortOrder: 2,
+    },
+    {
+      question: 'What documents do I need?',
+      answer:
+        'Upload a driving licence, an identity selfie, and insurance during verification. You cannot go online until those documents are approved.',
+      category: 'provider',
+      sortOrder: 3,
+    },
+    {
+      question: 'How is my rating calculated?',
+      answer:
+        'Your rating is the average of rider reviews after completed trips. A higher rating can improve how often you are offered trips.',
+      category: 'provider',
+      sortOrder: 4,
+    },
+    {
+      question: 'Can I cancel an accepted trip?',
+      answer:
+        'Cancelling after you accept can affect your completion rate and may add a penalty. Cancel only when you cannot complete the trip.',
+      category: 'provider',
+      sortOrder: 5,
+    },
+    {
+      question: 'Which ride classes can I serve?',
+      answer:
+        'You receive offers only for the classes your vehicle is approved for, such as Ryvo Go, Comfort, XL, or Parcel.',
+      category: 'provider',
+      sortOrder: 6,
+    },
+  ];
+
+  for (const faq of faqs) {
+    const existing = await prisma.faq.findFirst({ where: { question: faq.question } });
+    if (existing) {
+      await prisma.faq.update({
+        where: { id: existing.id },
+        data: { answer: faq.answer, category: faq.category, sortOrder: faq.sortOrder, isActive: true },
+      });
+    } else {
+      await prisma.faq.create({ data: { ...faq, isActive: true } });
+    }
+  }
+  console.log(`Seeded ${faqs.length} FAQs.`);
 
   // Countries
   for (let i = 0; i < COUNTRIES_DATA.length; i++) {

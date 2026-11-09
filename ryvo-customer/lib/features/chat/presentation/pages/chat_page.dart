@@ -1,8 +1,10 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/theme/app_theme.dart';
 import '../../../../shared/providers/app_providers.dart';
 import 'package:ryvo_customer/l10n/app_localizations.dart';
 
@@ -28,6 +30,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
   final List<_ChatMessage> _messages = [];
   StreamSubscription<Map<String, dynamic>>? _sub;
   bool _loading = true;
+  bool _sending = false;
 
   @override
   void initState() {
@@ -79,16 +82,33 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     });
   }
 
-  Future<void> _send() async {
-    final text = _controller.text.trim();
-    if (text.isEmpty) return;
-    _controller.clear();
+  Future<void> _sendText(String raw, {bool clearField = false}) async {
+    final text = raw.trim();
+    if (text.isEmpty || _sending) return;
+    setState(() => _sending = true);
+    if (clearField) _controller.clear();
     try {
-      final res = await ref.read(jobRepositoryProvider).sendMessage(widget.jobId, text);
+      final res =
+          await ref.read(jobRepositoryProvider).sendMessage(widget.jobId, text);
+      if (!mounted) return;
       _add(_fromMap(res));
     } catch (e) {
-      if (mounted) showApiError(context, e);
+      if (!mounted) return;
+      if (clearField) {
+        _controller.text = text;
+        _controller.selection = TextSelection.collapsed(offset: text.length);
+      }
+      showApiError(context, e);
+    } finally {
+      if (mounted) setState(() => _sending = false);
     }
+  }
+
+  Future<void> _send() => _sendText(_controller.text, clearField: true);
+
+  void _sendQuickReply(String text) {
+    HapticFeedback.selectionClick();
+    _sendText(text);
   }
 
   @override
@@ -101,10 +121,20 @@ class _ChatPageState extends ConsumerState<ChatPage> {
 
   String _time(DateTime t) => '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
 
+  List<String> _quickReplies(AppLocalizations l10n) => [
+        l10n.quickReplyImHere,
+        l10n.quickReplyWhereAreYou,
+        l10n.quickReplyOnMyWay,
+        l10n.quickReplyPleaseWait,
+        l10n.quickReplyCantSeeYou,
+        l10n.quickReplyOkThanks,
+      ];
+
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     final job = ref.watch(jobDraftProvider).activeJob;
-    final title = job?.provider?.fullName ?? AppLocalizations.of(context).provider;
+    final title = job?.provider?.fullName ?? l10n.provider;
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -119,7 +149,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                 ? const Center(child: CircularProgressIndicator())
                 : _messages.isEmpty
                     ? Center(
-                        child: Text(AppLocalizations.of(context).noMessagesYet,
+                        child: Text(l10n.noMessagesYet,
                             style: GoogleFonts.poppins(fontSize: 13, color: AppColors.textSecondary)),
                       )
                     : ListView.builder(
@@ -128,6 +158,11 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                         itemCount: _messages.length,
                         itemBuilder: (_, i) => _Bubble(message: _messages[i], time: _time(_messages[i].time)),
                       ),
+          ),
+          _QuickReplies(
+            replies: _quickReplies(l10n),
+            enabled: !_sending,
+            onTap: _sendQuickReply,
           ),
           Container(
             padding: const EdgeInsets.all(12),
@@ -144,7 +179,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                       controller: _controller,
                       style: GoogleFonts.poppins(color: AppColors.textPrimary),
                       decoration: InputDecoration(
-                        hintText: AppLocalizations.of(context).typeAMessage,
+                        hintText: l10n.typeAMessage,
                         hintStyle: GoogleFonts.poppins(color: AppColors.textHint),
                         filled: true,
                         fillColor: AppColors.background,
@@ -169,6 +204,58 @@ class _ChatPageState extends ConsumerState<ChatPage> {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _QuickReplies extends StatelessWidget {
+  const _QuickReplies({
+    required this.replies,
+    required this.onTap,
+    required this.enabled,
+  });
+
+  final List<String> replies;
+  final ValueChanged<String> onTap;
+  final bool enabled;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 44,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+        itemCount: replies.length,
+        separatorBuilder: (_, __) => const SizedBox(width: 8),
+        itemBuilder: (context, index) {
+          final label = replies[index];
+          return Material(
+            color: AppColors.modal,
+            shape: StadiumBorder(side: BorderSide(color: AppColors.divider)),
+            child: InkWell(
+              customBorder: const StadiumBorder(),
+              onTap: enabled ? () => onTap(label) : null,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                child: Center(
+                  child: Text(
+                    label,
+                    style: RyvoTypography.style(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: enabled
+                          ? AppColors.textPrimary
+                          : AppColors.textSecondary,
+                      letterSpacing: -0.2,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          );
+        },
       ),
     );
   }

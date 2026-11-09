@@ -23,7 +23,9 @@ class ProfilePage extends ConsumerStatefulWidget {
 }
 
 class _ProfilePageState extends ConsumerState<ProfilePage> {
-  static const double _expandedHeight = 220;
+  /// Status bar plus the identity row: 16 above, 64 avatar, 16 below.
+  double _expandedHeight(BuildContext context) =>
+      MediaQuery.paddingOf(context).top + 96;
 
   final ScrollController _scroll = ScrollController();
   final ValueNotifier<double> _titleOpacity = ValueNotifier<double>(0);
@@ -45,7 +47,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
   void _onScroll() {
     if (!_scroll.hasClients) return;
     final top = MediaQuery.paddingOf(context).top;
-    final distance = _expandedHeight - kToolbarHeight - top;
+    final distance = _expandedHeight(context) - kToolbarHeight - top;
     final next = _scroll.offset >= distance - 16 ? 1.0 : 0.0;
     if (_titleOpacity.value != next) _titleOpacity.value = next;
   }
@@ -115,7 +117,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
                 SliverAppBar(
                   pinned: true,
                   stretch: true,
-                  expandedHeight: _expandedHeight,
+                  expandedHeight: _expandedHeight(context),
                   automaticallyImplyLeading: false,
                   backgroundColor: AppColors.background,
                   surfaceTintColor: Colors.transparent,
@@ -291,64 +293,63 @@ class _ProfileHeader extends StatelessWidget {
       child: Padding(
         padding: EdgeInsets.fromLTRB(
           20,
-          MediaQuery.paddingOf(context).top,
+          MediaQuery.paddingOf(context).top + 16,
           20,
-          8,
+          16,
         ),
-        child: Align(
-          alignment: const Alignment(0, -0.2),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              _Avatar(profile: profile),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      name,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: RyvoTypography.style(
-                        fontSize: 22,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.textPrimary,
-                        letterSpacing: -0.5,
-                        height: 1.1,
-                      ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+              _Avatar(profile: profile, onTap: onEdit),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: RyvoTypography.style(
+                      fontSize: 22,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.textPrimary,
+                      letterSpacing: -0.5,
+                      height: 1.1,
                     ),
-                    const SizedBox(height: 4),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    profile.phone,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: RyvoTypography.style(
+                      fontSize: 14,
+                      height: 1.15,
+                      color: AppColors.textSecondary,
+                      tabular: true,
+                    ),
+                  ),
+                  if (email.isNotEmpty) ...[
+                    const SizedBox(height: 2),
                     Text(
-                      profile.phone,
+                      email,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: RyvoTypography.style(
-                        fontSize: 14,
+                        fontSize: 13,
+                        height: 1.15,
                         color: AppColors.textSecondary,
-                        tabular: true,
                       ),
                     ),
-                    if (email.isNotEmpty) ...[
-                      const SizedBox(height: 2),
-                      Text(
-                        email,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: RyvoTypography.style(
-                          fontSize: 13,
-                          color: AppColors.textSecondary,
-                        ),
-                      ),
-                    ],
                   ],
-                ),
+                ],
               ),
-              const SizedBox(width: 8),
-              _EditPill(onTap: onEdit),
-            ],
-          ),
+            ),
+            const SizedBox(width: 8),
+            _EditPill(onTap: onEdit),
+          ],
         ),
       ),
     );
@@ -389,9 +390,10 @@ class _EditPill extends StatelessWidget {
 }
 
 class _Avatar extends StatelessWidget {
-  const _Avatar({required this.profile});
+  const _Avatar({required this.profile, required this.onTap});
 
   final UserProfile profile;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -405,22 +407,29 @@ class _Avatar extends StatelessWidget {
         letterSpacing: -0.4,
       ),
     );
-    return Container(
-      width: 64,
-      height: 64,
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        color: AppColors.card,
-        border: Border.all(color: AppColors.divider),
+    final face = url != null && url.isNotEmpty
+        ? Image.network(
+            url,
+            fit: BoxFit.cover,
+            errorBuilder: (_, __, ___) => Center(child: initials),
+          )
+        : Center(child: initials);
+    return GestureDetector(
+      onTap: () {
+        HapticFeedback.selectionClick();
+        onTap();
+      },
+      child: Container(
+        width: 64,
+        height: 64,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: AppColors.card,
+          border: Border.all(color: AppColors.divider),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: face,
       ),
-      clipBehavior: Clip.antiAlias,
-      child: url != null && url.isNotEmpty
-          ? Image.network(
-              url,
-              fit: BoxFit.cover,
-              errorBuilder: (_, __, ___) => Center(child: initials),
-            )
-          : Center(child: initials),
     );
   }
 }
@@ -433,7 +442,7 @@ class _SectionTitle extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 32, 16, 12),
+      padding: const EdgeInsets.fromLTRB(16, 20, 16, 8),
       child: Text(
         title,
         style: RyvoTypography.style(

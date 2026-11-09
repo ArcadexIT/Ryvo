@@ -3,13 +3,26 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
+import {
+  AlertCircle,
+  ArrowUpRight,
+  Ban,
+  BarChart3,
+  Car,
+  CircleCheck,
+  CreditCard,
+  FileText,
+  Navigation,
+  TrendingUp,
+  Users,
+  Wallet,
+} from 'lucide-react';
+import { Header } from '@/components/layout/header';
 import { DateRangePicker, dateRangeToDays, type DateRange } from '@/components/ui/date-range-picker';
 import { SystemHealth } from '@/components/dashboard/system-health';
 import { ActivityFeed } from '@/components/dashboard/activity-feed';
 import { DriverPerformance } from '@/components/dashboard/driver-performance';
-import { JobStatusCard } from '@/components/dashboard/job-status-card';
 import { RevenueChart } from '@/components/charts/revenue-chart';
-import { Sparkline } from '@/components/ui/sparkline';
 import { Stat } from '@/components/ui/stat';
 import { Skeleton } from '@/components/ui/skeleton';
 import { apiFetch, buildQuery } from '@/lib/api';
@@ -41,7 +54,7 @@ interface Charts {
 export default function DashboardPage() {
   const { permissions } = useAuth();
   const canFinance = hasPermission(permissions, 'finance');
-  const [dateRange, setDateRange] = useState<DateRange>('7d');
+  const [dateRange, setDateRange] = useState<DateRange>('30d');
   const days = dateRangeToDays(dateRange);
 
   const { data: kpis, isLoading: kpisLoading, error: kpisError } = useQuery({
@@ -84,57 +97,50 @@ export default function DashboardPage() {
   const online = kpis?.onlineProviders ?? 0;
   const busy = kpis?.busyProviders ?? 0;
   const offline = Math.max(0, (kpis?.totalProviders ?? 0) - online - busy);
-  const spark = charts?.jobsByDay?.map((day) => day.jobs) ?? [];
-
   return (
-    <div className="flex-1 overflow-y-auto px-5 py-5 lg:px-6">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h1 className="page-title">Overview</h1>
-          <p className="mt-1 text-sm text-muted">Platform activity for the selected period.</p>
-        </div>
-        <DateRangePicker value={dateRange} onChange={setDateRange} />
-      </div>
+    <>
+    <Header
+      title="Overview"
+      description="Platform activity for the selected period."
+      breadcrumb={false}
+      actions={<DateRangePicker value={dateRange} onChange={setDateRange} />}
+    />
+    <div className="flex-1 overflow-y-auto px-5 pb-6 lg:px-6">
+      {kpisError ? <p className="text-sm text-danger">Failed to load KPIs</p> : null}
 
-      {kpisError ? <p className="mt-4 text-sm text-danger">Failed to load KPIs</p> : null}
-
-      <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
         {kpisLoading ? (
-          Array.from({ length: 4 }).map((_, index) => <Skeleton key={index} className="h-32 rounded-lg" />)
+          Array.from({ length: 6 }).map((_, index) => <Skeleton key={index} className="h-[138px] rounded-[18px]" />)
         ) : (
           <>
-            <Stat
-              label="Active trips"
-              value={kpis?.activeJobs ?? 0}
-              delta={kpis?.trends?.activeJobs}
-              href="/dispatch"
-              spark={spark.length > 1 ? <Sparkline data={spark} color="currentColor" height={32} /> : null}
-            />
-            <Stat
-              label="Revenue today"
-              value={formatCurrency(kpis?.revenueToday ?? 0)}
-              delta={kpis?.trends?.revenueToday}
-              href="/finance/earnings"
-            />
-            <Stat label="Online drivers" value={online} href="/providers" />
-            <Stat label="Pending KYC" value={kycCount ?? 0} href="/providers/kyc" />
+            <Stat label="Active trips" value={kpis?.activeJobs ?? 0} href="/dispatch" tone="emerald" icon={Car} mark={TrendingUp} />
+            <Stat label="Revenue today" value={formatCurrency(kpis?.revenueToday ?? 0)} href="/finance/earnings" tone="sky" icon={CreditCard} mark={TrendingUp} />
+            <Stat label="Completed today" value={kpis?.completedToday ?? 0} href="/jobs" tone="violet" icon={CircleCheck} mark={TrendingUp} />
+            <Stat label="All trips" value={kpis?.totalJobs ?? 0} href="/jobs" tone="amber" icon={Navigation} mark={BarChart3} />
+            <Stat label="Online drivers" value={online} href="/providers" tone="teal" icon={Users} mark={Users} />
+            <Stat label="Pending KYC" value={kycCount ?? 0} href="/providers/kyc" tone="rose" icon={Ban} mark={AlertCircle} />
           </>
         )}
       </div>
 
-      <div className="mt-3 grid grid-cols-1 gap-3 xl:grid-cols-12">
-        <section className="rounded-lg border border-hairline bg-card p-4 xl:col-span-8">
+      <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-12">
+        <section className="panel-card p-4 xl:col-span-8">
           <div className="mb-2 flex items-center justify-between gap-3">
-            <div>
-              <h2 className="text-sm font-semibold text-primary">Trips and revenue</h2>
-              <p className="text-xs text-muted">Last {days} days</p>
+            <div className="flex items-center gap-2">
+              <span className="grid size-8 place-items-center rounded-lg bg-chart-1/15 text-chart-1">
+                <BarChart3 className="size-4" strokeWidth={1.75} />
+              </span>
+              <div>
+                <h2 className="text-sm font-semibold text-primary">Trips and revenue</h2>
+                <p className="text-xs text-muted">Last {days} days</p>
+              </div>
             </div>
             <div className="flex items-center gap-3 text-xs text-muted">
               <span className="inline-flex items-center gap-1.5">
-                <span className="size-1.5 rounded-full bg-success" /> Revenue
+                <span className="size-2 rounded-full bg-chart-2" /> Trips
               </span>
               <span className="inline-flex items-center gap-1.5">
-                <span className="size-1.5 rounded-full bg-muted" /> Trips
+                <span className="size-2 rounded-full bg-chart-1" /> Revenue
               </span>
             </div>
           </div>
@@ -147,38 +153,57 @@ export default function DashboardPage() {
           )}
         </section>
 
-        <section className="rounded-lg border border-hairline bg-card p-4 xl:col-span-4">
-          <h2 className="text-sm font-semibold text-primary">Needs attention</h2>
-          <ul className="mt-4 divide-y divide-hairline">
-            <AttentionRow href="/providers/kyc" label="KYC queue" value={kycCount ?? 0} />
+        <section className="panel-card p-4 xl:col-span-4">
+          <div className="flex items-center justify-between gap-3">
+            <h2 className="inline-flex items-center gap-2 text-sm font-semibold text-primary">
+              <span className="grid size-8 place-items-center rounded-lg bg-chart-3/15 text-chart-3">
+                <AlertCircle className="size-4" strokeWidth={1.75} />
+              </span>
+              Needs attention
+            </h2>
+            <Link href="/dispatch" className="inline-flex items-center gap-1 text-xs font-medium text-chart-1 hover:underline">
+              View all <ArrowUpRight className="size-3.5" strokeWidth={1.75} />
+            </Link>
+          </div>
+          <ul className="mt-4 space-y-2">
+            <AttentionRow href="/providers/kyc" label="KYC queue" value={kycCount ?? 0} icon={FileText} />
             {canFinance ? (
-              <AttentionRow
-                href="/finance/payouts"
-                label="Payouts awaiting confirmation"
-                value={payoutSummary?.count ?? 0}
-              />
+              <AttentionRow href="/finance/payouts" label="Payouts awaiting confirmation" value={payoutSummary?.count ?? 0} icon={Wallet} />
             ) : null}
-            <AttentionRow href="/dispatch" label="Active trips" value={kpis?.activeJobs ?? 0} />
+            <AttentionRow href="/dispatch" label="Active trips" value={kpis?.activeJobs ?? 0} icon={Car} />
           </ul>
         </section>
       </div>
 
-      <div className="mt-3 grid grid-cols-1 gap-3 lg:grid-cols-3">
+      <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-3">
         <DriverPerformance online={online} offline={offline} onBreak={busy} />
         <SystemHealth />
         <ActivityFeed />
-        <JobStatusCard breakdown={charts?.statusBreakdown ?? {}} />
       </div>
     </div>
+    </>
   );
 }
 
-function AttentionRow({ href, label, value }: { href: string; label: string; value: number }) {
+function AttentionRow({
+  href,
+  label,
+  value,
+  icon: Icon,
+}: {
+  href: string;
+  label: string;
+  value: number;
+  icon: typeof Car;
+}) {
   return (
     <li>
-      <Link href={href} className="flex items-center justify-between py-3 text-sm hover:text-primary">
-        <span className="text-muted">{label}</span>
-        <span className="num font-medium text-primary">{value}</span>
+      <Link href={href} className="flex items-center gap-3 rounded-xl bg-canvas px-3 py-2.5 transition-colors hover:bg-input">
+        <span className="grid size-8 place-items-center rounded-lg bg-sheet text-muted shadow-sm">
+          <Icon className="size-4" strokeWidth={1.75} />
+        </span>
+        <span className="min-w-0 flex-1 truncate text-sm text-primary">{label}</span>
+        <span className="num grid size-7 place-items-center rounded-full bg-sheet text-xs font-semibold text-primary">{value}</span>
       </Link>
     </li>
   );
