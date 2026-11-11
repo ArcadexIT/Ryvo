@@ -3,10 +3,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../../core/theme/app_colors.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../../../shared/providers/app_providers.dart';
 import '../../../../shared/widgets/job_chat_button.dart';
 import '../../../../shared/widgets/provider_avatar.dart';
 import 'package:ryvo_driver/l10n/app_localizations.dart';
+import 'delete_account_flow.dart';
 
 class ProfilePage extends ConsumerWidget {
   const ProfilePage({super.key});
@@ -121,6 +123,7 @@ class ProfilePage extends ConsumerWidget {
                           _Row(l10n.personalInfo, () => context.push('/personal-info')),
                           _Row(l10n.vehicleInfo, () => context.push('/vehicle-info')),
                           _Row(l10n.paymentMethods2, () => context.push('/payment-methods')),
+                          _Row('Delete account', () => confirmDeleteDriverAccount(context, ref), color: AppColors.error),
                         ],
                       ),
                       _Section(
@@ -136,6 +139,12 @@ class ProfilePage extends ConsumerWidget {
                           _Row(l10n.myPerformance, () => context.push('/performance')),
                           _Row(l10n.wallet, () => context.push('/wallet')),
                           _Row(l10n.helpSupport, () => context.push('/help')),
+                          _Row('Privacy policy', () {
+                            launchUrl(
+                              Uri.parse('https://ryvo.arcadexit.com/privacy-policy/'),
+                              mode: LaunchMode.externalApplication,
+                            );
+                          }),
                           if (resumeRoute != null)
                             _Row(l10n.resumeActiveJob, () => context.push(resumeRoute), color: AppColors.primary),
                           if (activeJob != null && resumeRoute != null)

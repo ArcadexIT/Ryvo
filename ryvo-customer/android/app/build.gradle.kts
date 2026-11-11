@@ -19,7 +19,8 @@ if (keystorePropertiesFile.exists()) {
 
 android {
     namespace = "com.ryvo.customer"
-    compileSdk = flutter.compileSdkVersion
+    // Play requires API 36 for new apps and updates (31 Aug 2026).
+    compileSdk = 36
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
@@ -33,11 +34,20 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.ryvo.customer"
-        minSdk = flutter.minSdkVersion  // flutter_stripe requires min SDK 21
-        targetSdk = flutter.targetSdkVersion
+        // Must match the package name of the Play Console app. Permanent after the first upload.
+        applicationId = "com.arcadexit.ryvo.customer"
+        // Google Play (from 31 Aug 2026) rejects new apps below API 36.
+        minSdk = 24
+        targetSdk = 36
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+    }
+
+    // Uncompressed native libs, 16 KB zip-aligned (Play page-size rule).
+    packaging {
+        jniLibs {
+            useLegacyPackaging = false
+        }
     }
 
     buildFeatures {
@@ -65,6 +75,24 @@ android {
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",
+            )
+        }
+    }
+}
+
+tasks.matching { it.name == "bundleRelease" || it.name == "assembleRelease" }.configureEach {
+    doFirst {
+        if (!keystorePropertiesFile.exists()) {
+            throw GradleException(
+                "Missing android/key.properties. Create it for the upload keystore before building a Play App Bundle.",
+            )
+        }
+        val storePath = keystoreProperties.getProperty("storeFile")
+        val store = storePath?.let { project.file(it) }
+        if (store == null || !store.exists()) {
+            throw GradleException(
+                "Upload keystore not found at $storePath. " +
+                    "Set storeFile in android/key.properties to the shared .jks.",
             )
         }
     }

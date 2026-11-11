@@ -1,84 +1,33 @@
-# Ryvo Driver — Google Play Listing Pack
+# Ryvo Driver — Google Play listing pack
 
-## App identity
+Version to upload: **1.0.0** (versionCode **7**). Package **com.arcadexit.ryvo.driver**.
 
-| Field | Value |
-|-------|--------|
-| Title | Ryvo Driver |
-| Package name | `com.ryvo.driver` |
-| Version | `1.0.0` (versionCode `1`) |
-| Default language | English (en-GB / en-US) |
-| Suggested category | Auto & Vehicles |
-| Contact email | enquiries@ryvo.arcadexit.com |
-| Privacy policy | https://ryvo.arcadexit.com/privacy-policy/ |
-| Developer | Ryvo Ltd |
+`com.ryvo.driver` stays the Kotlin namespace and the iOS bundle id. The Play application id is `com.arcadexit.ryvo.driver`. Add this package in Firebase project `ryvo-7b28a` and on the Maps API key before shipping, then replace `android/app/google-services.json` with the file Firebase downloads for that app.
 
-## Listing assets in this folder
+The old “Jomp” / jump-start graphics and description do not match this app. Use the files in this folder.
 
-| File | Spec | Status |
-|------|------|--------|
-| `short-description.txt` | ≤80 characters | Ready |
-| `full-description.txt` | ≤4000 characters | Ready |
-| `feature-graphic.png` | 1024 × 500 | Ready |
-| `icon-512.png` | 512 × 512 | Ready |
-| `app-release.aab` | Signed release bundle (~50MB) | Ready (also at `build/app/outputs/bundle/release/`) |
-| `UPLOAD_CERT_SHA.txt` | SHA-1 / SHA-256 for Maps & Firebase | Ready |
+## Still required before you can press Publish
 
-## Screenshot checklist (capture from a real device)
+1. Use the shared upload keystore at `~/keystores/ryvo-upload.jks` (alias `ryvo_upload`). `android/key.properties` is gitignored and already points at it. Fingerprints are in `UPLOAD_CERT_SHA.txt`. Register those on the Firebase and Maps apps for this package, not the fingerprints from the project this repo was cloned from.
+2. On https://ryvo.arcadexit.com/privacy-policy/ remove the sentence that calls the policy a product placeholder, and add a “Delete your account” section (steps are in the chat reply).
+3. Capture at least 2 phone screenshots (1080×1920 PNG, no transparency).
+4. Create a verified UK driver test account and enter it under App access.
+5. Build and upload the bundle:
 
-Phone (required):
-- At least 2 screenshots
-- JPEG or 24-bit PNG (no alpha)
-- Min dimension 320px, max 3840px
-- Recommended: 1080 × 1920 (portrait)
+```bash
+flutter build appbundle --release
+```
 
-Suggested screens to capture:
-1. Home map (online) with job area
-2. Incoming job / accept sheet
-3. Active navigation / job in progress
-4. Earnings / wallet
-5. Profile or verification complete
+The file is `build/app/outputs/bundle/release/app-release.aab`.
 
-7-inch / 10-inch tablets: optional unless you target large screens.
+## Assets in this folder
 
-## Content rating notes
+| File | Spec |
+|------|------|
+| `short-description.txt` | 55 characters |
+| `full-description.txt` | Store description |
+| `icon-512.png` | 512×512 PNG |
+| `feature-graphic.png` | 1024×500 PNG, no alpha |
+| `UPLOAD_CERT_SHA.txt` | Shared upload certificate |
 
-Expect questions about:
-- Location sharing (precise location for jobs)
-- User communication (in-app chat with customers)
-- Account creation / identity verification
-- Financial info (payouts / bank details)
-
-App is for adults 18+ (provider workforce).
-
-## Data safety (summary for Play Console form)
-
-Collected / shared as needed to provide the service:
-
-| Data type | Purpose | Notes |
-|-----------|---------|--------|
-| Location (precise) | App functionality | Job matching, map, navigation, ETA |
-| Personal info (name, email, phone) | Account | Registration / support |
-| Photos / documents | App functionality | KYC: licence, registration, insurance, selfie, equipment |
-| Financial info | App functionality | Bank / withdraw for payouts |
-| Messages | App functionality | Customer–provider chat |
-| Device / app activity | App functionality, analytics | Notifications, diagnostics as applicable |
-
-- Data is used to provide roadside assistance services between customers and providers.
-- See full policy: https://ryvo.arcadexit.com/privacy-policy/
-- Encryption in transit: yes (HTTPS)
-- Users can request deletion via contact: enquiries@ryvo.arcadexit.com
-
-## Upload steps
-
-1. Open [Google Play Console](https://play.google.com/console)
-2. Create app → **Ryvo Driver** → package `com.ryvo.driver`
-3. Complete Store listing (paste short/full description; upload icon + feature graphic)
-4. Set Privacy policy URL and contact email
-5. Complete Data safety + Content rating
-6. Create production (or closed testing) release → upload `app-release.aab`
-7. Register upload keystore SHA-1 / SHA-256 on Google Maps + Firebase Android apps
-
-## Keystore reminder
-
-Credentials are in `store/KEYSTORE_CREDENTIALS.txt` (gitignored). Back up the keystore and passwords securely — required for every future update.
+Screenshots are not in this folder. Capture: home map online, incoming ride, trip navigation, earnings, profile.

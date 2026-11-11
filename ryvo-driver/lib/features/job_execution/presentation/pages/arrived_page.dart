@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:image_picker/image_picker.dart';
 
+import '../../../../core/location/location_disclosure.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/utils/maps_navigation.dart';
 import '../../../../core/utils/phone_call.dart';
@@ -34,6 +35,10 @@ class _ArrivedPageState extends ConsumerState<ArrivedPage> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      promptDriverLocationDisclosure(context, ref);
+    });
     _pollTimer = Timer.periodic(const Duration(seconds: 4), (_) => _refresh());
   }
 

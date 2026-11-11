@@ -19,7 +19,7 @@ if (keystorePropertiesFile.exists()) {
 
 android {
     namespace = "com.ryvo.driver"
-    compileSdk = flutter.compileSdkVersion
+    compileSdk = maxOf(flutter.compileSdkVersion, 36)
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
@@ -33,11 +33,22 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.ryvo.driver"
-        minSdk = flutter.minSdkVersion
-        targetSdk = flutter.targetSdkVersion
+        // Must match the package name of the Play Console app. Permanent after the first upload.
+        applicationId = "com.arcadexit.ryvo.driver"
+        // Play requires API 36 for new apps and updates as of 31 Aug 2026.
+        minSdk = maxOf(flutter.minSdkVersion, 24)
+        targetSdk = maxOf(flutter.targetSdkVersion, 36)
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+        ndk {
+            debugSymbolLevel = "SYMBOL_TABLE"
+        }
+    }
+
+    packaging {
+        jniLibs {
+            useLegacyPackaging = false
+        }
     }
 
     signingConfigs {
@@ -51,7 +62,19 @@ android {
 
     buildTypes {
         release {
-            signingConfig = signingConfigs.getByName("release")
+            if (keystorePropertiesFile.exists()) {
+                signingConfig = signingConfigs.getByName("release")
+            }
+        }
+    }
+}
+
+tasks.configureEach {
+    if (!keystorePropertiesFile.exists() && (name == "signReleaseBundle" || name == "signRelease")) {
+        doFirst {
+            throw GradleException(
+                "Missing android/key.properties. Create it for the upload keystore before building a Play App Bundle.",
+            )
         }
     }
 }

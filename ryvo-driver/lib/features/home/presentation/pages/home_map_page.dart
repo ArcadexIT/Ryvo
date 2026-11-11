@@ -9,6 +9,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import '../../../../core/constants/mock_data.dart';
 import '../../../../core/location/driving_route.dart';
+import '../../../../core/location/location_disclosure.dart';
 import '../../../../core/services/job_alert_sound.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/utils/money.dart';
@@ -69,6 +70,8 @@ class _HomeMapPageState extends ConsumerState<HomeMapPage> with WidgetsBindingOb
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted) return;
+      await promptDriverLocationDisclosure(context, ref);
       if (!mounted) return;
       ref.read(earningsNotifierProvider.notifier).load();
       if (ref.read(activeJobProvider) == null) {
@@ -280,6 +283,12 @@ class _HomeMapPageState extends ConsumerState<HomeMapPage> with WidgetsBindingOb
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(AppLocalizations.of(context).completeOnboardingApprovalBeforeGoingOnline)),
         );
+        return;
+      }
+      final locationOk = await promptDriverLocationDisclosure(context, ref);
+      if (!mounted) return;
+      if (!locationOk) {
+        ref.read(isOnlineProvider.notifier).state = false;
         return;
       }
     }

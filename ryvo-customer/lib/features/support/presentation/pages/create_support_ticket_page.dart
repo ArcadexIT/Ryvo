@@ -13,10 +13,14 @@ class CreateSupportTicketPage extends ConsumerStatefulWidget {
   const CreateSupportTicketPage({
     super.key,
     this.initialCategory,
+    this.initialSubject,
+    this.initialMessage,
     this.jobId,
   });
 
   final String? initialCategory;
+  final String? initialSubject;
+  final String? initialMessage;
   final String? jobId;
 
   @override
@@ -36,6 +40,14 @@ class _CreateSupportTicketPageState extends ConsumerState<CreateSupportTicketPag
     super.initState();
     if (widget.initialCategory != null && _categories.contains(widget.initialCategory)) {
       _category = widget.initialCategory!;
+    }
+    final subject = widget.initialSubject?.trim();
+    final message = widget.initialMessage?.trim();
+    if (subject != null && subject.isNotEmpty) {
+      _subjectController.text = subject;
+    }
+    if (message != null && message.isNotEmpty) {
+      _messageController.text = message;
     }
   }
 

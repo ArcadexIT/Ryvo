@@ -227,6 +227,12 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
                         onTap: () => context.push('/legal/privacy'),
                       ),
                       RyvoGrabListTile(
+                        icon: CupertinoIcons.trash,
+                        label: 'Delete account',
+                        labelColor: AppColors.error,
+                        onTap: () => context.push('/profile/delete-account'),
+                      ),
+                      RyvoGrabListTile(
                         icon: CupertinoIcons.square_arrow_right,
                         label: l10n.signOut,
                         showChevron: false,

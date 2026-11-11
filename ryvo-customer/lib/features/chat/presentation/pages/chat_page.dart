@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../shared/providers/app_providers.dart';
@@ -111,6 +112,26 @@ class _ChatPageState extends ConsumerState<ChatPage> {
       appBar: AppBar(
         backgroundColor: AppColors.background,
         title: Text(title, style: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.w600)),
+        actions: [
+          IconButton(
+            tooltip: 'Report',
+            onPressed: () {
+              context.push(
+                Uri(
+                  path: '/support/new',
+                  queryParameters: {
+                    'category': 'job_issue',
+                    'jobId': widget.jobId,
+                    'subject': 'Report a trip message',
+                    'message':
+                        'Please review the chat on trip ${widget.jobId}.',
+                  },
+                ).toString(),
+              );
+            },
+            icon: Icon(Icons.flag_outlined, color: AppColors.textPrimary),
+          ),
+        ],
       ),
       body: Column(
         children: [

@@ -65,6 +65,42 @@ class _ChatPageState extends ConsumerState<ChatPage> {
 
   String _time(DateTime t) => '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
 
+  Future<void> _reportChat(String customerName, String? jobRef) async {
+    final reason = await showDialog<String>(
+      context: context,
+      builder: (ctx) => SimpleDialog(
+        backgroundColor: AppColors.surface,
+        surfaceTintColor: AppColors.surface,
+        title: const Text('Report this chat', style: TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.w700)),
+        children: [
+          for (final item in const ['Harassment or abuse', 'Safety concern', 'Spam', 'Something else'])
+            SimpleDialogOption(
+              onPressed: () => Navigator.pop(ctx, item),
+              child: Text(item, style: const TextStyle(color: AppColors.textPrimary)),
+            ),
+        ],
+      ),
+    );
+    if (reason == null || !mounted) return;
+    try {
+      await ref.read(supportRepositoryProvider).createTicket(
+            category: 'job_issue',
+            subject: 'Report trip chat',
+            message: 'Reason: $reason\nCustomer: $customerName\nJob: ${jobRef ?? widget.jobId}\nJob id: ${widget.jobId}',
+            jobId: widget.jobId,
+          );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Report sent. Our team will review this chat.')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not send the report. $e'), backgroundColor: AppColors.error),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final chat = ref.watch(chatNotifierProvider(widget.jobId));
@@ -93,6 +129,13 @@ class _ChatPageState extends ConsumerState<ChatPage> {
             ),
           ],
         ),
+        actions: [
+          IconButton(
+            tooltip: 'Report',
+            onPressed: () => _reportChat(title, jobRef),
+            icon: const Icon(Icons.flag_outlined, color: AppColors.textSecondary),
+          ),
+        ],
       ),
       body: Column(
         children: [

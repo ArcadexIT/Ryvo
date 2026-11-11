@@ -10,6 +10,7 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 import '../../../../core/constants/mock_data.dart';
 import '../../../../core/errors/failure.dart';
 import '../../../../core/location/driving_route.dart';
+import '../../../../core/location/location_disclosure.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/utils/maps_navigation.dart';
 import '../../../../core/utils/phone_call.dart';
@@ -56,7 +57,10 @@ class _TurnByTurnPageState extends ConsumerState<TurnByTurnPage> {
     final loc = ref.read(locationStreamProvider).valueOrNull;
     if (loc != null) _driver.value = LatLng(loc.latitude, loc.longitude);
     _pollTimer = Timer.periodic(const Duration(seconds: 4), (_) => _refreshActive());
-    WidgetsBinding.instance.addPostFrameCallback((_) => _markEnRoute());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      promptDriverLocationDisclosure(context, ref);
+      _markEnRoute();
+    });
   }
 
   @override

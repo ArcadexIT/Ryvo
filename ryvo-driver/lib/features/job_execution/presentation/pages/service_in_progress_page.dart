@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:image_picker/image_picker.dart';
+import '../../../../core/location/location_disclosure.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/utils/job_elapsed.dart';
 import '../../../../features/job/domain/entities/job_entity.dart';
@@ -38,6 +39,7 @@ class _ServiceInProgressPageState extends ConsumerState<ServiceInProgressPage> {
     _tripCovering = ref.read(tripScreenCoveringHomeProvider.notifier);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
+      promptDriverLocationDisclosure(context, ref);
       _markedCovering = true;
       _tripCovering.state = true;
     });

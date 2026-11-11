@@ -592,6 +592,16 @@ class SupportRepository {
         parser: (json) => SupportTicketDetail.fromJson(json as Map<String, dynamic>),
       );
 
+  /// Play requires an in-app way to ask for account deletion. The customer API
+  /// has no delete-account route, so this files an account ticket the team
+  /// must action.
+  Future<SupportTicket> requestAccountDeletion() => createTicket(
+        category: 'account',
+        subject: 'Delete my Ryvo account',
+        message:
+            'Please delete this Ryvo customer account and the personal data tied to it, including my profile, saved places, vehicles, messages, and notification token. I understand trip and payment records may be kept where the law requires it.',
+      );
+
   Future<SupportTicket> createTicket({
     required String category,
     required String subject,
