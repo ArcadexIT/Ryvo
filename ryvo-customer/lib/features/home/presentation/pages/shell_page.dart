@@ -80,6 +80,12 @@ class ShellPage extends ConsumerWidget {
                       initialLocation: branch == navigationShell.currentIndex,
                     );
                   },
+                  onDragSelect: (navIndex) {
+                    HapticFeedback.lightImpact();
+                    navigationShell.goBranch(
+                      _branchIndexForNav(navIndex, walletEnabled),
+                    );
+                  },
                 ),
               ),
             ),
@@ -97,19 +103,84 @@ class _ShellNavSpec {
   const _ShellNavSpec({required this.icon, required this.label});
 }
 
-class _FloatingPillBar extends StatelessWidget {
+class _FloatingPillBar extends StatefulWidget {
   final List<_ShellNavSpec> items;
   final int currentIndex;
   final ValueChanged<int> onTap;
+  final ValueChanged<int> onDragSelect;
 
   const _FloatingPillBar({
     required this.items,
     required this.currentIndex,
     required this.onTap,
+    required this.onDragSelect,
   });
 
   @override
+  State<_FloatingPillBar> createState() => _FloatingPillBarState();
+}
+
+class _FloatingPillBarState extends State<_FloatingPillBar> {
+  static const Duration _snapDuration = Duration(milliseconds: 250);
+
+  /// Thumb X (local to the pill's inner area) while dragging; null at rest.
+  /// Updated per pointer event without `setState` so only the pill rebuilds.
+  final ValueNotifier<double?> _dragXOffset = ValueNotifier<double?>(null);
+
+  /// Tab currently under the thumb; drives icon/label highlight while dragging.
+  final ValueNotifier<int?> _hoverIndex = ValueNotifier<int?>(null);
+
+  /// Last tab index that fired a haptic tick during the active drag.
+  int? _hapticIndex;
+
+  @override
+  void dispose() {
+    _dragXOffset.dispose();
+    _hoverIndex.dispose();
+    super.dispose();
+  }
+
+  int _indexForX(double x, double slot, int count) {
+    if (slot <= 0 || count == 0) return 0;
+    return (x / slot).floor().clamp(0, count - 1).toInt();
+  }
+
+  void _onDragStart(
+      DragStartDetails d, double maxWidth, double slot, int count) {
+    _hapticIndex = widget.currentIndex;
+    _onDragUpdateX(d.localPosition.dx, maxWidth, slot, count);
+  }
+
+  void _onDragUpdateX(double dx, double maxWidth, double slot, int count) {
+    final x = dx.clamp(0.0, maxWidth).toDouble();
+    _dragXOffset.value = x;
+    final hovered = _indexForX(x, slot, count);
+    if (hovered != _hapticIndex) {
+      _hapticIndex = hovered;
+      HapticFeedback.selectionClick();
+    }
+    if (_hoverIndex.value != hovered) _hoverIndex.value = hovered;
+  }
+
+  void _onDragEnd(double slot, int count) {
+    final x = _dragXOffset.value;
+    if (x == null) return;
+    final finalIndex = _indexForX(x, slot, count);
+    _hapticIndex = null;
+    _dragXOffset.value = null;
+    _hoverIndex.value = null;
+    widget.onDragSelect(finalIndex);
+  }
+
+  void _onDragCancel() {
+    _hapticIndex = null;
+    _dragXOffset.value = null;
+    _hoverIndex.value = null;
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final items = widget.items;
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: () {},
@@ -131,39 +202,72 @@ class _FloatingPillBar extends StatelessWidget {
           builder: (context, constraints) {
             final count = items.length;
             final slot = count == 0 ? 0.0 : constraints.maxWidth / count;
-            final index =
-                currentIndex.clamp(0, count == 0 ? 0 : count - 1).toInt();
-            return Stack(
-              children: [
-                if (count > 0)
-                  AnimatedPositioned(
-                    duration: const Duration(milliseconds: 250),
-                    curve: Curves.easeOutCubic,
-                    left: index * slot,
-                    width: slot,
-                    top: 0,
-                    bottom: 0,
-                    child: DecoratedBox(
-                      decoration: BoxDecoration(
-                        color: AppColors.surface,
-                        borderRadius: BorderRadius.circular(40),
-                      ),
-                    ),
-                  ),
-                Row(
-                  children: [
-                    for (var i = 0; i < count; i++)
-                      Expanded(
-                        child: _ShellNavItem(
-                          icon: items[i].icon,
-                          label: items[i].label,
-                          selected: i == index,
-                          onTap: () => onTap(i),
+            final maxWidth = constraints.maxWidth;
+            final index = widget.currentIndex
+                .clamp(0, count == 0 ? 0 : count - 1)
+                .toInt();
+            return GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onHorizontalDragStart: (d) =>
+                  _onDragStart(d, maxWidth, slot, count),
+              onHorizontalDragUpdate: (d) =>
+                  _onDragUpdateX(d.localPosition.dx, maxWidth, slot, count),
+              onHorizontalDragEnd: (_) => _onDragEnd(slot, count),
+              onHorizontalDragCancel: _onDragCancel,
+              child: Stack(
+                children: [
+                  if (count > 0)
+                    ValueListenableBuilder<double?>(
+                      valueListenable: _dragXOffset,
+                      builder: (context, dragX, child) {
+                        final dragging = dragX != null;
+                        final left = dragging
+                            ? (dragX - slot / 2)
+                                .clamp(0.0, maxWidth - slot)
+                                .toDouble()
+                            : index * slot;
+                        return AnimatedPositioned(
+                          // Zero duration while dragging = pill tracks the
+                          // thumb 1:1; on release it eases into the slot.
+                          duration: dragging ? Duration.zero : _snapDuration,
+                          curve: Curves.fastOutSlowIn,
+                          left: left,
+                          width: slot,
+                          top: 0,
+                          bottom: 0,
+                          child: child!,
+                        );
+                      },
+                      child: RepaintBoundary(
+                        child: DecoratedBox(
+                          decoration: BoxDecoration(
+                            color: AppColors.surface,
+                            borderRadius: BorderRadius.circular(40),
+                          ),
                         ),
                       ),
-                  ],
-                ),
-              ],
+                    ),
+                  ValueListenableBuilder<int?>(
+                    valueListenable: _hoverIndex,
+                    builder: (context, hovered, _) {
+                      final active = hovered ?? index;
+                      return Row(
+                        children: [
+                          for (var i = 0; i < count; i++)
+                            Expanded(
+                              child: _ShellNavItem(
+                                icon: items[i].icon,
+                                label: items[i].label,
+                                selected: i == active,
+                                onTap: () => widget.onTap(i),
+                              ),
+                            ),
+                        ],
+                      );
+                    },
+                  ),
+                ],
+              ),
             );
           },
         ),

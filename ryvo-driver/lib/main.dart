@@ -6,7 +6,10 @@ import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:ryvo_driver/l10n/app_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'core/location/location_disclosure.dart';
 import 'core/network/push_messaging.dart';
+import 'core/theme/app_colors.dart';
 import 'core/router/app_router.dart';
 import 'core/theme/app_theme.dart';
 import 'core/widgets/global_error_boundary.dart';
@@ -16,11 +19,16 @@ import 'shared/providers/app_providers.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  final prefs = await SharedPreferences.getInstance();
+  locationDisclosureAcceptedAtLaunch = prefs.getBool(kLocationDisclosurePrefKey) == true;
   await PushMessaging.instance.init();
   SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
   SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
     statusBarColor: Colors.transparent,
-    statusBarIconBrightness: Brightness.dark,
+    statusBarIconBrightness: Brightness.light,
+    statusBarBrightness: Brightness.dark,
+    systemNavigationBarColor: AppColors.background,
+    systemNavigationBarIconBrightness: Brightness.light,
   ));
   runApp(const ProviderScope(child: RyvoDriverApp()));
 }

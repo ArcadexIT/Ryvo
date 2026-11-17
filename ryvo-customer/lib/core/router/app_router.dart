@@ -18,6 +18,7 @@ import '../../features/onboarding/presentation/pages/onboarding_page.dart';
 import '../../features/onboarding/presentation/pages/splash_page.dart';
 import '../../features/tracking/presentation/pages/rate_driver_page.dart';
 import '../../features/profile/presentation/pages/appearance_page.dart';
+import '../../features/profile/presentation/pages/delete_account_page.dart';
 import '../../features/profile/presentation/pages/edit_profile_page.dart';
 import '../../features/profile/presentation/pages/payment_methods_page.dart';
 import '../../features/profile/presentation/pages/profile_page.dart';
@@ -132,6 +133,11 @@ final routerProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(path: '/top-up', builder: (_, __) => const TopUpPage()),
       GoRoute(
+        path: '/profile/delete-account',
+        pageBuilder: (_, state) =>
+            _fullscreenPage(state, const DeleteAccountPage()),
+      ),
+      GoRoute(
         path: '/profile/edit',
         pageBuilder: (_, state) =>
             _fullscreenPage(state, const EditProfilePage()),
@@ -200,6 +206,8 @@ final routerProvider = Provider<GoRouter>((ref) {
           state,
           CreateSupportTicketPage(
             initialCategory: state.uri.queryParameters['category'],
+            initialSubject: state.uri.queryParameters['subject'],
+            initialMessage: state.uri.queryParameters['message'],
             jobId: state.uri.queryParameters['jobId'],
           ),
         ),

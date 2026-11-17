@@ -1,6 +1,9 @@
 # macOS
 .DS_Store
 
+# Firebase CLI debug output
+firebase-debug.log
+
 # Local whitelabel config. Copy scripts/whitelabel.env.example.
 scripts/whitelabel.env
 

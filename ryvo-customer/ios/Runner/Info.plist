@@ -15,7 +15,7 @@
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>
-	<string>ryvo_customer</string>
+	<string>Ryvo</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
@@ -39,16 +39,18 @@
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
 	<key>GMSApiKey</key>
 	<string>AIzaSyD-nDbyA917YSx-Y_jKynqK7rqx54ticec</string>
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>NSCameraUsageDescription</key>
-	<string>Ryvo needs camera access so you can take photos of your vehicle.</string>
+	<string>Ryvo uses the camera when you choose to photograph a vehicle for a booking.</string>
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
-	<string>Ryvo uses your location during an active service request so providers can reach you and you can track their arrival.</string>
+	<string>Ryvo uses your location to set your pickup, show nearby drivers, and keep your trip updated while a ride is active.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>Ryvo needs your location to find nearby providers and send help to your exact position.</string>
+	<string>Ryvo uses your location to set your pickup, show nearby drivers, and follow your trip.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
-	<string>Ryvo needs photo library access so you can add photos of your vehicle.</string>
+	<string>Ryvo uses your photo library when you attach a vehicle photo to a booking.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

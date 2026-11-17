@@ -1,21 +1,22 @@
-Ryvo gets you emergency car jump-start help when your battery dies. Request a nearby verified provider, track their arrival live, and pay securely in the app.
+Ryvo is the rider app for booking a car, sending a parcel, or offering your own fare. Set a pickup and drop-off, see the price before you confirm, and follow the driver on the map until you arrive.
 
-INSTANT JUMP START
-Open the app, confirm your location, and request help in a few taps. Nearby providers are matched so help can reach you quickly.
+BOOK A RIDE
+Choose a vehicle, confirm the route, and send the request. Nearby drivers can accept the trip or respond to your offer.
 
-VERIFIED & TRUSTED
-Providers complete identity and document checks so you know a real roadside professional is on the way.
+SEND A PARCEL
+Use the same flow to send a parcel. You get a driver, a live map, and a record of the job.
 
-LIVE TRACKING
-Follow your provider on the map with real-time updates from assigned through arrival and job completion. Chat in-app if you need to share details.
+LIVE TRIP
+Watch the driver move on the map, chat in the app, and share the trip with someone you trust. When the trip ends, rate the driver.
 
-SECURE PAYMENT
-Pay for your jump-start with Stripe in the app. Keep booking history and manage vehicles for faster next-time requests.
+PAY IN THE APP
+Pay by card through Stripe, with your Ryvo wallet, or in cash where the trip allows it. Ryvo does not store your full card number. Receipts and past trips stay in the app.
 
-WHO IT’S FOR
-Drivers and vehicle owners who need on-demand roadside jump-start assistance — not for service providers (use Ryvo Driver for that).
+YOUR ACCOUNT
+Save places you use often, manage payment methods, and reach in-app support if a trip needs help. You can request account deletion from Profile.
 
-SUPPORT & PRIVACY
+Ryvo is for riders aged 18 and over, where the service operates. Drivers use the separate Ryvo Driver app.
+
 Privacy Policy: https://ryvo.arcadexit.com/privacy-policy/
-Contact: enquiries@ryvo.arcadexit.com
-Ryvo Ltd — 128 City Road, London, United Kingdom, EC1V 2NX
+Support: enquiries@ryvo.arcadexit.com
+Ryvo Ltd, 128 City Road, London, United Kingdom, EC1V 2NX

@@ -102,8 +102,8 @@ class LocationRemoteDataSource {
           accuracy: accuracy,
           distanceFilter: distanceFilter,
           foregroundNotificationConfig: const ForegroundNotificationConfig(
-            notificationText: 'Ryvo is tracking your location for the active trip',
-            notificationTitle: 'Ryvo Driver Active',
+            notificationText: 'Sharing your location while you are online for ride matching',
+            notificationTitle: 'Ryvo Driver is online',
             enableWakeLock: true,
           ),
         );

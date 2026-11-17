@@ -16,7 +16,9 @@ import '../../features/job/data/repositories/job_repository_impl.dart';
 import '../../features/job/domain/repositories/i_job_repository.dart';
 import '../../features/kyc/data/repositories/kyc_repository_impl.dart';
 import '../../features/kyc/domain/repositories/i_kyc_repository.dart';
+import '../../core/location/location_disclosure.dart';
 import '../../features/location/data/repositories/location_repository_impl.dart';
+import '../../features/location/domain/entities/location_entity.dart';
 import '../../features/location/domain/repositories/i_location_repository.dart';
 import '../../features/wallet/data/repositories/wallet_repository_impl.dart';
 import '../../features/wallet/domain/repositories/i_wallet_repository.dart';
@@ -85,7 +87,12 @@ final authNotifierProvider = AsyncNotifierProvider<AuthNotifier, AuthState>(Auth
 final kycNotifierProvider = AsyncNotifierProvider<KycNotifier, KycUiState>(KycNotifier.new);
 final availabilityNotifierProvider = NotifierProvider<AvailabilityNotifier, bool>(AvailabilityNotifier.new);
 final jobNotifierProvider = AsyncNotifierProvider<JobNotifier, JobUiState>(JobNotifier.new);
-final locationStreamProvider = StreamProvider((ref) => ref.read(locationRepositoryProvider).watchCurrentLocation());
+final locationStreamProvider = StreamProvider<LocationEntity>((ref) {
+  if (!ref.watch(locationUpdatesEnabledProvider)) {
+    return const Stream<LocationEntity>.empty();
+  }
+  return ref.read(locationRepositoryProvider).watchCurrentLocation();
+});
 final earningsNotifierProvider = AsyncNotifierProvider<EarningsNotifier, EarningsUiState>(EarningsNotifier.new);
 final walletNotifierProvider = AsyncNotifierProvider<WalletNotifier, WalletUiState>(WalletNotifier.new);
 final chatNotifierProvider = AsyncNotifierProvider.family<ChatNotifier, ChatUiState, String>(ChatNotifier.new);
