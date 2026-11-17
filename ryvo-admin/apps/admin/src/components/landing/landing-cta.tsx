@@ -17,7 +17,7 @@ export function LandingCta() {
             </h2>
             <p className="mt-4 max-w-md text-base leading-relaxed text-white/65">
               Get the rider app to request a trip, or the driver app to accept offers —
-              available on the App Store and Google Play.
+              available on TestFlight and Google Play.
             </p>
             <DualAudienceStoreBadges className="mt-8" tone="light" />
           </div>

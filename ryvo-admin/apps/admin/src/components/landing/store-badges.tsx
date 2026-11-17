@@ -39,8 +39,16 @@ export function StoreBadge({
   tone = 'dark',
 }: StoreBadgeProps) {
   const isApple = store === 'appStore';
+  const isTestFlight = isApple && href.includes('testflight.apple.com');
   const isLight = tone === 'light';
   const isExternal = href.startsWith('http');
+  const storeName = isTestFlight ? 'TestFlight' : isApple ? 'App Store' : 'Google Play';
+  const eyebrow = isTestFlight ? 'Join the beta on' : isApple ? 'Download on the' : 'GET IT ON';
+  const ariaLabel = isTestFlight
+    ? 'Join the TestFlight beta'
+    : isApple
+      ? 'Download on the App Store'
+      : 'Get it on Google Play';
 
   return (
     <a
@@ -54,7 +62,7 @@ export function StoreBadge({
           : '!bg-[#0b1b33] !text-white hover:!bg-[#1a2d4a]',
         className,
       )}
-      aria-label={isApple ? 'Download on the App Store' : 'Get it on Google Play'}
+      aria-label={ariaLabel}
     >
       {isApple ? (
         <AppleLogo className="h-7 w-7 shrink-0" />
@@ -68,7 +76,7 @@ export function StoreBadge({
             isLight ? '!text-[#0b1b33]/70' : '!text-white/80',
           )}
         >
-          {isApple ? 'Download on the' : 'GET IT ON'}
+          {eyebrow}
         </span>
         <span
           className={cn(
@@ -76,7 +84,7 @@ export function StoreBadge({
             isLight ? '!text-[#0b1b33]' : '!text-white',
           )}
         >
-          {isApple ? 'App Store' : 'Google Play'}
+          {storeName}
         </span>
       </span>
     </a>
@@ -116,7 +124,7 @@ export function DualAudienceStoreBadges({ className, tone = 'dark' }: DualAudien
     <div className={cn('flex flex-col gap-5', className)}>
       <div>
         <p className={cn('mb-2.5 text-sm font-semibold tracking-wide', onDark ? 'text-[#fbf8f4]/80' : 'landing-text-navy')}>
-          Customer app
+          Rider app
         </p>
         <StoreBadgeRow audience="customer" tone={tone} />
       </div>

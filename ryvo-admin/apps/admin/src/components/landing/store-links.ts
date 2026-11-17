@@ -1,13 +1,11 @@
-import { landingSection } from './paths';
-
-/** App Store listings are not live yet — those badges still scroll to the download section. */
+/** Live store listings for the rider (customer) and driver apps. iOS is on TestFlight. */
 export const STORE_LINKS = {
   customer: {
-    appStore: landingSection('download'),
-    playStore: 'https://play.google.com/store/apps/details?id=com.ryvo.customer',
+    appStore: 'https://testflight.apple.com/join/BM9kTUdh',
+    playStore: 'https://play.google.com/store/apps/details?id=com.arcadexit.ryvo.customer',
   },
   provider: {
-    appStore: landingSection('download'),
-    playStore: 'https://play.google.com/store/apps/details?id=com.ryvo.driver',
+    appStore: 'https://testflight.apple.com/join/qNtPtn74',
+    playStore: 'https://play.google.com/store/apps/details?id=com.arcadexit.ryvo.driver',
   },
 } as const;
