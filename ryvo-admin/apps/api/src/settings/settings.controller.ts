@@ -23,6 +23,13 @@ export class SettingsController {
     return successResponse(await this.settings.getAll());
   }
 
+  /** Full browser key for the admin live map only. The settings list never includes it. */
+  @Get('map-key')
+  async mapKey() {
+    const value = await this.settings.get('map_api_key');
+    return successResponse(typeof value === 'string' ? value.trim() : '');
+  }
+
   @Patch(':key')
   async update(
     @Param('key') key: string,
@@ -37,10 +44,10 @@ export class SettingsController {
         action: 'update_setting',
         entityType: 'platform_setting',
         entityId: key,
-        oldValues: { value: old },
-        newValues: { value },
+        oldValues: { value: this.settings.redact(key, old) },
+        newValues: { value: this.settings.redact(key, value) },
       });
     }
-    return successResponse(result);
+    return successResponse({ ...result, value: this.settings.redact(key, result.value) });
   }
 }

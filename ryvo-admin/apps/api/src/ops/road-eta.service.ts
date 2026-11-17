@@ -64,10 +64,11 @@ export class RoadEtaService {
   }
 
   private async apiKey() {
+    // Server calls need an IP-restricted key. The settings key is the browser key.
+    const fromEnv = this.config.get<string>('GOOGLE_MAPS_API_KEY')?.trim() ?? '';
+    if (fromEnv) return fromEnv;
     const stored = await this.settings.get(PLATFORM_SETTINGS_KEYS.MAP_API_KEY);
-    const fromSettings = typeof stored === 'string' ? stored.trim() : '';
-    if (fromSettings) return fromSettings;
-    return this.config.get<string>('GOOGLE_MAPS_API_KEY')?.trim() ?? '';
+    return typeof stored === 'string' ? stored.trim() : '';
   }
 
   private async googleMatrix(legs: DriveLeg[]) {

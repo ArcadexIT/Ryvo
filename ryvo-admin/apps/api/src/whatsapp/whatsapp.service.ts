@@ -307,8 +307,9 @@ export class WhatsAppService {
   }
 
   private async geocode(query: string): Promise<{ address: string; lat: number; lng: number } | null> {
-    const key = await this.settings.get('map_api_key');
-    const apiKey = typeof key === 'string' && key.trim() ? key.trim() : this.config.get<string>('GOOGLE_MAPS_API_KEY') ?? '';
+    const fromEnv = this.config.get<string>('GOOGLE_MAPS_API_KEY')?.trim() ?? '';
+    const key = fromEnv || (await this.settings.get('map_api_key'));
+    const apiKey = typeof key === 'string' ? key.trim() : '';
     if (!apiKey) {
       return { address: query, lat: 52.4862, lng: -1.8904 };
     }

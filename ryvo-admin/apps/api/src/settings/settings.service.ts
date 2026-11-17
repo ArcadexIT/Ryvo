@@ -20,7 +20,27 @@ export class SettingsService {
   }
 
   async getAll() {
-    return this.prisma.platformSetting.findMany();
+    const rows = await this.prisma.platformSetting.findMany();
+    return rows.map((row) => ({ ...row, value: this.redact(row.key, row.value) }));
+  }
+
+  /** Keys that must never be sent back to the browser. */
+  private isSecret(key: string) {
+    return (
+      key === PLATFORM_SETTINGS_KEYS.MAP_API_KEY ||
+      key === PLATFORM_SETTINGS_KEYS.STRIPE_PUBLISHABLE_KEY ||
+      key === PLATFORM_SETTINGS_KEYS.STRIPE_SECRET_KEY ||
+      key === PLATFORM_SETTINGS_KEYS.VEHICLE_LOOKUP_API_KEY
+    );
+  }
+
+  /** Last four characters only. The settings page can show that a key is saved. */
+  redact(key: string, value: unknown): unknown {
+    if (!this.isSecret(key) || typeof value !== 'string') return value;
+    const raw = value.trim();
+    if (!raw || raw.includes('•')) return raw;
+    const prefix = raw.match(/^(?:pk|sk)_(?:test|live)_/)?.[0] ?? '';
+    return `${prefix}••••${raw.slice(-4)}`;
   }
 
   async set(key: string, value: unknown, updatedBy?: string) {
@@ -31,11 +51,37 @@ export class SettingsService {
       }
       value = code;
     }
+    if (this.isSecret(key) && typeof value === 'string' && value.includes('•')) {
+      throw new BadRequestException('Paste the full key. The saved key is not shown again.');
+    }
+    if (
+      key === PLATFORM_SETTINGS_KEYS.STRIPE_SECRET_KEY &&
+      typeof value === 'string' &&
+      value.trim()
+    ) {
+      const publishable = await this.get(PLATFORM_SETTINGS_KEYS.STRIPE_PUBLISHABLE_KEY);
+      if (typeof publishable === 'string' && publishable.trim() && !this.sameStripeAccount(publishable, value)) {
+        throw new BadRequestException(
+          'That secret key is from a different Stripe account or mode than the publishable key.',
+        );
+      }
+    }
     return this.prisma.platformSetting.upsert({
       where: { key },
       update: { value: value as object, updatedBy: updatedBy ?? null },
       create: { key, value: value as object, updatedBy },
     });
+  }
+
+  private sameStripeAccount(publishable: string, secret: string) {
+    const accountKey = (key: string) => {
+      const match = key.trim().match(/^(?:pk|sk|rk)_(test|live)_([A-Za-z0-9]{8,})/);
+      if (!match) return null;
+      return `${match[1]}:${match[2].slice(0, 16)}`;
+    };
+    const left = accountKey(publishable);
+    const right = accountKey(secret);
+    return !!left && left === right;
   }
 
   private isTruthy(val: unknown, defaultValue = true): boolean {
