@@ -6,7 +6,7 @@
 	<string>production</string>
 	<key>com.apple.developer.in-app-payments</key>
 	<array>
-		<string>merchant.ryvo.arcadexit.com</string>
+		<string>merchant.xxxxxxxx</string>
 	</array>
 </dict>
 </plist>

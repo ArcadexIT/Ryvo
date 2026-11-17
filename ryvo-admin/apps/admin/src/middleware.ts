@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-const MARKETING_HOSTS = new Set(['ryvo.arcadexit.com', 'www.ryvo.arcadexit.com']);
-const ADMIN_HOST = 'https://ryvo.arcadexit.com';
+const MARKETING_HOSTS = new Set(['xxxxxxxx', 'www.xxxxxxxx']);
+const ADMIN_HOST = 'https://xxxxxxxx';
 // Routing hint only. The real session stays in localStorage; AuthGuard still checks it.
 const ADMIN_SESSION_COOKIE = 'ryvo_admin_session';
 
@@ -45,7 +45,7 @@ export function middleware(request: NextRequest) {
 
   // www has no certificate. Keep login on the apex, which is this same app.
   if (
-    host !== 'ryvo.arcadexit.com' &&
+    host !== 'xxxxxxxx' &&
     (pathname === '/login' || pathname.startsWith('/login/'))
   ) {
     return NextResponse.redirect(new URL(pathname + request.nextUrl.search, ADMIN_HOST));

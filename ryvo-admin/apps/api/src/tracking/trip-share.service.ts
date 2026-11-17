@@ -228,7 +228,7 @@ export class TripShareService {
 
   private publicUrl(token: string) {
     const base = (
-      this.config.get<string>('PUBLIC_WEB_URL') ?? 'https://ryvo.arcadexit.com'
+      this.config.get<string>('PUBLIC_WEB_URL') ?? 'https://xxxxxxxx'
     ).replace(/\/$/, '');
     return `${base}/track/${token}`;
   }

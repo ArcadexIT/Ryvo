@@ -47,7 +47,7 @@ class _StripeOnboardingPageState extends State<StripeOnboardingPage> {
   /// True when Stripe finished onboarding, false when the link expired.
   bool? _handoff(String url) {
     final uri = Uri.tryParse(url);
-    if (uri == null || uri.host != 'ryvo.arcadexit.com') return null;
+    if (uri == null || uri.host != 'xxxxxxxx') return null;
     if (uri.path == '/stripe/return' || uri.path.startsWith('/stripe/return/')) return true;
     if (uri.path == '/stripe/refresh' || uri.path.startsWith('/stripe/refresh/')) return false;
     if (uri.scheme == 'ryvodriver') return true;

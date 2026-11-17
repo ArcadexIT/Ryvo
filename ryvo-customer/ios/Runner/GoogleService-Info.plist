@@ -3,17 +3,17 @@
 <plist version="1.0">
 <dict>
 	<key>API_KEY</key>
-	<string>AIzaSyDAfLJ5b9H9kf1_ugfI5J6T2TwR2e3pd7s</string>
+	<string>xxxxxxxx</string>
 	<key>GCM_SENDER_ID</key>
-	<string>764078089873</string>
+	<string>xxxxxxxx</string>
 	<key>PLIST_VERSION</key>
 	<string>1</string>
 	<key>BUNDLE_ID</key>
 	<string>com.ryvo.customer</string>
 	<key>PROJECT_ID</key>
-	<string>ryvo-7b28a</string>
+	<string>xxxxxxxx</string>
 	<key>STORAGE_BUCKET</key>
-	<string>ryvo-7b28a.firebasestorage.app</string>
+	<string>xxxxxxxx.firebasestorage.app</string>
 	<key>IS_ADS_ENABLED</key>
 	<false></false>
 	<key>IS_ANALYTICS_ENABLED</key>
@@ -25,6 +25,6 @@
 	<key>IS_SIGNIN_ENABLED</key>
 	<true></true>
 	<key>GOOGLE_APP_ID</key>
-	<string>1:764078089873:ios:7dcaffa52c6feac370c130</string>
+	<string>xxxxxxxx</string>
 </dict>
 </plist>

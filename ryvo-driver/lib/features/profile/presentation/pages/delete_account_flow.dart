@@ -82,7 +82,7 @@ Future<void> confirmDeleteDriverAccount(BuildContext context, WidgetRef ref) asy
       content: Text(
         removedOnServer
             ? 'Your Ryvo Driver account has been deleted. Trip and payout records may be kept only where the law requires it.'
-            : 'Your deletion request was sent. Ryvo will close this account and delete your personal data, usually within 30 days. Trip and payout records may be kept where UK tax, safety, or fraud law requires it. You can also email enquiries@ryvo.arcadexit.com.',
+            : 'Your deletion request was sent. Ryvo will close this account and delete your personal data, usually within 30 days. Trip and payout records may be kept where UK tax, safety, or fraud law requires it. You can also email enquiries@xxxxxxxx.',
         style: const TextStyle(color: AppColors.textSecondary, height: 1.4),
       ),
       actions: [
@@ -102,7 +102,7 @@ Future<void> confirmDeleteDriverAccount(BuildContext context, WidgetRef ref) asy
 String _dioMessage(DioException e) {
   final data = e.response?.data;
   if (data is Map && data['message'] != null) return data['message'].toString();
-  return 'Could not delete the account. Try again, or email enquiries@ryvo.arcadexit.com.';
+  return 'Could not delete the account. Try again, or email enquiries@xxxxxxxx.';
 }
 
 class _DeleteAccountDialog extends StatefulWidget {

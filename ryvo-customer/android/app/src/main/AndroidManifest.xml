@@ -29,7 +29,7 @@
         <!-- Google Maps API Key — must be a direct child of <application> -->
         <meta-data
             android:name="com.google.android.geo.API_KEY"
-            android:value="AIzaSyD-nDbyA917YSx-Y_jKynqK7rqx54ticec"/>
+            android:value="xxxxxxxx"/>
 
         <meta-data
             android:name="com.google.firebase.messaging.default_notification_channel_id"

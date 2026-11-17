@@ -34,11 +34,16 @@ export class AuthService {
   ) {}
 
   private get accessSecret() {
-    return this.config.get<string>('JWT_ACCESS_SECRET') ?? 'ryvo-access-secret-change-me';
+    return this.config.get<string>('JWT_ACCESS_SECRET') ?? 'xxxxxxxx';
+  }
+
+  /** The fixed code 123456 is for local development only. Production must use the SMS code. */
+  private get allowDemoOtp() {
+    return (this.config.get<string>('NODE_ENV') ?? 'development') !== 'production';
   }
 
   private get refreshSecret() {
-    return this.config.get<string>('JWT_REFRESH_SECRET') ?? 'ryvo-refresh-secret-change-me';
+    return this.config.get<string>('JWT_REFRESH_SECRET') ?? 'xxxxxxxx';
   }
 
   async login(phone: string, password: string, appRole?: UserRole.CUSTOMER | UserRole.PROVIDER) {
@@ -234,6 +239,7 @@ export class AuthService {
   ) {
     phone = normalizePhone(phone);
     const demo =
+      this.allowDemoOtp &&
       (appRole === UserRole.PROVIDER || appRole === UserRole.CUSTOMER) &&
       code === DEMO_DRIVER_OTP;
     const otp = await this.prisma.otpVerification.findFirst({
@@ -322,7 +328,7 @@ export class AuthService {
     options?: { allowDemoCode?: boolean },
   ) {
     phone = normalizePhone(phone);
-    const demo = options?.allowDemoCode === true && code === DEMO_DRIVER_OTP;
+    const demo = this.allowDemoOtp && options?.allowDemoCode === true && code === DEMO_DRIVER_OTP;
     const otp = await this.prisma.otpVerification.findFirst({
       where: {
         phone,

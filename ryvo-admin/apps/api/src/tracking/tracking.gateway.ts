@@ -61,7 +61,7 @@ export class TrackingGateway implements OnGatewayConnection, OnGatewayInit {
     try {
       const secret =
         this.config.get<string>('JWT_ACCESS_SECRET') ??
-        'ryvo-access-secret-change-me';
+        'xxxxxxxx';
       const payload = this.jwt.verify(token, { secret }) as {
         sub: string;
         role: string;

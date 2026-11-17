@@ -41,48 +41,48 @@ class DefaultFirebaseOptions {
   }
 
   static const FirebaseOptions web = FirebaseOptions(
-    apiKey: 'AIzaSyDrKiGnX4HACprjhriAhKwzyqBF0pIeIoQ',
-    appId: '1:764078089873:web:e13eff447d21387970c130',
-    messagingSenderId: '764078089873',
-    projectId: 'ryvo-7b28a',
-    authDomain: 'ryvo-7b28a.firebaseapp.com',
-    storageBucket: 'ryvo-7b28a.firebasestorage.app',
-    measurementId: 'G-KLQNBL1ZJN',
+    apiKey: 'xxxxxxxx',
+    appId: 'xxxxxxxx',
+    messagingSenderId: 'xxxxxxxx',
+    projectId: 'xxxxxxxx',
+    authDomain: 'xxxxxxxx.firebaseapp.com',
+    storageBucket: 'xxxxxxxx.firebasestorage.app',
+    measurementId: 'xxxxxxxx',
   );
 
   static const FirebaseOptions android = FirebaseOptions(
-    apiKey: 'AIzaSyCxb6LNMgmVEcfSV-H3sx53-rUUMMMORGA',
-    appId: '1:764078089873:android:418f4826685b0a0f70c130',
-    messagingSenderId: '764078089873',
-    projectId: 'ryvo-7b28a',
-    storageBucket: 'ryvo-7b28a.firebasestorage.app',
+    apiKey: 'xxxxxxxx',
+    appId: 'xxxxxxxx',
+    messagingSenderId: 'xxxxxxxx',
+    projectId: 'xxxxxxxx',
+    storageBucket: 'xxxxxxxx.firebasestorage.app',
   );
 
   static const FirebaseOptions ios = FirebaseOptions(
-    apiKey: 'AIzaSyDAfLJ5b9H9kf1_ugfI5J6T2TwR2e3pd7s',
-    appId: '1:764078089873:ios:8ba4f17fa9fa704f70c130',
-    messagingSenderId: '764078089873',
-    projectId: 'ryvo-7b28a',
-    storageBucket: 'ryvo-7b28a.firebasestorage.app',
+    apiKey: 'xxxxxxxx',
+    appId: 'xxxxxxxx',
+    messagingSenderId: 'xxxxxxxx',
+    projectId: 'xxxxxxxx',
+    storageBucket: 'xxxxxxxx.firebasestorage.app',
     iosBundleId: 'com.ryvo.driver',
   );
 
   static const FirebaseOptions macos = FirebaseOptions(
-    apiKey: 'AIzaSyDAfLJ5b9H9kf1_ugfI5J6T2TwR2e3pd7s',
-    appId: '1:764078089873:ios:8ba4f17fa9fa704f70c130',
-    messagingSenderId: '764078089873',
-    projectId: 'ryvo-7b28a',
-    storageBucket: 'ryvo-7b28a.firebasestorage.app',
+    apiKey: 'xxxxxxxx',
+    appId: 'xxxxxxxx',
+    messagingSenderId: 'xxxxxxxx',
+    projectId: 'xxxxxxxx',
+    storageBucket: 'xxxxxxxx.firebasestorage.app',
     iosBundleId: 'com.ryvo.driver',
   );
 
   static const FirebaseOptions windows = FirebaseOptions(
-    apiKey: 'AIzaSyDrKiGnX4HACprjhriAhKwzyqBF0pIeIoQ',
-    appId: '1:764078089873:web:2996b43e487cc7a870c130',
-    messagingSenderId: '764078089873',
-    projectId: 'ryvo-7b28a',
-    authDomain: 'ryvo-7b28a.firebaseapp.com',
-    storageBucket: 'ryvo-7b28a.firebasestorage.app',
-    measurementId: 'G-ZVS4H6DHS7',
+    apiKey: 'xxxxxxxx',
+    appId: 'xxxxxxxx',
+    messagingSenderId: 'xxxxxxxx',
+    projectId: 'xxxxxxxx',
+    authDomain: 'xxxxxxxx.firebaseapp.com',
+    storageBucket: 'xxxxxxxx.firebasestorage.app',
+    measurementId: 'xxxxxxxx',
   );
 }

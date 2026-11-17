@@ -69,7 +69,7 @@ Ryvo Ltd
 London
 United Kingdom
 EC1V 2NX
-Email: enquiries@ryvo.arcadexit.com`,
+Email: enquiries@xxxxxxxx`,
   },
   privacy: {
     title: 'Privacy Policy',
@@ -172,6 +172,6 @@ Ryvo Ltd
 London
 United Kingdom
 EC1V 2NX
-Email: enquiries@ryvo.arcadexit.com`,
+Email: enquiries@xxxxxxxx`,
   },
 };

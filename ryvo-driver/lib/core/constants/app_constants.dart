@@ -12,7 +12,7 @@ class AppConstants {
   static String get apiBaseUrl {
     const override = String.fromEnvironment('API_BASE_URL');
     if (override.isNotEmpty) return override;
-    return 'https://ryvo.arcadexit.com/api/v1';
+    return 'https://xxxxxxxx/api/v1';
   }
 
   /// Socket.IO origin (no `/api/v1`). Gateway namespace is `/tracking`.
@@ -29,7 +29,7 @@ class AppConstants {
   /// Same Maps key as the Android manifest. Used for driving directions.
   static const googleMapsApiKey = String.fromEnvironment(
     'GOOGLE_MAPS_API_KEY',
-    defaultValue: 'AIzaSyD-nDbyA917YSx-Y_jKynqK7rqx54ticec',
+    defaultValue: 'xxxxxxxx',
   );
 
   static const tokenKey = 'auth_token';

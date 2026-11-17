@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { Bug, LifeBuoy, Mail, Trash2 } from 'lucide-react';
 
-const SUPPORT_EMAIL = 'enquiries@ryvo.arcadexit.com';
+const SUPPORT_EMAIL = 'enquiries@xxxxxxxx';
 
 type TopicId = 'support' | 'bug' | 'account-deletion';
 

@@ -1,6 +1,6 @@
 /**
  * Landing in-page section links use hash anchors so they work on both
- * https://ryvo.arcadexit.com/ and https://ryvo.arcadexit.com/landing-page.
+ * https://xxxxxxxx/ and https://xxxxxxxx/landing-page.
  * Privacy uses a clean path rewritten by middleware on every host.
  */
 export const LANDING_HOME = '#home';

@@ -116,7 +116,7 @@ class _DeleteAccountPageState extends ConsumerState<DeleteAccountPage> {
           ),
           const SizedBox(height: 12),
           Text(
-            'Spend any wallet balance before you continue. A balance left on the account is closed with it. You can also email enquiries@ryvo.arcadexit.com from the address on this account if you no longer have the app.',
+            'Spend any wallet balance before you continue. A balance left on the account is closed with it. You can also email enquiries@xxxxxxxx from the address on this account if you no longer have the app.',
             style: RyvoTypography.style(
               fontSize: 15,
               fontWeight: FontWeight.w400,

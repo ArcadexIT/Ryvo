@@ -17,7 +17,7 @@ const FEATURES = [
   { icon: ShieldCheck, text: 'Enterprise-grade security & audit trails' },
 ];
 
-const ADMIN_PHONE = '01754713136';
+const ADMIN_PHONE = '10000000000';
 const ADMIN_PASSWORD = '123456';
 
 export default function LoginPage() {
@@ -122,7 +122,7 @@ export default function LoginPage() {
               <Input
                 id="phone"
                 type="tel"
-                placeholder="01754713136"
+                placeholder="10000000000"
                 value={phone}
                 onChange={(e) => setPhone(e.target.value)}
                 leading={<Phone strokeWidth={1.75} />}

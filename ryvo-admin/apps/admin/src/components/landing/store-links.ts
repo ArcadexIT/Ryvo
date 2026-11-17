@@ -1,11 +1,11 @@
-/** Live store listings for the rider (customer) and driver apps. iOS is on TestFlight. */
+/** Store listings. Replace xxxxxxxx with your App Store and Play Store URLs. */
 export const STORE_LINKS = {
   customer: {
-    appStore: 'https://testflight.apple.com/join/BM9kTUdh',
-    playStore: 'https://play.google.com/store/apps/details?id=com.arcadexit.ryvo.customer',
+    appStore: 'https://xxxxxxxx',
+    playStore: 'https://xxxxxxxx',
   },
   provider: {
-    appStore: 'https://testflight.apple.com/join/qNtPtn74',
-    playStore: 'https://play.google.com/store/apps/details?id=com.arcadexit.ryvo.driver',
+    appStore: 'https://xxxxxxxx',
+    playStore: 'https://xxxxxxxx',
   },
 } as const;

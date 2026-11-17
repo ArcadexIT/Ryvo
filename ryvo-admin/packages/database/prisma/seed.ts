@@ -300,9 +300,9 @@ async function main() {
     });
   }
 
-  // Super admin
-  const adminPhone = '+01754713136';
-  const adminPassword = '123456';
+  // Super admin. The server installer passes ADMIN_PHONE. Local seed keeps the demo phone.
+  const adminPhone = process.env.ADMIN_PHONE?.trim() || '+10000000000';
+  const adminPassword = process.env.ADMIN_PASSWORD?.trim() || '123456';
   const passwordHash = await bcrypt.hash(adminPassword, 12);
   const adminUser = await prisma.user.upsert({
     where: { phone: adminPhone },

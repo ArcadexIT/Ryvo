@@ -4,7 +4,7 @@ services:
     container_name: ryvo-postgres
     environment:
       POSTGRES_USER: ryvo
-      POSTGRES_PASSWORD: ryvo_secret
+      POSTGRES_PASSWORD: xxxxxxxx
       POSTGRES_DB: ryvo
     ports:
       - "5433:5432"

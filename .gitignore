@@ -1,6 +1,16 @@
 # macOS
 .DS_Store
 
+# CodeCanyon upload zip
+dist/
+
+# Build output. Buyers generate this locally.
+**/build/
+**/.dart_tool/
+**/Pods/
+**/.gradle/
+**/.next/
+
 # Firebase CLI debug output
 firebase-debug.log
 

@@ -1,0 +1,680 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Ryvo Documentation</title>
+  <style>
+    :root {
+      --ink: #090a0d;
+      --text: #1c2430;
+      --muted: #5c6b7e;
+      --line: #e2e8f0;
+      --paper: #f6f7f9;
+      --card: #ffffff;
+      --accent: #05944f;
+      --accent-soft: #e8f8ef;
+      --warn: #9a6700;
+      --warn-soft: #fff6de;
+      --code: #12151b;
+      --sidebar: 272px;
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      color: var(--text);
+      background: var(--paper);
+      font: 16px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    }
+    a { color: var(--accent); }
+    code, .path {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 0.9em;
+    }
+    .layout { display: flex; min-height: 100vh; }
+    nav {
+      position: sticky;
+      top: 0;
+      width: var(--sidebar);
+      height: 100vh;
+      overflow: auto;
+      flex-shrink: 0;
+      background: var(--ink);
+      color: #d5dbe3;
+      padding: 28px 18px 40px;
+    }
+    nav .brand { color: #fff; font-weight: 700; letter-spacing: -0.03em; font-size: 22px; }
+    nav .ver { margin: 4px 0 22px; color: #8b97a8; font-size: 13px; }
+    nav a {
+      display: block;
+      color: #c5ced8;
+      text-decoration: none;
+      padding: 6px 10px;
+      border-radius: 8px;
+      font-size: 14px;
+    }
+    nav a:hover, nav a:focus { background: #1a1e26; color: #fff; }
+    nav .group {
+      margin: 16px 10px 6px;
+      color: #7d8b9c;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+    main { flex: 1; min-width: 0; padding: 40px 48px 80px; max-width: 920px; }
+    h1 { margin: 0 0 8px; font-size: 36px; letter-spacing: -0.04em; color: var(--ink); }
+    h2 {
+      margin: 56px 0 12px;
+      padding-top: 8px;
+      font-size: 26px;
+      letter-spacing: -0.03em;
+      color: var(--ink);
+    }
+    h3 { margin: 28px 0 8px; font-size: 18px; color: var(--ink); }
+    p { margin: 0 0 14px; }
+    .lede { font-size: 18px; color: var(--muted); max-width: 640px; }
+    ol.steps { padding-left: 22px; }
+    ol.steps li, ul li { margin: 0 0 8px; }
+    table { width: 100%; border-collapse: collapse; margin: 12px 0 20px; background: var(--card); }
+    th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--line); vertical-align: top; font-size: 14px; }
+    th { background: #f1f5f9; color: var(--ink); font-weight: 650; }
+    pre {
+      background: var(--code);
+      color: #e8eef5;
+      padding: 14px 16px;
+      border-radius: 10px;
+      overflow: auto;
+      font-size: 13px;
+      line-height: 1.5;
+    }
+    pre code { font-size: inherit; color: inherit; }
+    .callout {
+      border-radius: 10px;
+      padding: 12px 14px;
+      margin: 14px 0 18px;
+      background: var(--accent-soft);
+      border: 1px solid #b7ebcf;
+    }
+    .callout.warn { background: var(--warn-soft); border-color: #f0d48a; }
+    .callout strong { color: var(--ink); }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 4px 16px 8px;
+      margin: 12px 0 18px;
+    }
+    footer { margin-top: 48px; color: var(--muted); font-size: 14px; }
+    @media (max-width: 860px) {
+      .layout { display: block; }
+      nav { position: relative; width: auto; height: auto; }
+      main { padding: 28px 18px 64px; }
+    }
+    @media print {
+      nav { display: none; }
+      main { max-width: none; }
+      pre { white-space: pre-wrap; }
+    }
+  </style>
+</head>
+<body>
+  <div class="layout">
+    <nav>
+      <div class="brand">Ryvo</div>
+      <div class="ver">Documentation · v1.0.0</div>
+      <div class="group">Start</div>
+      <a href="#intro">Introduction</a>
+      <a href="#features">Features</a>
+      <a href="#requirements">Requirements</a>
+      <a href="#package">Package contents</a>
+      <div class="group">Install</div>
+      <a href="#server">Server installation</a>
+      <a href="#https">Public HTTPS</a>
+      <a href="#local">Local installation</a>
+      <a href="#login">First login</a>
+      <div class="group">Configure</div>
+      <a href="#admin">Admin panel</a>
+      <a href="#maps">Google Maps</a>
+      <a href="#firebase">Firebase push</a>
+      <a href="#stripe">Stripe</a>
+      <a href="#twilio">SMS and WhatsApp</a>
+      <a href="#uploads">File uploads</a>
+      <a href="#customer">Customer app</a>
+      <a href="#driver">Driver app</a>
+      <a href="#identity">App name and IDs</a>
+      <div class="group">Use</div>
+      <a href="#guide">Day-to-day use</a>
+      <a href="#update">Updating</a>
+      <a href="#faq">FAQ</a>
+      <a href="#changelog">Changelog</a>
+      <a href="#credits">Credits</a>
+      <a href="#license">License</a>
+      <a href="#support">Support</a>
+    </nav>
+    <main>
+      <h1>Ryvo</h1>
+      <p class="lede">Ride, bid, and parcel marketplace. This file is the installation and user guide for the customer app, the driver app, the API, and the admin panel.</p>
+      <p>Open this page in any browser. It does not need a server. Work from top to bottom the first time. After the server is up, use the configure sections for Maps, Firebase, Stripe, and the mobile builds.</p>
+
+      <div class="callout warn">
+        <strong>Before you go live.</strong> Every key in this download is the placeholder <code>xxxxxxxx</code>. Search the project for <code>xxxxxxxx</code> and replace each one with your own value: API URL, Maps, Stripe, Firebase, and database password. The project still builds with those placeholders. Change the admin password, and change the Android application id and iOS bundle id before the first store upload. The demo OTP <code>123456</code> works only when the API is not in production mode.
+      </div>
+
+      <h2 id="intro">Introduction</h2>
+      <p>Ryvo is one product in four parts:</p>
+      <table>
+        <thead><tr><th>Folder</th><th>What it is</th></tr></thead>
+        <tbody>
+          <tr><td><code>ryvo-customer</code></td><td>Flutter app for riders. Android and iOS.</td></tr>
+          <tr><td><code>ryvo-driver</code></td><td>Flutter app for drivers. Android and iOS.</td></tr>
+          <tr><td><code>ryvo-admin</code></td><td>NestJS API, Next.js admin panel, Prisma database.</td></tr>
+          <tr><td><code>scripts</code></td><td>Points both mobile apps at your API.</td></tr>
+        </tbody>
+      </table>
+      <p>Riders book a ride, offer a bid, or send a parcel. Drivers go online, accept the job, and get paid. Staff run the city from the admin panel: verification, dispatch, fares, wallets, and payouts. The same API serves the apps, the panel, and optional WhatsApp booking.</p>
+
+      <h2 id="features">Features</h2>
+      <h3>Customer app</h3>
+      <ul>
+        <li>Phone and password sign-in, registration, and password reset.</li>
+        <li>Ride, bid, and parcel on one map.</li>
+        <li>Fare shown before the rider confirms.</li>
+        <li>Live driver tracking, in-trip chat, and trip sharing.</li>
+        <li>Card (Stripe), wallet, and cash, each of which you can turn on or off.</li>
+        <li>Saved places, invoices, support tickets, ratings, and account deletion.</li>
+      </ul>
+      <h3>Driver app</h3>
+      <ul>
+        <li>Online and offline. Nearby requests show pickup, drop-off, and earning.</li>
+        <li>Accept or decline, mark arrival, run the trip, complete it.</li>
+        <li>Identity, licence, vehicle, and insurance upload. Riders only see approved drivers.</li>
+        <li>Earnings, bank account, Stripe payouts, and daily, weekly, or monthly plans.</li>
+        <li>Trip chat, support tickets, and account deletion.</li>
+      </ul>
+      <h3>Admin panel</h3>
+      <ul>
+        <li>Overview, live map, dispatch board, and trip detail.</li>
+        <li>Riders, drivers, document verification, and reviews.</li>
+        <li>Payments, wallets, earnings, payouts, and invoices.</li>
+        <li>Ride types, fare rules, promo codes, and driver plans.</li>
+        <li>Support tickets, broadcasts, banners, FAQs, and legal pages.</li>
+        <li>Currency, commission or subscription, surge, countries, staff roles, and audit log.</li>
+      </ul>
+
+      <h2 id="requirements">Requirements</h2>
+      <h3>Production server</h3>
+      <table>
+        <thead><tr><th>Item</th><th>Minimum</th></tr></thead>
+        <tbody>
+          <tr><td>System</td><td>Ubuntu 22.04 or 24.04, 64-bit</td></tr>
+          <tr><td>CPU and RAM</td><td>2 vCPU and 4 GB RAM. 2 GB can work if you add 2 GB of swap. The first Docker build needs the extra memory.</td></tr>
+          <tr><td>Disk</td><td>20 GB free</td></tr>
+          <tr><td>Software</td><td>Docker Engine and Docker Compose v2. The installer installs Docker if it is missing.</td></tr>
+          <tr><td>Network</td><td>A domain A record pointing at the server. Ports 22, 80, and 443 open.</td></tr>
+          <tr><td>Database</td><td>PostgreSQL 16 with PostGIS, and Redis 7. Both start inside Docker. You do not install them by hand.</td></tr>
+        </tbody>
+      </table>
+      <h3>Building the mobile apps</h3>
+      <table>
+        <thead><tr><th>Item</th><th>Version</th></tr></thead>
+        <tbody>
+          <tr><td>Flutter</td><td>Stable channel, Dart SDK 3.x (<code>&gt;=3.0.0 &lt;4.0.0</code>)</td></tr>
+          <tr><td>Android</td><td>Android Studio, JDK 17. minSdk 24, targetSdk 36.</td></tr>
+          <tr><td>iOS</td><td>macOS with Xcode 15 or newer.</td></tr>
+          <tr><td>Node.js</td><td>20 or newer, only if you run the API outside Docker.</td></tr>
+        </tbody>
+      </table>
+      <h3>Accounts you create</h3>
+      <p>Ryvo does not include these services. You create each account and paste your own keys.</p>
+      <ul>
+        <li>Google Cloud, for Maps SDK on Android, Maps SDK on iOS, Places, and Maps JavaScript.</li>
+        <li>Firebase, for Cloud Messaging. One project, two apps (customer and driver).</li>
+        <li>Stripe, for card payments and driver payouts.</li>
+        <li>Twilio, for SMS verification. WhatsApp is optional.</li>
+        <li>Amazon S3 or Cloudinary, for KYC photos and other uploads.</li>
+        <li>OpenAI, optional, for free-text WhatsApp booking.</li>
+      </ul>
+
+      <h2 id="package">Package contents</h2>
+      <pre><code>ryvo/
+├── documentation/index.html    this guide
+├── changelog.txt
+├── scripts/                    mobile app configuration
+├── ryvo-customer/              rider Flutter app
+├── ryvo-driver/                driver Flutter app
+└── ryvo-admin/
+    ├── apps/api/               NestJS API
+    ├── apps/admin/             Next.js admin
+    ├── packages/database/      Prisma schema and seed
+    └── docker/                 Postgres, Redis, API, admin, Caddy</code></pre>
+      <p>The package does not include <code>node_modules</code>, Flutter build folders, <code>.env</code> files, keystores, or the author’s Firebase project. You generate those during installation.</p>
+
+      <h2 id="server">Server installation</h2>
+      <p>Use this on a fresh Ubuntu server. It is the path most buyers should follow. Local installation is the next section, for development on your own computer.</p>
+      <ol class="steps">
+        <li>Point your domain’s A record at the server IP. Wait until it resolves.</li>
+        <li>SSH in as a user who can run <code>sudo</code>.</li>
+        <li>Install git if it is not there: <code>sudo apt-get update && sudo apt-get install -y git curl</code></li>
+        <li>Upload this project and enter the folder:
+          <pre><code>cd /opt
+sudo mkdir -p ryvo && sudo chown "$USER" ryvo
+# copy the project here, then:
+cd /opt/ryvo</code></pre>
+        </li>
+        <li>Run the installer:
+          <pre><code>bash ryvo-admin/docker/install.sh</code></pre>
+        </li>
+        <li>Answer the prompts. Press Enter to accept a default. Leave a payment or SMS field empty if you will add it later in the admin panel.
+          <table>
+            <thead><tr><th>Prompt</th><th>What to enter</th></tr></thead>
+            <tbody>
+              <tr><td>Public domain</td><td><code>example.com</code> with no <code>https://</code> and no path. Use <code>localhost</code> only for a private test.</td></tr>
+              <tr><td>Admin phone</td><td>Your phone in international form, such as <code>+447700900000</code>. This becomes the admin login.</td></tr>
+              <tr><td>Google Maps API key</td><td>A browser key with Maps JavaScript API enabled. Used by the live map.</td></tr>
+              <tr><td>Stripe secret and publishable keys</td><td>Both from the same Stripe account, both test or both live.</td></tr>
+              <tr><td>Twilio</td><td>Account SID, auth token, and the SMS from-number or Messaging Service SID.</td></tr>
+              <tr><td>WhatsApp from-number</td><td>Optional. Leave empty to skip.</td></tr>
+              <tr><td>OpenAI key</td><td>Optional. Leave empty to use keyword booking.</td></tr>
+              <tr><td>Postgres password</td><td>Accept the generated password unless you have a reason to type one.</td></tr>
+            </tbody>
+          </table>
+        </li>
+        <li>Wait. The first build compiles the API and the admin panel. On a 2 GB server this can take several minutes. The script then waits until <code>http://127.0.0.1:4180/api/v1/health</code> returns, and creates the admin user.</li>
+      </ol>
+      <div class="callout">
+        <strong>Where the site actually listens.</strong> Docker binds to <code>127.0.0.1:4180</code> on the server. It does not open ports 80 or 443 by itself. The next section publishes it with HTTPS. Until you do that, the panel is only reachable on the server itself.
+      </div>
+      <p>If the script stops with “The API did not become healthy”, read the log and run the installer again:</p>
+      <pre><code>docker compose -f ryvo-admin/docker/docker-compose.prod.yml logs --tail=80 api</code></pre>
+      <p>Run <code>install.sh</code> once on a new server. Running it again rewrites <code>apps/api/.env.production</code>. If an admin user already exists, the second run does not change that password.</p>
+
+      <h2 id="https">Public HTTPS</h2>
+      <p>Install Nginx on the host and proxy every request to port 4180. The sample file is <code>ryvo-admin/docker/host-nginx.conf.example</code>.</p>
+      <ol class="steps">
+        <li><code>sudo apt-get install -y nginx certbot python3-certbot-nginx</code></li>
+        <li>Copy the sample, replace <code>example.com</code> with your domain, and enable the site:
+          <pre><code>sudo cp ryvo-admin/docker/host-nginx.conf.example /etc/nginx/sites-available/ryvo
+sudo sed -i 's/example.com/your-domain.com/' /etc/nginx/sites-available/ryvo
+sudo ln -sf /etc/nginx/sites-available/ryvo /etc/nginx/sites-enabled/ryvo
+sudo rm -f /etc/nginx/sites-enabled/default
+sudo nginx -t && sudo systemctl reload nginx</code></pre>
+        </li>
+        <li>Issue the certificate: <code>sudo certbot --nginx -d your-domain.com</code></li>
+        <li>Open <code>https://your-domain.com</code>. You should see the admin login.</li>
+        <li>Open <code>https://your-domain.com/api/v1/health</code>. You should see <code>"status":"ok"</code>.</li>
+      </ol>
+      <p>Nginx must forward the <code>Upgrade</code> and <code>Connection</code> headers. The sample file already does. Without them the live map and trip tracking stay disconnected.</p>
+      <p>API base URL for the apps: <code>https://your-domain.com/api/v1</code></p>
+      <p>Socket URL for the apps: <code>https://your-domain.com</code></p>
+
+      <h2 id="local">Local installation</h2>
+      <p>Use this when you want to change the code on your computer. Production servers should use the installer above.</p>
+      <ol class="steps">
+        <li>Install Node.js 20+, Docker, and Flutter.</li>
+        <li>Start Postgres and Redis:
+          <pre><code>cd ryvo-admin/docker
+docker compose up -d</code></pre>
+          Postgres is published on port <strong>5433</strong>, so it does not collide with a Postgres you already have on 5432.
+        </li>
+        <li>Install JavaScript dependencies from <code>ryvo-admin</code>:
+          <pre><code>cd ../
+npm install</code></pre>
+        </li>
+        <li>Copy the env templates and leave the local defaults for a first run:
+          <pre><code>cp packages/database/.env.example packages/database/.env
+cp apps/api/.env.example apps/api/.env
+cp apps/admin/.env.example apps/admin/.env</code></pre>
+        </li>
+        <li>Create the database and the demo accounts:
+          <pre><code>npm run db:generate
+npm run db:push
+npm run db:seed</code></pre>
+        </li>
+        <li>Start the API and the admin panel in two terminals:
+          <pre><code>npm run dev --workspace=@ryvo/api
+npm run dev --workspace=@ryvo/admin</code></pre>
+        </li>
+      </ol>
+      <table>
+        <thead><tr><th>URL</th><th>Purpose</th></tr></thead>
+        <tbody>
+          <tr><td><code>http://localhost:3000</code></td><td>Admin panel</td></tr>
+          <tr><td><code>http://localhost:4000/api/docs</code></td><td>Swagger</td></tr>
+          <tr><td><code>http://localhost:4000/api/v1/health</code></td><td>Health check</td></tr>
+        </tbody>
+      </table>
+      <p>For a phone on the same Wi-Fi, the API URL cannot be <code>localhost</code>. Use the computer’s LAN IP. The Android emulator uses <code>http://10.0.2.2:4000/api/v1</code>.</p>
+
+      <h2 id="login">First login</h2>
+      <h3>Server</h3>
+      <p>Phone: the number you typed into the installer. Password: <code>123456</code>. Sign in at <code>https://your-domain.com</code>, then change the password from the admin profile before you share the URL.</p>
+      <h3>Local seed</h3>
+      <p><code>npm run db:seed</code> creates these accounts. Re-running the seed resets the super admin password to <code>123456</code> and resets platform settings to the defaults in <code>seed.ts</code>. Do that on a development database, not on a live one.</p>
+      <table>
+        <thead><tr><th>Role</th><th>Phone</th><th>Password</th></tr></thead>
+        <tbody>
+          <tr><td>Super admin</td><td><code>+10000000000</code></td><td><code>123456</code></td></tr>
+          <tr><td>Rider (US)</td><td><code>+12345678900</code></td><td><code>Customer@123</code></td></tr>
+          <tr><td>Rider (UK)</td><td><code>+447700900001</code></td><td><code>Customer@123</code></td></tr>
+          <tr><td>Driver (US)</td><td><code>+19876543210</code></td><td><code>Provider@123</code></td></tr>
+          <tr><td>Driver (UK)</td><td><code>+447700900002</code></td><td><code>Provider@123</code></td></tr>
+        </tbody>
+      </table>
+      <p>On a server, the installer creates the same demo riders and drivers the first time, and the admin phone is the one you entered rather than the local demo phone.</p>
+      <div class="callout warn">
+        <strong>Development OTP.</strong> While <code>NODE_ENV</code> is not <code>production</code>, riders and drivers can verify with the code <code>123456</code>. The Docker installer sets <code>NODE_ENV=production</code>, so a live server requires a real SMS code from Twilio. If SMS is not configured, registration on that server cannot finish.
+      </div>
+
+      <h2 id="admin">Admin panel</h2>
+      <p>Sign in with the admin phone and password. The sidebar is the map of the product.</p>
+      <table>
+        <thead><tr><th>Menu</th><th>Use it for</th></tr></thead>
+        <tbody>
+          <tr><td>Overview</td><td>Today’s trips, revenue, and counts.</td></tr>
+          <tr><td>Live map</td><td>Drivers and active trips. Needs the Maps key in Settings.</td></tr>
+          <tr><td>Dispatch</td><td>Jobs that need a driver. Assign one by hand if matching does not.</td></tr>
+          <tr><td>Trips</td><td>Open a trip, read the timeline, cancel, or replay tracking.</td></tr>
+          <tr><td>Riders</td><td>Search, open a profile, suspend, adjust a wallet.</td></tr>
+          <tr><td>Drivers</td><td>Status, force offline, commission.</td></tr>
+          <tr><td>Verification</td><td>Approve or reject identity, licence, vehicle, and insurance.</td></tr>
+          <tr><td>Reviews</td><td>Ratings left after trips.</td></tr>
+          <tr><td>Payments, Wallets, Earnings, Payouts, Invoices</td><td>Money in and money out. Approve a payout when a driver has withdrawn.</td></tr>
+          <tr><td>Ride types</td><td>Classes such as the standard car and the parcel bike. Set a price and turn a class on or off.</td></tr>
+          <tr><td>Fare rules</td><td>Base fare, distance, and time.</td></tr>
+          <tr><td>Promo codes</td><td>Discounts riders enter at checkout.</td></tr>
+          <tr><td>Driver plans</td><td>Daily, weekly, and monthly access. Use these when monetization is subscription.</td></tr>
+          <tr><td>Tickets</td><td>Reply to rider and driver support.</td></tr>
+          <tr><td>Broadcasts</td><td>Push a message to riders or drivers.</td></tr>
+          <tr><td>Banners, FAQs, Legal</td><td>Home banners, help articles, terms, and privacy. The apps read the legal pages from here.</td></tr>
+          <tr><td>Settings</td><td>Currency, dispatch radius, commission or subscription, surge, WhatsApp, Maps, Stripe, cancellation fees.</td></tr>
+          <tr><td>Countries</td><td>Which dial codes appear on the phone field.</td></tr>
+          <tr><td>Team and Access</td><td>Staff accounts and what each role can open.</td></tr>
+          <tr><td>Audit</td><td>Who changed what.</td></tr>
+          <tr><td>Coverage and Agreements</td><td>Service area and the driver agreement text.</td></tr>
+        </tbody>
+      </table>
+      <h3>Settings you should set first</h3>
+      <ol class="steps">
+        <li><strong>General.</strong> Choose the currency. Set matching radius and offer timeout for your city. Choose commission or subscription. Commission takes a percentage of each fare. Subscription charges drivers for a plan and can take no commission.</li>
+        <li><strong>Billing.</strong> Turn on the payment methods you actually offer: card, wallet, cash. Paste the Stripe publishable key and secret from the same account. Set cancellation fees, or leave them at 0.</li>
+        <li><strong>Integrations.</strong> Paste the Google Maps browser key so the live map loads.</li>
+        <li><strong>Notifications.</strong> Leave driver registration OTP on when Twilio is configured. Turn it off only for a closed test where you accept the development code.</li>
+      </ol>
+      <p>A new driver stays unverified until someone opens Verification and approves the documents. Until then that driver cannot take trips.</p>
+
+      <h2 id="maps">Google Maps</h2>
+      <p>Create a key in Google Cloud and restrict it. You need more than one restriction because the admin site, Android, and iOS do not share a key style.</p>
+      <ol class="steps">
+        <li>Enable Maps JavaScript API, Maps SDK for Android, Maps SDK for iOS, Places API, and Geocoding API.</li>
+        <li>Browser key, restricted to your admin domain. Paste it in Admin → Settings → Integrations, and into <code>NEXT_PUBLIC_MAP_API_KEY</code> if you build the admin image yourself. The installer asks for this key and passes it into the admin container.</li>
+        <li>Android key, restricted by package name and SHA-1. Put it in both apps:
+          <ul>
+            <li><code>ryvo-customer/android/app/src/main/AndroidManifest.xml</code> meta-data <code>com.google.android.geo.API_KEY</code></li>
+            <li><code>ryvo-driver/android/app/src/main/AndroidManifest.xml</code> the same meta-data</li>
+          </ul>
+        </li>
+        <li>iOS key. Put it in <code>GMSApiKey</code> inside each app’s <code>ios/Runner/Info.plist</code>.</li>
+        <li>The apps also read <code>MAPS_API_KEY</code> from <code>scripts/whitelabel.env</code> at build time. Use that for the Dart fallback so you do not have to edit source for every build. The manifest and Info.plist values are still required for the native map.</li>
+      </ol>
+      <p>Billing must be enabled on the Google Cloud project or the map tiles stay blank.</p>
+
+      <h2 id="firebase">Firebase push</h2>
+      <p>Push uses Firebase Cloud Messaging. Create one Firebase project and add two Android apps and two iOS apps.</p>
+      <table>
+        <thead><tr><th>App</th><th>Android package</th><th>iOS bundle</th></tr></thead>
+        <tbody>
+          <tr><td>Customer</td><td>The applicationId in <code>ryvo-customer/android/app/build.gradle.kts</code></td><td>The bundle id in the customer Xcode target</td></tr>
+          <tr><td>Driver</td><td>The applicationId in <code>ryvo-driver/android/app/build.gradle.kts</code></td><td>The bundle id in the driver Xcode target</td></tr>
+        </tbody>
+      </table>
+      <p>Change those ids to your own before you create the Firebase apps. The ids shipped in the project may already belong to another Play listing. See <a href="#identity">App name and IDs</a>.</p>
+      <ol class="steps">
+        <li>Install the FlutterFire CLI: <code>dart pub global activate flutterfire_cli</code></li>
+        <li>From <code>ryvo-customer</code> run <code>flutterfire configure</code> and select the customer apps. This writes <code>lib/firebase_options.dart</code>, <code>android/app/google-services.json</code>, and <code>ios/Runner/GoogleService-Info.plist</code>.</li>
+        <li>Repeat from <code>ryvo-driver</code> for the driver apps.</li>
+        <li>In Firebase, open Project settings → Service accounts → Generate new private key.</li>
+        <li>Save that JSON as <code>ryvo-admin/apps/api/firebase-service-account.json</code> on the server.</li>
+        <li>Rebuild the API container so it mounts the file:
+          <pre><code>bash ryvo-admin/docker/redeploy.sh</code></pre>
+          On a server that was not cloned with git, rebuild with:
+          <pre><code>docker compose -f ryvo-admin/docker/docker-compose.prod.yml up -d --build api</code></pre>
+        </li>
+      </ol>
+      <p>Without the service account, the apps still run. Push notifications do not.</p>
+
+      <h2 id="stripe">Stripe</h2>
+      <ol class="steps">
+        <li>In the Stripe Dashboard, copy the publishable key and the secret key. Use test keys until a real card payment succeeds.</li>
+        <li>Server installer: paste both when asked. Or later, put the secret in <code>ryvo-admin/apps/api/.env.production</code> as <code>STRIPE_SECRET_KEY</code> and restart the API.</li>
+        <li>Admin → Settings → Billing. Paste the publishable key and the secret. They must be from the same Stripe account and the same mode. The panel warns you if they are not.</li>
+        <li>Developers → Webhooks → Add endpoint.
+          <ul>
+            <li>URL: <code>https://your-domain.com/api/v1/webhooks/stripe</code></li>
+            <li>Event: <code>payment_intent.succeeded</code></li>
+          </ul>
+          Copy the signing secret into <code>STRIPE_WEBHOOK_SECRET</code> in <code>apps/api/.env.production</code>, then restart the API container.
+        </li>
+        <li>Driver payouts use Stripe Connect. The driver app opens Stripe’s hosted onboarding. In Stripe, turn on Connect and set the return URLs to your domain. The admin app already has <code>/stripe/return</code> and <code>/stripe/refresh</code>.</li>
+      </ol>
+      <p>Card payments stay off until Billing has a publishable key and the API has the matching secret. Cash and wallet are separate switches on the same Billing tab.</p>
+
+      <h2 id="twilio">SMS and WhatsApp</h2>
+      <h3>SMS one-time codes</h3>
+      <ol class="steps">
+        <li>Create a Twilio account and buy a number, or create a Messaging Service.</li>
+        <li>Set these in <code>apps/api/.env.production</code> (the installer writes them if you answered the prompts):
+          <pre><code>TWILIO_ACCOUNT_SID=
+TWILIO_AUTH_TOKEN=
+TWILIO_PHONE_NUMBER=
+TWILIO_MESSAGING_SERVICE_SID=</code></pre>
+          Use either the from-number or the Messaging Service SID. For production, prefer the Messaging Service and leave the from-number empty.
+        </li>
+        <li>Restart the API. Registration and password reset then send a real code.</li>
+      </ol>
+      <h3>WhatsApp booking</h3>
+      <p>A rider can text Ride, Bid, or Parcel instead of using the app. Drivers still use the driver app. Payment on this channel is cash.</p>
+      <ol class="steps">
+        <li>In Twilio, open Messaging → Try it out → Send a WhatsApp message, and join the sandbox from your phone.</li>
+        <li>Set <code>TWILIO_WHATSAPP_FROM</code> to the sandbox number, usually <code>+14155238886</code>.</li>
+        <li>In Twilio, set the webhook for incoming messages to <code>https://your-domain.com/api/v1/webhooks/whatsapp</code>, method POST.</li>
+        <li>Admin → Settings → General. Turn on WhatsApp booking. Edit the welcome text if you want.</li>
+        <li>From a phone that joined the sandbox, send <code>hi</code>. Reply <code>Ride</code>, then a pickup address, then a drop-off, then the class number, then <code>YES</code>.</li>
+      </ol>
+      <p>Leave <code>OPENAI_API_KEY</code> empty to require those keywords. Set it if you want normal sentences mapped onto the same steps. A live business number needs WhatsApp approval in Twilio. Until then, only sandbox members can book.</p>
+
+      <h2 id="uploads">File uploads</h2>
+      <p>Driver photos and KYC files upload through a presigned URL. Configure Amazon S3 or Cloudinary on the API. The step-by-step S3 policy, CORS, and IAM user are in <code>ryvo-admin/docs/AWS_S3_SETUP.md</code>.</p>
+      <p>S3 variables in <code>apps/api/.env.production</code>:</p>
+      <pre><code>AWS_S3_BUCKET=
+AWS_REGION=
+AWS_ACCESS_KEY_ID=
+AWS_SECRET_ACCESS_KEY=</code></pre>
+      <p>Cloudinary, if you use it instead of new S3 uploads:</p>
+      <pre><code>CLOUDINARY_CLOUD_NAME=
+CLOUDINARY_API_KEY=
+CLOUDINARY_API_SECRET=</code></pre>
+      <p>Restart the API after saving. Keep the bucket private. Admins open documents through a short-lived link. The admin panel does not need the bucket to be public.</p>
+
+      <h2 id="customer">Customer app</h2>
+      <p>Build this after the API health check succeeds in a browser.</p>
+      <ol class="steps">
+        <li>Install Flutter and run <code>flutter doctor</code>. Fix anything it marks as required for Android or iOS.</li>
+        <li>Connect Firebase for this app. See <a href="#firebase">Firebase push</a>.</li>
+        <li>From the project root:
+          <pre><code>cp scripts/whitelabel.env.example scripts/whitelabel.env</code></pre>
+        </li>
+        <li>Edit <code>scripts/whitelabel.env</code>:
+          <pre><code>API_BASE_URL=https://your-domain.com/api/v1
+WS_BASE_URL=https://your-domain.com
+MAPS_API_KEY=your-maps-key
+APP_NAME=Ryvo
+ANDROID_APPLICATION_ID=com.yourcompany.ryvo.customer
+IOS_BUNDLE_ID=com.yourcompany.ryvo.customer</code></pre>
+        </li>
+        <li>Print the build commands:
+          <pre><code>bash scripts/configure-apps.sh</code></pre>
+        </li>
+        <li>Run the customer command it prints. A release APK looks like this, with your own URL and key:
+          <pre><code>cd ryvo-customer
+flutter pub get
+flutter build apk --release \
+  --dart-define=API_BASE_URL=https://your-domain.com/api/v1 \
+  --dart-define=WS_BASE_URL=https://your-domain.com \
+  --dart-define=MAPS_API_KEY=your-maps-key</code></pre>
+        </li>
+        <li>iOS, on a Mac, from <code>ryvo-customer</code>:
+          <pre><code>flutter build ipa --release \
+  --dart-define=API_BASE_URL=https://your-domain.com/api/v1 \
+  --dart-define=WS_BASE_URL=https://your-domain.com \
+  --dart-define=MAPS_API_KEY=your-maps-key</code></pre>
+        </li>
+      </ol>
+      <p>A debug run on the Android emulator:</p>
+      <pre><code>cd ryvo-customer
+flutter run --dart-define=API_BASE_URL=http://10.0.2.2:4000/api/v1 \
+  --dart-define=WS_BASE_URL=http://10.0.2.2:4000 \
+  --dart-define=MAPS_API_KEY=your-maps-key</code></pre>
+      <p>The Maps key in <code>AndroidManifest.xml</code> and <code>Info.plist</code>, and the API fallback in <code>lib/core/constants/app_constants.dart</code>, are <code>xxxxxxxx</code>. Replace them, or pass <code>--dart-define</code>, before you ship. A build that omits <code>--dart-define</code> uses that fallback.</p>
+      <p>Release Android builds need a keystore. Create <code>ryvo-customer/android/key.properties</code> (this file stays out of git):</p>
+      <pre><code>storePassword=your-store-password
+keyPassword=your-key-password
+keyAlias=upload
+storeFile=/absolute/path/to/upload-keystore.jks</code></pre>
+      <p>Create the keystore with <code>keytool -genkey -v -keystore upload-keystore.jks -keyalg RSA -keysize 2048 -validity 10000 -alias upload</code>. Keep the file. You cannot update the Play listing without it.</p>
+
+      <h2 id="driver">Driver app</h2>
+      <p>Repeat the customer steps from <code>ryvo-driver</code>. <code>scripts/configure-apps.sh</code> prints the driver command as well. Use a different Android application id and iOS bundle id from the customer app. Both apps talk to the same API.</p>
+      <p>The driver release signing file is <code>ryvo-driver/android/key.properties</code>, with its own keystore. Do not reuse the customer upload key if the Play listings are separate apps.</p>
+      <p>A driver who just registered cannot go online until Verification in the admin panel is approved, and until any required agreement on the Agreements screen is accepted.</p>
+
+      <h2 id="identity">App name and IDs</h2>
+      <p>Do this once, before the first store upload. Package names and bundle ids are permanent after the first publish.</p>
+      <table>
+        <thead><tr><th>What</th><th>Where</th></tr></thead>
+        <tbody>
+          <tr><td>Android application id, customer</td><td><code>ryvo-customer/android/app/build.gradle.kts</code> → <code>applicationId</code> and <code>namespace</code></td></tr>
+          <tr><td>Android application id, driver</td><td><code>ryvo-driver/android/app/build.gradle.kts</code></td></tr>
+          <tr><td>iOS bundle id</td><td>Open <code>ios/Runner.xcworkspace</code> and set the Runner target bundle identifier. It is also in <code>project.pbxproj</code> as <code>PRODUCT_BUNDLE_IDENTIFIER</code>.</td></tr>
+          <tr><td>Display name</td><td>Customer: <code>android/app/src/main/AndroidManifest.xml</code> and <code>ios/Runner/Info.plist</code> <code>CFBundleDisplayName</code>. Driver display name is set in the Xcode target.</td></tr>
+          <tr><td>Icon</td><td>Replace <code>assets/images/app_icon.png</code>, then run <code>dart run flutter_launcher_icons</code> inside that app.</td></tr>
+        </tbody>
+      </table>
+      <p>After the ids change, download new <code>google-services.json</code> and <code>GoogleService-Info.plist</code> files. The old Firebase files will not match.</p>
+
+      <h2 id="guide">Day-to-day use</h2>
+      <h3>A rider</h3>
+      <ol class="steps">
+        <li>Install the customer app. Choose the country, enter the phone number, and create a password. Enter the SMS code.</li>
+        <li>Allow location. Set pickup and drop-off, or pick a saved place.</li>
+        <li>Choose Ride, Bid, or Parcel. Ride uses the quoted fare. Bid lets the rider offer a fare inside the limits you set. Parcel asks for the receiver and the size.</li>
+        <li>Pick a vehicle class and confirm. The app searches for a driver.</li>
+        <li>When a driver accepts, the map follows them. Chat is available during the trip. Share the trip from the tracking screen if you need someone else to watch it.</li>
+        <li>Pay by the method that is enabled: card, wallet, or cash. Rate the driver. The receipt stays under invoices.</li>
+      </ol>
+      <h3>A driver</h3>
+      <ol class="steps">
+        <li>Install the driver app and register.</li>
+        <li>Accept the driver agreement.</li>
+        <li>Photograph the identity document, driving licence, vehicle, and insurance.</li>
+        <li>Wait until staff approve the documents under Verification. The app stays on the pending screen until then.</li>
+        <li>Go online. Accept or decline each offer before it expires.</li>
+        <li>Navigate to the pickup, mark arrived, start the trip, and complete it.</li>
+        <li>Earnings shows the fare, the platform fee, and the net amount. Add a bank account or finish Stripe onboarding, then withdraw.</li>
+      </ol>
+      <h3>Staff, each morning</h3>
+      <ol class="steps">
+        <li>Open Verification and clear the pending queue. A pending driver is an idle driver.</li>
+        <li>Open the live map and confirm drivers are inside the coverage area.</li>
+        <li>Open Payouts and pay requests that match the driver’s balance.</li>
+        <li>Open Tickets and answer anything opened overnight.</li>
+      </ol>
+      <h3>Staff, when you launch a city</h3>
+      <ol class="steps">
+        <li>Countries: enable the countries you operate in.</li>
+        <li>Ride types and fare rules: set prices in your currency.</li>
+        <li>Coverage: draw the area drivers are allowed to serve.</li>
+        <li>Settings: currency, commission or subscription, payment methods.</li>
+        <li>Legal: replace the terms and privacy text with text your counsel has approved. The public pages are <code>/landing-page/terms</code> and <code>/landing-page/privacy-policy</code>.</li>
+        <li>Create one real rider and one real driver and complete a cash trip before you turn on live card payments.</li>
+      </ol>
+
+      <h2 id="update">Updating</h2>
+      <p>On a server that was installed from git:</p>
+      <pre><code>bash ryvo-admin/docker/redeploy.sh</code></pre>
+      <p>That pulls, rebuilds, and restarts. Your <code>.env.production</code>, Firebase JSON, and database volume stay in place. Take a database dump first:</p>
+      <pre><code>docker exec ryvo-postgres pg_dump -U ryvo ryvo > ryvo-$(date +%F).sql</code></pre>
+      <p>Ship a new mobile build when the API contract changes. Store the same <code>--dart-define</code> values you used the first time. Raise <code>version</code> in each <code>pubspec.yaml</code> before you upload to Play or the App Store. Play needs a higher version code. The <code>+5</code> in <code>1.0.0+5</code> is that number.</p>
+
+      <h2 id="faq">FAQ</h2>
+      <h3>The installer finished, but the domain does not load.</h3>
+      <p>The stack is on port 4180 of the server, not on the public internet. Finish <a href="#https">Public HTTPS</a>. From the server, <code>curl -fsS http://127.0.0.1:4180/api/v1/health</code> should succeed before Nginx will.</p>
+      <h3>Admin login says invalid credentials.</h3>
+      <p>Use the phone you typed into the installer, with the country code, and password <code>123456</code>. Local installs use <code>+10000000000</code> / <code>123456</code> after <code>npm run db:seed</code>. Check the API log for the line that starts with <code>Super admin:</code>.</p>
+      <h3>The map is grey or blank.</h3>
+      <p>The Maps key is missing, the required API is not enabled, or billing is not on in Google Cloud. The native map uses the manifest and Info.plist keys. The admin live map uses the key saved under Settings → Integrations.</p>
+      <h3>The app opens and shows another company’s data.</h3>
+      <p>The build used the fallback API URL. Rebuild with <code>--dart-define=API_BASE_URL=https://your-domain.com/api/v1</code> and change the fallback in <code>app_constants.dart</code>.</p>
+      <h3>Registration never gets a code.</h3>
+      <p>On a production server, Twilio must be set and the API restarted. In local development, the API prints the code in its terminal, and <code>123456</code> is also accepted.</p>
+      <h3>A driver is online in the app but never receives trips.</h3>
+      <p>Approve verification, confirm the driver is inside the matching radius of the pickup, and confirm the ride type is enabled. Matching radius is under Settings → General.</p>
+      <h3>Card payment fails immediately.</h3>
+      <p>The publishable key and the secret key are from different Stripe accounts, or one is test and one is live. Billing shows that mismatch. Also confirm <code>payment_intent.succeeded</code> is sent to the webhook.</p>
+      <h3>Uploads fail for KYC.</h3>
+      <p>S3 CORS must allow <code>PUT</code>, and the IAM user needs <code>s3:PutObject</code> and <code>s3:GetObject</code> on that bucket. See <code>ryvo-admin/docs/AWS_S3_SETUP.md</code>.</p>
+      <h3>Where are the env templates?</h3>
+      <ul>
+        <li><code>ryvo-admin/apps/api/.env.example</code></li>
+        <li><code>ryvo-admin/apps/admin/.env.example</code></li>
+        <li><code>ryvo-admin/packages/database/.env.example</code></li>
+        <li><code>ryvo-admin/docker/.env.example</code></li>
+        <li><code>scripts/whitelabel.env.example</code></li>
+      </ul>
+
+      <h2 id="changelog">Changelog</h2>
+      <p>The same notes are in <code>changelog.txt</code> at the root of the package.</p>
+      <h3>1.0.0 — 17 November 2026</h3>
+      <ul>
+        <li>Initial release.</li>
+        <li>Customer app, driver app, API, and admin panel.</li>
+        <li>Ride, bid, and parcel, live tracking, chat, wallets, Stripe, and cash.</li>
+        <li>Driver verification, earnings, and payouts.</li>
+        <li>Server installer, Nginx sample, and this guide.</li>
+      </ul>
+
+      <h2 id="credits">Credits</h2>
+      <p>Ryvo is the application. These projects are used under their own licenses and are not sold as part of this item:</p>
+      <ul>
+        <li>Flutter and Dart — BSD</li>
+        <li>NestJS, Next.js, Prisma, PostgreSQL, PostGIS, Redis, Socket.IO, Tailwind CSS</li>
+        <li>Riverpod, GoRouter, Dio, and the other packages named in each <code>pubspec.yaml</code></li>
+        <li>Google Fonts packages for Plus Jakarta Sans and Inter — SIL Open Font License</li>
+        <li>Lucide icons in the admin panel</li>
+      </ul>
+      <p>Google Maps, Firebase, Stripe, Twilio, Amazon S3, Cloudinary, and OpenAI are separate services. You need your own account for each one you turn on. No paid stock photos or premium icon packs are included.</p>
+
+      <h2 id="license">License</h2>
+      <p>Use of this item is covered by the Envato Market license you purchased with the download. That license file is delivered by CodeCanyon. This folder does not replace it.</p>
+      <p>The Regular License is for one end product whose end users are not charged. A marketplace that charges riders or drivers needs the Extended License. Confirm the license type on your download page before you launch a paid service.</p>
+      <p>You may change the code for the one end product that license allows. You may not resell the source, publish it in another marketplace, or share it with a second company as a second product.</p>
+
+      <h2 id="support">Support</h2>
+      <p>Include these when you write:</p>
+      <ul>
+        <li>The item version, from the top of this page.</li>
+        <li>Server or local, and the system version.</li>
+        <li>The exact step in this guide you had reached.</li>
+        <li>The command you ran and the error text. Hide passwords and API keys.</li>
+      </ul>
+      <p>Support covers installation of the item as described here, and defects in the original code. Server administration, custom features, store-review appeals, and third-party account approval (Stripe, Twilio, Apple, Google) are outside that scope.</p>
+      <p>Contact the author through the CodeCanyon item page, or at enquiries@ryvo.arcadexit.com.</p>
+
+      <footer>
+        Ryvo documentation 1.0.0. Follow the sections in order the first time you install.
+      </footer>
+    </main>
+  </div>
+</body>
+</html>

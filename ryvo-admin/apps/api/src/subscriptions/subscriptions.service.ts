@@ -171,8 +171,8 @@ export class SubscriptionsService implements OnModuleInit, OnModuleDestroy {
           quantity: 1,
         },
       ],
-      success_url: 'https://ryvo.arcadexit.com/stripe/return?session_id={CHECKOUT_SESSION_ID}',
-      cancel_url: 'https://ryvo.arcadexit.com/stripe/refresh',
+      success_url: 'https://xxxxxxxx/stripe/return?session_id={CHECKOUT_SESSION_ID}',
+      cancel_url: 'https://xxxxxxxx/stripe/refresh',
       client_reference_id: subscription.id,
       metadata: {
         kind: 'driver_subscription',

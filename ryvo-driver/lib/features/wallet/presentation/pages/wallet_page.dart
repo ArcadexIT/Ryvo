@@ -83,8 +83,8 @@ class _WalletPageState extends ConsumerState<WalletPage> with WidgetsBindingObse
         ref.invalidate(providerProfileProvider);
       }
       final res = await ref.read(dioClientProvider).dio.post('/provider/stripe/account-link', data: {
-        'refreshUrl': 'https://ryvo.arcadexit.com/stripe/refresh',
-        'returnUrl': 'https://ryvo.arcadexit.com/stripe/return',
+        'refreshUrl': 'https://xxxxxxxx/stripe/refresh',
+        'returnUrl': 'https://xxxxxxxx/stripe/return',
       });
       final body = res.data;
       final data = body is Map ? body['data'] : null;

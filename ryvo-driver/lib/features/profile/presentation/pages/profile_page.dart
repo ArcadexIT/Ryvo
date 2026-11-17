@@ -141,7 +141,7 @@ class ProfilePage extends ConsumerWidget {
                           _Row(l10n.helpSupport, () => context.push('/help')),
                           _Row('Privacy policy', () {
                             launchUrl(
-                              Uri.parse('https://ryvo.arcadexit.com/privacy-policy/'),
+                              Uri.parse('https://xxxxxxxx/privacy-policy/'),
                               mode: LaunchMode.externalApplication,
                             );
                           }),

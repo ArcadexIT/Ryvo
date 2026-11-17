@@ -1,0 +1,8 @@
+Version 1.0.0 — 17 November 2026
+- Initial release.
+- Customer app: ride, bid, and parcel booking, live tracking, chat, wallet, card and cash payment, invoices, support.
+- Driver app: go online, accept trips, navigation, KYC, earnings, Stripe payouts, subscriptions.
+- Admin panel: dispatch, live map, riders, drivers, verification, pricing, finance, content, staff roles.
+- API: NestJS, PostgreSQL, Redis, Socket.IO.
+- One-command server installer with Nginx example for HTTPS.
+- WhatsApp booking through Twilio, optional OpenAI replies.
