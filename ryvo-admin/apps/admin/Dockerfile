@@ -1,7 +1,7 @@
 # Build context MUST be the monorepo root, e.g.:
 #   docker build -f apps/admin/Dockerfile -t ryvo-admin .
 
-FROM node:20-bookworm-slim AS base
+FROM node:22-bookworm-slim AS base
 WORKDIR /app
 
 FROM base AS deps

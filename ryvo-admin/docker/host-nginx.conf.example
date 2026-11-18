@@ -1,0 +1,30 @@
+# Host Nginx in front of Ryvo.
+# The Docker stack listens on 127.0.0.1:4180 only. It does not open public ports 80 or 443.
+#
+# 1. Point the domain A record at this server.
+# 2. sudo apt-get install -y nginx certbot python3-certbot-nginx
+# 3. Copy this file to /etc/nginx/sites-available/ryvo and replace example.com.
+# 4. sudo ln -s /etc/nginx/sites-available/ryvo /etc/nginx/sites-enabled/ryvo
+# 5. sudo nginx -t && sudo systemctl reload nginx
+# 6. sudo certbot --nginx -d example.com
+#
+# WebSocket (live map and trip tracking) needs the Upgrade headers below.
+
+server {
+    listen 80;
+    server_name example.com;
+
+    client_max_body_size 20m;
+
+    location / {
+        proxy_pass http://127.0.0.1:4180;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_read_timeout 3600s;
+    }
+}

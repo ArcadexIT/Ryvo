@@ -50,7 +50,7 @@ if ! docker compose version >/dev/null 2>&1; then
 fi
 
 DOMAIN="$(prompt 'Public domain (example.com)' 'localhost')"
-ADMIN_PHONE="$(prompt 'Admin phone' '+01754713136')"
+ADMIN_PHONE="$(prompt 'Admin phone (include + and country code)' '+10000000000')"
 MAP_KEY="$(prompt 'Google Maps API key')"
 STRIPE_SECRET="$(prompt 'Stripe secret key (sk_...)' '' 1)"
 STRIPE_PK="$(prompt 'Stripe publishable key (pk_...)')"
@@ -104,14 +104,49 @@ echo "==> Starting stack"
 cd "$DOCKER_DIR"
 docker compose -f docker-compose.prod.yml up -d --build
 
+echo "==> Waiting for the API (database schema is applied on first boot)"
+ready=0
+for _ in $(seq 1 60); do
+  if curl -fsS "http://127.0.0.1:4180/api/v1/health" >/dev/null 2>&1; then
+    ready=1
+    break
+  fi
+  sleep 5
+done
+if [[ "$ready" != "1" ]]; then
+  echo "The API did not become healthy on http://127.0.0.1:4180."
+  echo "Read the log, then run this installer again:"
+  echo "  docker compose -f $DOCKER_DIR/docker-compose.prod.yml logs --tail=80 api"
+  exit 1
+fi
+
+admin_count="$(docker exec ryvo-postgres psql -U ryvo -d ryvo -tAc "SELECT COUNT(*) FROM users WHERE role = 'admin';" | tr -d '[:space:]' || true)"
+if [[ "${admin_count:-0}" == "0" ]]; then
+  echo "==> Creating the admin account and demo rider/driver accounts"
+  docker exec \
+    -e ADMIN_PHONE="$ADMIN_PHONE" \
+    -e ADMIN_PASSWORD="123456" \
+    -w /app \
+    ryvo-api \
+    npx tsx packages/database/prisma/seed.ts
+else
+  echo "==> An admin account already exists. Password was left unchanged."
+fi
+
 echo
-echo "RYVO is starting."
+echo "RYVO is running on this machine at http://127.0.0.1:4180"
+echo "Put Nginx or Caddy in front of that port before the site is public."
+echo "A ready Nginx file is docker/host-nginx.conf.example"
+echo
+echo "  After HTTPS is on:"
 echo "  Admin:  ${SCHEME}://${DOMAIN}"
 echo "  API:    ${API_URL}"
 echo "  Health: ${API_URL}/health"
-echo "  Default admin login: ${ADMIN_PHONE} / 123456  (change this immediately)"
+echo "  Admin login: ${ADMIN_PHONE} / 123456"
+echo "  Change that password before anyone else uses the panel."
 echo
-echo "Set Google Maps and Stripe publishable keys in Admin → Settings if you skipped them here."
+echo "Set Google Maps and the Stripe publishable key in Admin → Settings if you skipped them here."
 echo "Point the Flutter apps with scripts/configure-apps.sh after this server is reachable."
 echo "WhatsApp webhook: ${API_URL}/webhooks/whatsapp"
 echo "Stripe webhook:   ${API_URL}/webhooks/stripe"
+echo "Full buyer guide: documentation/index.html"

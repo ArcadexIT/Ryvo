@@ -17,7 +17,7 @@ interface ModalProps {
 
 export function Modal({ open, onClose, title, description, children, className }: ModalProps) {
   return (
-    <DialogPrimitive.Root open={open} onOpenChange={(v) => !v && onClose()}>
+    <DialogPrimitive.Root open={open} onOpenChange={(open: boolean) => { if (!open) onClose(); }}>
       <DialogPrimitive.Portal>
         <DialogPrimitive.Overlay className="animate-overlay-in fixed inset-0 z-50 bg-black/40" />
         <DialogPrimitive.Content

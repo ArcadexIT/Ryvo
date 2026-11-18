@@ -2,7 +2,7 @@ import { IsBoolean, IsEmail, IsOptional, IsString, MinLength } from 'class-valid
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class LoginDto {
-  @ApiProperty({ example: '01754713136' })
+  @ApiProperty({ example: '+10000000000' })
   @IsString()
   phone!: string;
 

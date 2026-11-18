@@ -38,7 +38,7 @@ On a fresh Ubuntu VPS:
 bash docker/install.sh
 ```
 
-That writes env files, starts Postgres/Redis/API/admin/Caddy, and prints the admin URL. Flutter store builds: `bash ../scripts/configure-apps.sh`. Full steps, WhatsApp/Stripe webhooks, and the free-install runbook: [`docs/INSTALL.md`](docs/INSTALL.md).
+That writes env files, starts Postgres/Redis/API/admin/Caddy on `127.0.0.1:4180`, creates the admin user on first boot, and prints the login. Publish the site with [`docker/host-nginx.conf.example`](docker/host-nginx.conf.example). Flutter store builds: `bash ../scripts/configure-apps.sh`. The buyer manual is [`../documentation/index.html`](../documentation/index.html). Short checklist: [`docs/INSTALL.md`](docs/INSTALL.md).
 
 ## Quick start
 
@@ -92,7 +92,7 @@ npm run dev --workspace=@ryvo/admin
 
 | Role | Phone | Password |
 |------|-------|----------|
-| Super Admin | 01754713136 | 123456 |
+| Super Admin | +10000000000 | 123456 |
 | Customer (US) | +12345678900 | Customer@123 |
 | Customer (UK) | +447700900001 | Customer@123 |
 | Provider (US) | +19876543210 | Provider@123 |

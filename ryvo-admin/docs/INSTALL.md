@@ -1,6 +1,6 @@
 # RYVO install guide
 
-This is the path a non-developer can follow. Video script outlines are at the end.
+Buyers should follow the full manual: [`documentation/index.html`](../../documentation/index.html) (open it in a browser). This file is the short server checklist. Video script outlines are at the end.
 
 ## 1. Server (one command)
 

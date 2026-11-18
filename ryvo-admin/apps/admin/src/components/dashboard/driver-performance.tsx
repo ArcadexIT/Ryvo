@@ -47,7 +47,13 @@ export function DriverPerformance({ online, offline, onBreak }: DriverPerformanc
                 <YAxis allowDecimals={false} tick={{ fill: 'var(--text-muted)', fontSize: 11 }} axisLine={false} tickLine={false} />
                 <Tooltip
                   cursor={{ fill: 'var(--input)' }}
-                  content={({ active, payload }) => {
+                  content={({
+                    active,
+                    payload,
+                  }: {
+                    active?: boolean;
+                    payload?: ReadonlyArray<{ payload?: { label: string; value: number } }>;
+                  }) => {
                     if (!active || !payload?.length) return null;
                     const row = payload[0].payload as { label: string; value: number };
                     const pct = Math.round((row.value / total) * 100);

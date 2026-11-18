@@ -41,7 +41,13 @@ export function JobStatusCard({ breakdown }: { breakdown: Record<string, number>
                 />
                 <Tooltip
                   cursor={{ fill: 'var(--input)' }}
-                  content={({ active, payload }) => {
+                  content={({
+                    active,
+                    payload,
+                  }: {
+                    active?: boolean;
+                    payload?: ReadonlyArray<{ payload?: { label: string; value: number } }>;
+                  }) => {
                     if (!active || !payload?.length) return null;
                     const row = payload[0].payload as { label: string; value: number };
                     return (

@@ -1,6 +1,16 @@
 # Ryvo
 
-Roadside assistance marketplace: customer app, provider app, API, and admin panel in one repo.
+Ride, bid, and parcel marketplace: customer app, driver app, API, and admin panel.
+
+**Third-party services are not included, and they charge you.** Stripe, Google Maps, Firebase, Twilio, Amazon Web Services, Cloudinary, and OpenAI are external. You create those accounts yourself. Each company bills you for usage. This download does not include credits or subscriptions for them.
+
+**Installation and user guide:** open [`documentation/index.html`](documentation/index.html) in a browser. That is the CodeCanyon manual (server install, HTTPS, mobile builds, admin, Maps, Stripe, Firebase). Changelog: [`changelog.txt`](changelog.txt). Item description text to paste on CodeCanyon: [`description.txt`](description.txt).
+
+To build the upload zip (excludes dependencies, secrets, and the Firebase project files):
+
+```bash
+bash scripts/package-codecanyon.sh
+```
 
 ## Layout
 
