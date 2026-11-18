@@ -106,6 +106,15 @@
       padding: 4px 16px 8px;
       margin: 12px 0 18px;
     }
+    figure { margin: 8px 0 28px; }
+    figure img {
+      width: 100%;
+      height: auto;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: #fff;
+    }
+    figcaption { margin-top: 8px; color: var(--muted); font-size: 14px; }
     footer { margin-top: 48px; color: var(--muted); font-size: 14px; }
     @media (max-width: 860px) {
       .layout { display: block; }
@@ -127,6 +136,7 @@
       <div class="group">Start</div>
       <a href="#intro">Introduction</a>
       <a href="#features">Features</a>
+      <a href="#screenshots">Screenshots</a>
       <a href="#requirements">Requirements</a>
       <a href="#package">Package contents</a>
       <div class="group">Install</div>
@@ -157,6 +167,11 @@
       <h1>Ryvo</h1>
       <p class="lede">Ride, bid, and parcel marketplace. This file is the installation and user guide for the customer app, the driver app, the API, and the admin panel.</p>
       <p>Open this page in any browser. It does not need a server. Work from top to bottom the first time. After the server is up, use the configure sections for Maps, Firebase, Stripe, and the mobile builds.</p>
+
+      <div class="callout warn">
+        <strong>Third-party services are not included, and they charge you.</strong>
+        Stripe, Google Maps, Firebase, Twilio, Amazon Web Services (S3 and SES), Cloudinary, and OpenAI are external companies. Ryvo does not include an account, a credit balance, or a free allowance for any of them. You create each account yourself. Those companies bill you for usage: card payments, map loads, push messages, SMS and WhatsApp, file storage, email, and optional AI replies. Those invoices are separate from the price of this item. You can leave a service empty until you are ready to turn it on. The apps still install. The feature that needs that service stays off until the account is connected.
+      </div>
 
       <div class="callout warn">
         <strong>Before you go live.</strong> Every key in this download is the placeholder <code>xxxxxxxx</code>. Search the project for <code>xxxxxxxx</code> and replace each one with your own value: API URL, Maps, Stripe, Firebase, and database password. The project still builds with those placeholders. Change the admin password, and change the Android application id and iOS bundle id before the first store upload. The demo OTP <code>123456</code> works only when the API is not in production mode.
@@ -203,6 +218,27 @@
         <li>Currency, commission or subscription, surge, countries, staff roles, and audit log.</li>
       </ul>
 
+      <h2 id="screenshots">Screenshots</h2>
+      <p>These are the main screens and the actions a rider, a driver, and a staff member take in them.</p>
+
+      <h3>Customer app</h3>
+      <figure>
+        <img src="screenshots/customer-app.png" alt="Customer app screens: home, request ride, bid, parcel, choose a ride, cancel, live tracking, support, sign in, and create account">
+        <figcaption>Home with pickup and drop-off. Request a ride, send a bid, or send a parcel. Choose a vehicle and see the fare. Cancel while searching. Follow the driver on the live map. Open help and create a support ticket. Sign in and create an account.</figcaption>
+      </figure>
+
+      <h3>Driver app</h3>
+      <figure>
+        <img src="screenshots/driver-app.png" alt="Driver app screens: go online, earnings, profile, edit vehicle, and sign in">
+        <figcaption>Go online and offline from the map. Read the balance and recent trips on Earnings. Open Profile, edit the vehicle, and sign in.</figcaption>
+      </figure>
+
+      <h3>Admin panel</h3>
+      <figure>
+        <img src="screenshots/admin-panel.png" alt="Admin panel screens: dashboard, live map, trips, riders, drivers, reviews, payments, earnings, invoices, ride types, and fare rules">
+        <figcaption>Dashboard totals. Live map of drivers. Trip list. Rider and driver records. Reviews. Payments, earnings, and invoices. Ride types and fare rules.</figcaption>
+      </figure>
+
       <h2 id="requirements">Requirements</h2>
       <h3>Production server</h3>
       <table>
@@ -220,14 +256,14 @@
       <table>
         <thead><tr><th>Item</th><th>Version</th></tr></thead>
         <tbody>
-          <tr><td>Flutter</td><td>Stable channel, Dart SDK 3.x (<code>&gt;=3.0.0 &lt;4.0.0</code>)</td></tr>
+          <tr><td>Flutter</td><td>Stable channel with Dart SDK 3.8 or newer (<code>&gt;=3.8.0 &lt;4.0.0</code>)</td></tr>
           <tr><td>Android</td><td>Android Studio, JDK 17. minSdk 24, targetSdk 36.</td></tr>
           <tr><td>iOS</td><td>macOS with Xcode 15 or newer.</td></tr>
-          <tr><td>Node.js</td><td>20 or newer, only if you run the API outside Docker.</td></tr>
+          <tr><td>Node.js</td><td>22 or newer. Docker images use Node 22. Node 20 is end of life and is not supported.</td></tr>
         </tbody>
       </table>
-      <h3>Accounts you create</h3>
-      <p>Ryvo does not include these services. You create each account and paste your own keys.</p>
+      <h3>Accounts you create, and what they cost</h3>
+      <p>Ryvo does not include these services. You create each account and paste your own keys. Each provider bills you for what you use. There is no usage credit in this download.</p>
       <ul>
         <li>Google Cloud, for Maps SDK on Android, Maps SDK on iOS, Places, and Maps JavaScript.</li>
         <li>Firebase, for Cloud Messaging. One project, two apps (customer and driver).</li>
@@ -312,7 +348,7 @@ sudo nginx -t && sudo systemctl reload nginx</code></pre>
       <h2 id="local">Local installation</h2>
       <p>Use this when you want to change the code on your computer. Production servers should use the installer above.</p>
       <ol class="steps">
-        <li>Install Node.js 20+, Docker, and Flutter.</li>
+        <li>Install Node.js 22 or newer, Docker, and Flutter.</li>
         <li>Start Postgres and Redis:
           <pre><code>cd ryvo-admin/docker
 docker compose up -d</code></pre>
@@ -653,7 +689,7 @@ storeFile=/absolute/path/to/upload-keystore.jks</code></pre>
         <li>Google Fonts packages for Plus Jakarta Sans and Inter — SIL Open Font License</li>
         <li>Lucide icons in the admin panel</li>
       </ul>
-      <p>Google Maps, Firebase, Stripe, Twilio, Amazon S3, Cloudinary, and OpenAI are separate services. You need your own account for each one you turn on. No paid stock photos or premium icon packs are included.</p>
+      <p>Google Maps, Firebase, Stripe, Twilio, Amazon Web Services, Cloudinary, and OpenAI are separate services. You need your own account for each one you turn on, and that company charges you for usage. No paid stock photos or premium icon packs are included.</p>
 
       <h2 id="license">License</h2>
       <p>Use of this item is covered by the Envato Market license you purchased with the download. That license file is delivered by CodeCanyon. This folder does not replace it.</p>

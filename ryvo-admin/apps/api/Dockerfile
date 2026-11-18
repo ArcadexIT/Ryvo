@@ -1,7 +1,7 @@
 # Build context MUST be the monorepo root, e.g.:
 #   docker build -f apps/api/Dockerfile -t ryvo-api .
 
-FROM node:20-bookworm-slim AS base
+FROM node:22-bookworm-slim AS base
 RUN apt-get update -y && apt-get install -y --no-install-recommends openssl && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 

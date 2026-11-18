@@ -250,7 +250,7 @@ export function DataTable<T extends { id?: string }>({
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
               {columns.map((col) => (
-                <DropdownMenuItem key={col.key} onSelect={(event) => event.preventDefault()} onClick={() => toggleColumn(col.key)}>
+                <DropdownMenuItem key={col.key} onSelect={(event: Event) => event.preventDefault()} onClick={() => toggleColumn(col.key)}>
                   <span className={cn('size-3 rounded-sm border border-hairline', !hidden.has(col.key) && 'bg-primary')} />
                   {col.header}
                 </DropdownMenuItem>

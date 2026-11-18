@@ -79,10 +79,14 @@ find "$STAGE/$NAME" -type f \( \
     s/sk_(test|live)_[0-9A-Za-z]+/xxxxxxxx_me/g;
   '
 
+find "$STAGE" -name '.DS_Store' -delete
+find "$STAGE" -name '__MACOSX' -type d -prune -exec rm -rf {} +
+
 rm -f "$ZIP"
 (
   cd "$STAGE"
-  zip -r -q "$ZIP" "$NAME"
+  # -X and COPYFILE_DISABLE stop macOS from adding a __MACOSX folder.
+  COPYFILE_DISABLE=1 zip -r -X -q "$ZIP" "$NAME" -x "*.DS_Store" -x "*__MACOSX*"
 )
 
 echo "Wrote $ZIP"

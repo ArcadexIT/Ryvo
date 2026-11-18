@@ -5,7 +5,7 @@ const ADMIN_HOST = 'https://xxxxxxxx';
 // Routing hint only. The real session stays in localStorage; AuthGuard still checks it.
 const ADMIN_SESSION_COOKIE = 'ryvo_admin_session';
 
-export function middleware(request: NextRequest) {
+export function proxy(request: NextRequest) {
   const host = request.headers.get('host')?.split(':')[0]?.toLowerCase() ?? '';
   const isMarketing = MARKETING_HOSTS.has(host);
   const { pathname } = request.nextUrl;

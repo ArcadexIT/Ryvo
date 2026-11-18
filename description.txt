@@ -1,0 +1,7 @@
+WARNING — third-party services are not included and they cost money
+
+Stripe, Google Maps, Firebase, Twilio, Amazon Web Services (S3 and SES), Cloudinary, and OpenAI are external services. They are not part of this item. The buyer creates each account and pays that company for usage. Map loads, card payments, SMS, WhatsApp, push messages, file storage, email, and optional AI replies appear on those vendors' invoices. This download does not include credits, subscriptions, or a free allowance for any of them. You can leave a service disconnected until you need it.
+
+Ryvo is a ride, bid, and parcel marketplace: a Flutter customer app, a Flutter driver app, a NestJS API, and a Next.js admin panel. Riders request a ride, send a bid, or send a parcel. Drivers go online, accept work, and get paid. Staff dispatch trips, set fares, and review payouts from the admin panel.
+
+The offline manual is documentation/index.html. It includes screenshots of the customer app, the driver app, and the admin panel, plus the server install, HTTPS, and the steps for each third-party account.

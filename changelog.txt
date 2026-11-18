@@ -1,3 +1,9 @@
+Version 1.0.1 — 18 November 2026
+- Documented that Stripe, Google Maps, Firebase, Twilio, AWS, Cloudinary, and OpenAI are external and billed to the buyer.
+- Added customer, driver, and admin screenshots to the documentation.
+- Node.js 22 or newer. Next.js 16 and React 19. Dart SDK 3.8 or newer.
+- Package zip no longer includes macOS junk files.
+
 Version 1.0.0 — 17 November 2026
 - Initial release.
 - Customer app: ride, bid, and parcel booking, live tracking, chat, wallet, card and cash payment, invoices, support.
