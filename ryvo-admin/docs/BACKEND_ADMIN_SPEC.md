@@ -1,7 +1,5 @@
 # Ryvo Platform — Backend & Admin Panel Developer Documentation
 
-> Source plan: `ryvo_backend_admin_docs_e569dace.plan.md`
-
 ## 1. Scope & Stack
 
 | Layer | Technology |
@@ -22,7 +20,7 @@
 - Payments: Wallet + Stripe card only (Cash removed from v1 backend even though customer UI shows it)
 
 **Source of truth for features:** Flutter routes and mock fields in both apps, especially:
-- Customer: `ryvo_customer_app_0a46c735.plan.md`, `lib/core/router/app_router.dart`
+- Customer: `lib/core/router/app_router.dart`
 - Provider: `lib/core/router/app_router.dart`, domain entities under `lib/features/*/domain/entities/`
 
 ---

@@ -12,8 +12,8 @@ import {
 } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import { AdminService } from './admin.service';
-import { JwtAuthGuard, RolesGuard, AdminRoleGuard } from '../auth/guards';
-import { Roles, AdminRoles } from '../auth/roles.decorator';
+import { AdminPermissionGuard, JwtAuthGuard, RolesGuard, AdminRoleGuard } from '../auth/guards';
+import { RequireAdminModule, Roles, AdminRoles } from '../auth/roles.decorator';
 import { UserRole } from '@ryvo/shared';
 import { successResponse } from '../common/utils';
 import { PaginationDto } from '../common/dto/pagination.dto';
@@ -143,7 +143,7 @@ class ListExportDto {
 
 @ApiTags('Admin Dashboard')
 @Controller('admin')
-@UseGuards(JwtAuthGuard, RolesGuard, AdminRoleGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, AdminRoleGuard, AdminPermissionGuard)
 @Roles(UserRole.ADMIN)
 @ApiBearerAuth()
 export class AdminController {
@@ -154,54 +154,64 @@ export class AdminController {
   ) {}
 
   @Get('dashboard/kpis')
+  @RequireAdminModule('dashboard')
   async kpis() {
     return successResponse(await this.admin.getDashboardKpis());
   }
 
   @Get('dashboard/charts')
+  @RequireAdminModule('dashboard')
   async charts(@Query('days') days?: number) {
     return successResponse(await this.admin.getCharts(Number(days) || 7));
   }
 
   @Get('dashboard/live')
+  @RequireAdminModule('live')
   async live() {
     return successResponse(await this.admin.getLiveSnapshot());
   }
 
   @Get('dashboard/activity')
+  @RequireAdminModule('dashboard')
   async activity(@Query('limit') limit?: number) {
     return successResponse(await this.admin.getDashboardActivity(Number(limit) || 10));
   }
 
   @Get('dashboard/top-providers')
+  @RequireAdminModule('dashboard')
   async topProviders(@Query('limit') limit?: number) {
     return successResponse(await this.admin.getTopProviders(Number(limit) || 5));
   }
 
   @Get('dashboard/health')
+  @RequireAdminModule('dashboard')
   async health() {
     return successResponse(await this.admin.getDashboardHealth());
   }
 
   @Get('dashboard/notifications')
+  @RequireAdminModule('notifications')
   async notifications(@Query('limit') limit?: number) {
     return successResponse(await this.admin.getAdminNotifications(Number(limit) || 20));
   }
 
   @Get('permissions')
   @AdminRoles('super_admin')
+  @RequireAdminModule('roles')
   async permissions() {
     return successResponse(await this.admin.getPermissionsCatalog());
   }
 
   @Get('roles')
   @AdminRoles('super_admin')
+  @RequireAdminModule('roles')
   async roles() {
     return successResponse(await this.admin.getRoles());
   }
 
   @Patch('roles/:role')
   @AdminRoles('super_admin')
+  @RequireAdminModule('roles')
   async updateRole(
     @Param('role') role: AdminRole,
     @Body() body: { permissions: string[] },
@@ -221,6 +231,7 @@ export class AdminController {
   }
 
   @Get('reviews')
+  @RequireAdminModule('reviews')
   async reviews(@Query() query: PaginationDto & { hiddenOnly?: string }) {
     const result = await this.admin.listReviews({
       ...query,
@@ -230,6 +241,7 @@ export class AdminController {
   }
 
   @Patch('reviews/:id')
+  @RequireAdminModule('reviews')
   async moderateReview(
     @Param('id') id: string,
     @Body() body: { action: 'hide' | 'unhide' | 'delete' },
@@ -248,12 +260,14 @@ export class AdminController {
   }
 
   @Get('notifications/broadcasts')
+  @RequireAdminModule('notifications')
   async broadcasts(@Query() query: PaginationDto) {
     const result = await this.admin.listBroadcasts(query);
     return successResponse(result.items, undefined, result.meta);
   }
 
   @Post('notifications/broadcast')
+  @RequireAdminModule('notifications')
   async broadcast(
     @Body() body: { title: string; body: string; audience: 'all' | 'customers' | 'providers' },
     @Req() req: { user: { adminUser?: { id: string } } },
@@ -275,11 +289,13 @@ export class AdminController {
   }
 
   @Get('audit-logs/summary')
+  @RequireAdminModule('audit')
   async auditSummary(@Query() query: AuditQueryDto) {
     return successResponse(await this.audit.summarize(query));
   }
 
   @Get('audit-logs')
+  @RequireAdminModule('audit')
   async auditLogs(@Query() query: AuditQueryDto) {
     const result = await this.admin.listAuditLogs(query);
     return successResponse(result.items, undefined, result.meta);
@@ -287,6 +303,7 @@ export class AdminController {
 
   @Get('users')
   @AdminRoles('super_admin')
+  @RequireAdminModule('admins')
   async adminUsers(@Query() query: PaginationDto) {
     const result = await this.admin.listAdminUsers(query);
     return successResponse(result.items, undefined, result.meta);
@@ -294,6 +311,7 @@ export class AdminController {
 
   @Post('users')
   @AdminRoles('super_admin')
+  @RequireAdminModule('admins')
   async createAdmin(
     @Body() dto: CreateAdminDto,
     @Req() req: { user: { adminUser?: { id: string } } },
@@ -313,6 +331,7 @@ export class AdminController {
 
   @Patch('users/:id')
   @AdminRoles('super_admin')
+  @RequireAdminModule('admins')
   async updateAdmin(
     @Param('id') id: string,
     @Body() dto: UpdateAdminDto,
@@ -333,60 +352,70 @@ export class AdminController {
 
   @Get('pricing/categories')
   @AdminRoles('super_admin', 'finance')
+  @RequireAdminModule('pricing')
   async categories() {
     return successResponse(await this.admin.listServiceCategories());
   }
 
   @Post('pricing/categories')
   @AdminRoles('super_admin', 'finance')
+  @RequireAdminModule('pricing')
   async createCategory(@Body() dto: ServiceCategoryDto) {
     return successResponse(await this.admin.createServiceCategory(dto));
   }
 
   @Patch('pricing/categories/:id')
   @AdminRoles('super_admin', 'finance')
+  @RequireAdminModule('pricing')
   async updateCategory(@Param('id') id: string, @Body() dto: ServiceCategoryDto) {
     return successResponse(await this.admin.updateServiceCategory(id, dto));
   }
 
   @Delete('pricing/categories/:id')
   @AdminRoles('super_admin', 'finance')
+  @RequireAdminModule('pricing')
   async deleteCategory(@Param('id') id: string) {
     return successResponse(await this.admin.deleteServiceCategory(id));
   }
 
   @Get('subscriptions/plans')
   @AdminRoles('super_admin', 'finance')
+  @RequireAdminModule('pricing')
   async subscriptionPlans() {
     return successResponse(await this.subscriptions.adminListPlans());
   }
 
   @Post('subscriptions/plans')
   @AdminRoles('super_admin', 'finance')
+  @RequireAdminModule('pricing')
   async upsertSubscriptionPlan(@Body() dto: SubscriptionPlanDto) {
     return successResponse(await this.subscriptions.upsertPlan(dto));
   }
 
   @Get('pricing/rules')
   @AdminRoles('super_admin', 'finance')
+  @RequireAdminModule('pricing')
   async pricingRules(@Query('serviceCategoryId') serviceCategoryId?: string) {
     return successResponse(await this.admin.listPricingRules(serviceCategoryId));
   }
 
   @Post('pricing/rules')
   @AdminRoles('super_admin', 'finance')
+  @RequireAdminModule('pricing')
   async createPricingRule(@Body() dto: PricingRuleDto) {
     return successResponse(await this.admin.createPricingRule(dto));
   }
 
   @Patch('pricing/rules/:id')
   @AdminRoles('super_admin', 'finance')
+  @RequireAdminModule('pricing')
   async updatePricingRule(@Param('id') id: string, @Body() dto: PricingRuleDto) {
     return successResponse(await this.admin.updatePricingRule(id, dto));
   }
 
   @Get('pricing/promo-codes')
   @AdminRoles('super_admin', 'finance')
+  @RequireAdminModule('pricing')
   async promoCodes(@Query() query: PaginationDto) {
     const result = await this.admin.listPromoCodes(query);
     return successResponse(result.items, undefined, result.meta);
@@ -394,18 +423,21 @@ export class AdminController {
 
   @Post('pricing/promo-codes')
   @AdminRoles('super_admin', 'finance')
+  @RequireAdminModule('pricing')
   async createPromoCode(@Body() dto: PromoCodeDto) {
     return successResponse(await this.admin.createPromoCode(dto));
   }
 
   @Patch('pricing/promo-codes/:id')
   @AdminRoles('super_admin', 'finance')
+  @RequireAdminModule('pricing')
   async updatePromoCode(@Param('id') id: string, @Body() dto: UpdatePromoCodeDto) {
     return successResponse(await this.admin.updatePromoCode(id, dto));
   }
 
   @Get('finance/payments')
   @AdminRoles('super_admin', 'finance')
+  @RequireAdminModule('finance')
   async payments(@Query() query: PaginationDto) {
     const result = await this.admin.listPayments(query);
     return successResponse(result.items, undefined, result.meta);
@@ -413,12 +445,14 @@ export class AdminController {
 
   @Get('finance/earnings/summary')
   @AdminRoles('super_admin', 'finance')
+  @RequireAdminModule('finance')
   async earningsSummary(@Query() query: EarningsQueryDto) {
     return successResponse(await this.admin.getEarningsSummary(query));
   }
 
   @Get('finance/earnings')
   @AdminRoles('super_admin', 'finance')
+  @RequireAdminModule('finance')
   async earnings(@Query() query: EarningsQueryDto) {
     const result = await this.admin.listEarnings(query);
     return successResponse(result.items, undefined, result.meta);
@@ -426,6 +460,7 @@ export class AdminController {
 
   @Get('finance/payouts')
   @AdminRoles('super_admin', 'finance')
+  @RequireAdminModule('finance')
   async payouts(@Query() query: PaginationDto & { providerId?: string; status?: string }) {
     const result = await this.admin.listPayouts(query);
     return successResponse(result.items, undefined, result.meta);
@@ -433,12 +468,14 @@ export class AdminController {
 
   @Get('finance/payouts/summary')
   @AdminRoles('super_admin', 'finance')
+  @RequireAdminModule('finance')
   async payoutSummary() {
     return successResponse(await this.admin.getPayoutSummary());
   }
 
   @Patch('finance/payouts/:id/process')
   @AdminRoles('super_admin', 'finance')
+  @RequireAdminModule('finance')
   async processPayout(
     @Param('id') id: string,
     @Req() req: { user: { adminUser?: { id: string } } },
@@ -457,17 +494,20 @@ export class AdminController {
 
   @Patch('finance/payouts/:id/reject')
   @AdminRoles('super_admin', 'finance')
+  @RequireAdminModule('finance')
   async rejectPayout(@Param('id') id: string) {
     return successResponse(await this.admin.rejectPayout(id));
   }
 
   @Post('finance/export')
   @AdminRoles('super_admin', 'finance')
+  @RequireAdminModule('finance')
   async exportFinance(@Body() dto: FinanceExportDto) {
     return successResponse(await this.admin.exportFinanceCsv(dto.type, dto));
   }
 
   @Post('export/list')
+  @RequireAdminModule('dashboard')
   async exportList(@Body() dto: ListExportDto) {
     const { type, ...filters } = dto;
     return successResponse(await this.admin.exportListCsv(type, filters));

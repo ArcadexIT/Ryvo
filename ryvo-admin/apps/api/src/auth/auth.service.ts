@@ -46,7 +46,12 @@ export class AuthService {
     return this.config.get<string>('JWT_REFRESH_SECRET') ?? 'xxxxxxxx';
   }
 
-  async login(phone: string, password: string, appRole?: UserRole.CUSTOMER | UserRole.PROVIDER) {
+  async login(
+    phone: string,
+    password: string,
+    appRole?: UserRole.CUSTOMER | UserRole.PROVIDER,
+    totpCode?: string,
+  ) {
     const normalizedPhone = normalizePhone(phone);
     const user = await this.prisma.user.findUnique({
       where: { phone: normalizedPhone },
@@ -71,6 +76,13 @@ export class AuthService {
       await this.ensureAppProfiles(user.id, appRole);
     }
 
+    if (!appRole && user.adminUser?.totpEnabled) {
+      if (!totpCode?.trim()) {
+        return { requires2fa: true as const };
+      }
+      await this.verify2FALogin(user.id, totpCode.trim());
+    }
+
     await this.prisma.user.update({
       where: { id: user.id },
       data: { lastLoginAt: new Date() },
@@ -78,6 +90,26 @@ export class AuthService {
 
     const tokenRole = appRole ?? user.role;
     return this.issueTokens(user.id, tokenRole);
+  }
+
+  async changePassword(userId: string, currentPassword: string, newPassword: string) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user?.passwordHash) throw new UnauthorizedException('Invalid credentials');
+    const valid = await bcrypt.compare(currentPassword, user.passwordHash);
+    if (!valid) throw new UnauthorizedException('Current password is incorrect');
+    if (newPassword.length < 8) {
+      throw new BadRequestException('New password must be at least 8 characters');
+    }
+    const passwordHash = await bcrypt.hash(newPassword, 12);
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { passwordHash },
+    });
+    await this.prisma.refreshToken.updateMany({
+      where: { userId, revokedAt: null },
+      data: { revokedAt: new Date() },
+    });
+    return { message: 'Password updated. Sign in again with the new password.' };
   }
 
   async register(data: {
@@ -260,13 +292,17 @@ export class AuthService {
       });
     }
 
+    // Mark the phone verified. Never change status here — suspended accounts stay suspended.
     await this.prisma.user.updateMany({
-      where: { phone },
-      data: { phoneVerifiedAt: new Date(), status: 'active' },
+      where: { phone, status: { not: 'suspended' } },
+      data: { phoneVerifiedAt: new Date() },
     });
 
     const user = await this.prisma.user.findUnique({ where: { phone } });
     if (!user) throw new BadRequestException('User not found');
+    if (user.status === 'suspended') {
+      throw new UnauthorizedException('Account suspended');
+    }
 
     return this.issueTokens(user.id, appRole ?? user.role);
   }

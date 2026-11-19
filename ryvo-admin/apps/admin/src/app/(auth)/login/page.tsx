@@ -17,13 +17,12 @@ const FEATURES = [
   { icon: ShieldCheck, text: 'Enterprise-grade security & audit trails' },
 ];
 
-const ADMIN_PHONE = '10000000000';
-const ADMIN_PASSWORD = '123456';
-
 export default function LoginPage() {
   const router = useRouter();
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
+  const [totpCode, setTotpCode] = useState('');
+  const [needs2fa, setNeeds2fa] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -37,7 +36,12 @@ export default function LoginPage() {
       const normalizedPhone = phone.trim().startsWith('+')
         ? phone.trim()
         : `+${phone.trim().replace(/[^\d]/g, '')}`;
-      await login(normalizedPhone, password);
+      const result = await login(normalizedPhone, password, needs2fa ? totpCode : undefined);
+      if ('requires2fa' in result && result.requires2fa) {
+        setNeeds2fa(true);
+        setError(null);
+        return;
+      }
       router.push('/');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Login failed');
@@ -101,19 +105,6 @@ export default function LoginPage() {
             <p className="mt-2 text-sm text-muted">Sign in to the Ryvo operations dashboard</p>
           </div>
 
-          <Button
-            type="button"
-            variant="secondary"
-            className="mb-4 w-full"
-            onClick={() => {
-              setPhone(ADMIN_PHONE);
-              setPassword(ADMIN_PASSWORD);
-              setError(null);
-            }}
-          >
-            Autofill
-          </Button>
-
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
               <label htmlFor="phone" className="text-sm font-medium text-primary">
@@ -122,12 +113,13 @@ export default function LoginPage() {
               <Input
                 id="phone"
                 type="tel"
-                placeholder="10000000000"
+                placeholder="Phone with country code"
                 value={phone}
                 onChange={(e) => setPhone(e.target.value)}
                 leading={<Phone strokeWidth={1.75} />}
                 required
                 autoComplete="tel"
+                disabled={needs2fa}
               />
             </div>
 
@@ -154,8 +146,29 @@ export default function LoginPage() {
                 }
                 required
                 autoComplete="current-password"
+                disabled={needs2fa}
               />
             </div>
+
+            {needs2fa ? (
+              <div className="space-y-2">
+                <label htmlFor="totp" className="text-sm font-medium text-primary">
+                  Authenticator code
+                </label>
+                <Input
+                  id="totp"
+                  type="text"
+                  inputMode="numeric"
+                  placeholder="000000"
+                  value={totpCode}
+                  onChange={(e) => setTotpCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                  leading={<ShieldCheck strokeWidth={1.75} />}
+                  required
+                  maxLength={6}
+                  autoComplete="one-time-code"
+                />
+              </div>
+            ) : null}
 
             {error ? (
               <div className="flex items-start gap-2 rounded-md bg-danger/10 px-3 py-2.5 text-sm text-danger">
@@ -165,7 +178,7 @@ export default function LoginPage() {
             ) : null}
 
             <Button type="submit" variant="emphasis" className="w-full" size="lg" loading={loading}>
-              Sign in
+              {needs2fa ? 'Verify and sign in' : 'Sign in'}
             </Button>
           </form>
         </div>

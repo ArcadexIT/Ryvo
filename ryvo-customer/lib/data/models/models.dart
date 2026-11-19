@@ -166,6 +166,42 @@ class FareEstimate {
   final String? pricingRuleId;
 }
 
+/// Result of `POST /customer/promos/validate`. `discountType` is the backend
+/// DiscountType enum: `percentage` or `fixed`.
+class PromoValidation {
+  const PromoValidation({
+    required this.id,
+    required this.code,
+    required this.discountType,
+    required this.discountValue,
+    required this.discountAmount,
+    required this.finalAmount,
+  });
+
+  factory PromoValidation.fromJson(Map<String, dynamic> json) => PromoValidation(
+        id: json['id'] as String,
+        code: json['code'] as String,
+        discountType: json['discountType'] as String? ?? 'fixed',
+        discountValue: _toDouble(json['discountValue']),
+        discountAmount: _toDouble(json['discountAmount']),
+        finalAmount: _toDouble(json['finalAmount']),
+      );
+
+  final String id;
+  final String code;
+  final String discountType;
+  final double discountValue;
+  final double discountAmount;
+  final double finalAmount;
+
+  /// Mirrors the server rule so the shown fare follows bid changes.
+  double discountFor(double amount) {
+    final raw = discountType == 'percentage' ? amount * discountValue / 100 : discountValue;
+    final rounded = (raw * 100).round() / 100;
+    return rounded.clamp(0, amount).toDouble();
+  }
+}
+
 class JobModel {
   JobModel({
     required this.id,

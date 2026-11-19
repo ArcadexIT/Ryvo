@@ -250,8 +250,78 @@ function SecurityTab() {
     onError: (err: Error) => sonnerToast.error(err.message),
   });
 
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+
+  const passwordMutation = useMutation({
+    mutationFn: () =>
+      apiMutate('/admin/auth/password/change', 'POST', {
+        currentPassword,
+        newPassword,
+      }),
+    onSuccess: () => {
+      setCurrentPassword('');
+      setNewPassword('');
+      setConfirmPassword('');
+      sonnerToast.success('Password updated. Sign in again with the new password.');
+      setTimeout(() => {
+        window.location.href = '/login';
+      }, 1200);
+    },
+    onError: (err: Error) => sonnerToast.error(err.message),
+  });
+
   return (
     <div className="space-y-5">
+      <Panel
+        icon={Shield}
+        title="Change password"
+        description="Update the password for this admin account. You will need to sign in again."
+      >
+        <div className="grid gap-3 px-5 py-4 sm:max-w-md">
+          <Input
+            type="password"
+            placeholder="Current password"
+            value={currentPassword}
+            onChange={(e) => setCurrentPassword(e.target.value)}
+            autoComplete="current-password"
+          />
+          <Input
+            type="password"
+            placeholder="New password (min 8 characters)"
+            value={newPassword}
+            onChange={(e) => setNewPassword(e.target.value)}
+            autoComplete="new-password"
+          />
+          <Input
+            type="password"
+            placeholder="Confirm new password"
+            value={confirmPassword}
+            onChange={(e) => setConfirmPassword(e.target.value)}
+            autoComplete="new-password"
+          />
+          <Button
+            disabled={
+              currentPassword.length < 6 ||
+              newPassword.length < 8 ||
+              newPassword !== confirmPassword ||
+              passwordMutation.isPending
+            }
+            loading={passwordMutation.isPending}
+            onClick={() => {
+              if (newPassword !== confirmPassword) {
+                sonnerToast.error('New passwords do not match');
+                return;
+              }
+              passwordMutation.mutate();
+            }}
+          >
+            Update password
+          </Button>
+        </div>
+      </Panel>
+
       <Panel
         icon={Shield}
         title="Two-factor authentication"

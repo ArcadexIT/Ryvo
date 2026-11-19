@@ -1,8 +1,8 @@
 import { Controller, Get, Param, Patch, Body, Query, UseGuards, Req } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import { CountriesService } from './countries.service';
-import { JwtAuthGuard, RolesGuard } from '../auth/guards';
-import { Roles } from '../auth/roles.decorator';
+import { AdminPermissionGuard, JwtAuthGuard, RolesGuard } from '../auth/guards';
+import { RequireAdminModule, Roles } from '../auth/roles.decorator';
 import { UserRole } from '@ryvo/shared';
 import { successResponse } from '../common/utils';
 import { PaginationDto } from '../common/dto/pagination.dto';
@@ -19,8 +19,9 @@ class SetActiveDto {
 
 @ApiTags('Admin Countries')
 @Controller('admin/countries')
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, AdminPermissionGuard)
 @Roles(UserRole.ADMIN)
+@RequireAdminModule('countries')
 @ApiBearerAuth()
 export class AdminCountriesController {
   constructor(

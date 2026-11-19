@@ -11,8 +11,8 @@ import {
 } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import { SupportService } from './support.service';
-import { JwtAuthGuard, RolesGuard } from '../auth/guards';
-import { Roles } from '../auth/roles.decorator';
+import { AdminPermissionGuard, JwtAuthGuard, RolesGuard } from '../auth/guards';
+import { RequireAdminModule, Roles } from '../auth/roles.decorator';
 import { UserRole } from '@ryvo/shared';
 import { successResponse } from '../common/utils';
 import { PaginationDto } from '../common/dto/pagination.dto';
@@ -58,8 +58,9 @@ class UpdateTicketPriorityDto {
 
 @ApiTags('Admin Support')
 @Controller('admin/support/tickets')
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, AdminPermissionGuard)
 @Roles(UserRole.ADMIN)
+@RequireAdminModule('support')
 @ApiBearerAuth()
 export class AdminSupportController {
   constructor(

@@ -5,6 +5,7 @@ import '../../../../core/theme/app_colors.dart';
 import '../../../../data/models/models.dart';
 import '../../../../shared/providers/app_providers.dart';
 import '../../../../shared/widgets/widgets.dart';
+import '../../../payment/presentation/customer_checkout.dart';
 import 'package:ryvo_customer/l10n/app_localizations.dart';
 
 class TopUpPage extends ConsumerStatefulWidget {
@@ -29,22 +30,33 @@ class _TopUpPageState extends ConsumerState<TopUpPage> {
   }
 
   Future<void> _topUp() async {
-    if (_amount <= 0) return;
+    if (_amount <= 0 || _loading) return;
     setState(() => _loading = true);
     try {
-      await ref.read(walletRepositoryProvider).topUp(
-            _amount.toDouble(),
-            description: 'Wallet top up',
-          );
-      ref.invalidate(walletBalanceProvider);
-      ref.invalidate(walletTransactionsProvider);
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Added ${formatMoney(_amount.toDouble())} to wallet')),
+      final before = ref.read(walletBalanceProvider).valueOrNull?.balance ?? 0;
+      final paid = await CustomerCheckout(ref).topUpWallet(
+        context: context,
+        amount: _amount.toDouble(),
       );
+      if (!paid || !mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Payment received. Your balance updates once it confirms.'),
+        ),
+      );
+      // The Stripe webhook credits the wallet, so poll for a short while.
+      for (var attempt = 0; attempt < 6; attempt++) {
+        ref.invalidate(walletBalanceProvider);
+        ref.invalidate(walletTransactionsProvider);
+        try {
+          final latest = await ref.read(walletBalanceProvider.future);
+          if ((latest?.balance ?? before) > before) break;
+        } catch (_) {}
+        await Future<void>.delayed(const Duration(seconds: 2));
+        if (!mounted) return;
+      }
+      if (!mounted) return;
       Navigator.of(context).pop();
-    } catch (e) {
-      if (mounted) showApiError(context, e);
     } finally {
       if (mounted) setState(() => _loading = false);
     }

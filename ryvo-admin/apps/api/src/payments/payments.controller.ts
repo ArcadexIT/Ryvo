@@ -12,8 +12,8 @@ import {
 } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import { PaymentsService } from './payments.service';
-import { JwtAuthGuard, RolesGuard } from '../auth/guards';
-import { Roles } from '../auth/roles.decorator';
+import { AdminPermissionGuard, JwtAuthGuard, RolesGuard } from '../auth/guards';
+import { RequireAdminModule, Roles } from '../auth/roles.decorator';
 import { UserRole } from '@ryvo/shared';
 import { successResponse } from '../common/utils';
 import { PaginationDto } from '../common/dto/pagination.dto';
@@ -28,12 +28,14 @@ class PaymentFiltersDto extends PaginationDto {
 
 class CreatePaymentIntentDto {
   @IsUUID() jobId!: string;
-  @IsNumber() @Min(0.01) amount!: number;
-  @IsOptional() @IsString() currency?: string;
 }
 
 class ConfirmPaymentDto {
   @IsOptional() @IsString() paymentIntentId?: string;
+}
+
+class WalletTopUpDto {
+  @IsNumber() @Min(0.01) amount!: number;
 }
 
 class RefundDto {
@@ -43,8 +45,9 @@ class RefundDto {
 
 @ApiTags('Admin Payments')
 @Controller('admin/payments')
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, AdminPermissionGuard)
 @Roles(UserRole.ADMIN)
+@RequireAdminModule('finance')
 @ApiBearerAuth()
 export class AdminPaymentsController {
   constructor(private payments: PaymentsService) {}
@@ -90,18 +93,37 @@ export class CustomerPaymentsController {
     @Body() dto: CreatePaymentIntentDto,
   ) {
     return successResponse(
-      await this.payments.createPaymentIntent(dto.jobId, dto.amount, req.user.id),
+      await this.payments.createPaymentIntent(dto.jobId, req.user.id),
+    );
+  }
+
+  @Post('wallet-top-up')
+  async walletTopUp(
+    @Req() req: { user: { id: string } },
+    @Body() dto: WalletTopUpDto,
+  ) {
+    return successResponse(
+      await this.payments.createWalletTopUpIntent(req.user.id, dto.amount),
     );
   }
 
   @Post('job/:jobId/confirm')
-  async confirm(@Param('jobId') jobId: string, @Body() dto: ConfirmPaymentDto) {
-    return successResponse(await this.payments.confirmPayment(jobId, dto.paymentIntentId));
+  async confirm(
+    @Req() req: { user: { id: string } },
+    @Param('jobId') jobId: string,
+    @Body() dto: ConfirmPaymentDto,
+  ) {
+    return successResponse(
+      await this.payments.confirmPayment(jobId, req.user.id, dto.paymentIntentId),
+    );
   }
 
   @Get('job/:jobId')
-  async byJob(@Param('jobId') jobId: string) {
-    return successResponse(await this.payments.findByJob(jobId));
+  async byJob(
+    @Req() req: { user: { id: string } },
+    @Param('jobId') jobId: string,
+  ) {
+    return successResponse(await this.payments.findByJob(jobId, req.user.id));
   }
 
   @Post('job/:jobId/wallet')

@@ -66,6 +66,40 @@ export class ProviderJobsService {
     private matching: MatchingService,
   ) {}
 
+  /** Strip the parcel recipient OTP so drivers cannot read the delivery code. */
+  private withoutRecipientOtp<T extends { recipientOtp?: string | null }>(job: T): T {
+    return { ...job, recipientOtp: null };
+  }
+
+  /**
+   * Load a job owned by this driver.
+   * `redactOtp` defaults to true for API responses. Internal status transitions
+   * pass false so parcel delivery checks can see whether an OTP exists.
+   */
+  async getOne(
+    providerId: string,
+    jobId: string,
+    options: { redactOtp?: boolean } = {},
+  ) {
+    const redactOtp = options.redactOtp !== false;
+    const job = await this.prisma.job.findUnique({
+      where: { id: jobId },
+      include: {
+        ...jobInclude,
+        payment: true,
+        ratings: true,
+        providerEarning: {
+          select: { netAmount: true, grossAmount: true, platformFee: true },
+        },
+      },
+    });
+    if (!job) throw new NotFoundException('Job not found');
+    if (job.providerId !== providerId) {
+      throw new ForbiddenException('Job does not belong to this driver');
+    }
+    return redactOtp ? this.withoutRecipientOtp(job) : job;
+  }
+
   async getActive(providerId: string) {
     const jobs = await this.prisma.job.findMany({
       where: { providerId, status: { in: ACTIVE_STATUSES } },
@@ -86,7 +120,7 @@ export class ProviderJobsService {
       return (a.matchedAt?.getTime() ?? 0) - (b.matchedAt?.getTime() ?? 0);
     });
 
-    const current = jobs[0];
+    const current = this.withoutRecipientOtp(jobs[0]);
     const next = jobs.find(
       (job) => job.id !== current.id && (job.status === 'matched' || job.status === 'payment_pending'),
     );
@@ -117,35 +151,19 @@ export class ProviderJobsService {
       }),
       this.prisma.job.count({ where }),
     ]);
-    return { items, meta: paginateMeta(page, limit, total) };
-  }
-
-  async getOne(providerId: string, jobId: string) {
-    const job = await this.prisma.job.findUnique({
-      where: { id: jobId },
-      include: {
-        ...jobInclude,
-        payment: true,
-        ratings: true,
-        providerEarning: {
-          select: { netAmount: true, grossAmount: true, platformFee: true },
-        },
-      },
-    });
-    if (!job) throw new NotFoundException('Job not found');
-    if (job.providerId !== providerId) {
-      throw new ForbiddenException('Job does not belong to this driver');
-    }
-    return job;
+    return {
+      items: items.map((job) => this.withoutRecipientOtp(job)),
+      meta: paginateMeta(page, limit, total),
+    };
   }
 
   async confirmStart(providerId: string, jobId: string) {
-    await this.getOne(providerId, jobId);
+    await this.getOne(providerId, jobId, { redactOtp: false });
     return this.jobs.confirmJobStart(jobId, 'provider', providerId);
   }
 
   async cancelJob(providerId: string, jobId: string, reason?: string) {
-    const job = await this.getOne(providerId, jobId);
+    const job = await this.getOne(providerId, jobId, { redactOtp: false });
     if (job.status === 'completed' || job.status.startsWith('cancelled')) {
       throw new BadRequestException('Job is already closed');
     }
@@ -162,7 +180,7 @@ export class ProviderJobsService {
       throw new BadRequestException(`Drivers cannot set status ${toStatus}`);
     }
 
-    const job = await this.getOne(providerId, jobId);
+    const job = await this.getOne(providerId, jobId, { redactOtp: false });
     if (job.status === 'completed' || job.status.startsWith('cancelled')) {
       throw new BadRequestException('Job is already closed');
     }
@@ -188,7 +206,7 @@ export class ProviderJobsService {
       }
       await this.jobs.finalizeFare(jobId);
       await this.payments.chargeForCompletedJob(jobId);
-      fareJob = await this.getOne(providerId, jobId);
+      fareJob = await this.getOne(providerId, jobId, { redactOtp: false });
     }
 
     const updated = await this.prisma.$transaction(async (tx) => {
@@ -250,7 +268,7 @@ export class ProviderJobsService {
         .catch(() => undefined);
     }
 
-    return updated;
+    return this.withoutRecipientOtp(updated);
   }
 
   /** Email receipt to customer and provider after a completed job. */

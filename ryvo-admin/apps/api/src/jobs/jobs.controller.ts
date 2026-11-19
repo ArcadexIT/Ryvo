@@ -11,8 +11,8 @@ import {
 } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import { JobsService } from './jobs.service';
-import { JwtAuthGuard, RolesGuard } from '../auth/guards';
-import { Roles } from '../auth/roles.decorator';
+import { AdminPermissionGuard, JwtAuthGuard, RolesGuard } from '../auth/guards';
+import { RequireAdminModule, Roles } from '../auth/roles.decorator';
 import { CancelledBy, UserRole } from '@ryvo/shared';
 import { successResponse } from '../common/utils';
 import { PaginationDto } from '../common/dto/pagination.dto';
@@ -51,8 +51,9 @@ class EstimateFareDto {
 
 @ApiTags('Admin Jobs')
 @Controller('admin/jobs')
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, AdminPermissionGuard)
 @Roles(UserRole.ADMIN)
+@RequireAdminModule('jobs')
 @ApiBearerAuth()
 export class JobsController {
   constructor(

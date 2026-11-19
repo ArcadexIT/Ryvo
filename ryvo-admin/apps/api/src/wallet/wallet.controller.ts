@@ -1,8 +1,8 @@
 import { Controller, Get, Post, Body, Query, Param, UseGuards, Req } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import { WalletService } from './wallet.service';
-import { JwtAuthGuard, RolesGuard } from '../auth/guards';
-import { Roles } from '../auth/roles.decorator';
+import { AdminPermissionGuard, JwtAuthGuard, RolesGuard } from '../auth/guards';
+import { RequireAdminModule, Roles } from '../auth/roles.decorator';
 import { UserRole } from '@ryvo/shared';
 import { successResponse } from '../common/utils';
 import { PaginationDto } from '../common/dto/pagination.dto';
@@ -39,16 +39,28 @@ export class CustomerWalletController {
     return successResponse(result.items, undefined, result.meta);
   }
 
+  /**
+   * @deprecated Direct credit is removed. Use POST /customer/payments/wallet-top-up
+   * then complete the Stripe PaymentSheet; the webhook credits the wallet.
+   */
   @Post('top-up')
-  async topUp(@Req() req: { user: { id: string } }, @Body() dto: TopUpDto) {
-    return successResponse(await this.wallet.topUp(req.user.id, dto.amount, dto.description));
+  async topUp() {
+    return successResponse(
+      {
+        redirected: true,
+        message:
+          'Wallet top-ups require a card payment. Call POST /customer/payments/wallet-top-up and confirm the PaymentIntent.',
+      },
+      'Wallet top-ups require a confirmed Stripe payment',
+    );
   }
 }
 
 @ApiTags('Admin Wallet')
 @Controller('admin/wallet')
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, AdminPermissionGuard)
 @Roles(UserRole.ADMIN)
+@RequireAdminModule('finance')
 @ApiBearerAuth()
 export class AdminWalletController {
   constructor(

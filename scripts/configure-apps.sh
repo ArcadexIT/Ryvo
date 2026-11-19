@@ -22,7 +22,8 @@ set +a
 
 API_BASE_URL="${API_BASE_URL:?Set API_BASE_URL}"
 WS_BASE_URL="${WS_BASE_URL:-}"
-MAPS_API_KEY="${MAPS_API_KEY:-}"
+# Accept GOOGLE_MAPS_API_KEY (preferred) or MAPS_API_KEY (alias).
+GOOGLE_MAPS_API_KEY="${GOOGLE_MAPS_API_KEY:-${MAPS_API_KEY:-}}"
 APP_NAME="${APP_NAME:-Ryvo}"
 
 echo "Configured:"
@@ -33,13 +34,13 @@ echo "Customer (Android):"
 echo "  cd $ROOT/ryvo-customer && flutter pub get && flutter build apk --release \\"
 echo "    --dart-define=API_BASE_URL=$API_BASE_URL \\"
 echo "    --dart-define=WS_BASE_URL=${WS_BASE_URL} \\"
-echo "    --dart-define=MAPS_API_KEY=${MAPS_API_KEY}"
+echo "    --dart-define=GOOGLE_MAPS_API_KEY=${GOOGLE_MAPS_API_KEY}"
 echo
 echo "Driver (Android):"
 echo "  cd $ROOT/ryvo-driver && flutter pub get && flutter build apk --release \\"
 echo "    --dart-define=API_BASE_URL=$API_BASE_URL \\"
 echo "    --dart-define=WS_BASE_URL=${WS_BASE_URL} \\"
-echo "    --dart-define=MAPS_API_KEY=${MAPS_API_KEY}"
+echo "    --dart-define=GOOGLE_MAPS_API_KEY=${GOOGLE_MAPS_API_KEY}"
 echo
 echo "iOS: the same --dart-define flags with flutter build ipa --release"
 echo "Change applicationId / bundle id in android/app/build.gradle and ios/Runner.xcodeproj before store upload."

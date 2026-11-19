@@ -161,12 +161,15 @@ export class PaymentsService implements OnModuleInit {
     return { items, meta: paginateMeta(page, limit, total) };
   }
 
-  async findByJob(jobId: string) {
+  async findByJob(jobId: string, userId?: string) {
     const payment = await this.prisma.payment.findUnique({
       where: { jobId },
-      include: { job: true },
+      include: { job: { include: { customer: true } } },
     });
     if (!payment) throw new NotFoundException('Payment not found');
+    if (userId && payment.job.customer.userId !== userId) {
+      throw new BadRequestException('Job does not belong to this customer');
+    }
     return payment;
   }
 
@@ -305,34 +308,36 @@ export class PaymentsService implements OnModuleInit {
     return created.id;
   }
 
-  async createPaymentIntent(jobId: string, amount: number, userId?: string) {
+  async createPaymentIntent(jobId: string, userId: string) {
     await this.assertPaymentMethodEnabled('stripe');
     const stripe = await this.stripeForCardSheet();
 
-    const job = await this.prisma.job.findUnique({ where: { id: jobId } });
-    if (!job) throw new NotFoundException('Job not found');
+    const job = await this.loadJobForPayment(jobId, userId);
+    const amount = this.jobAmount(job);
+    if (amount <= 0) throw new BadRequestException('Invalid job amount');
 
-    let stripeCustomerId: string | undefined;
-    let ephemeralKey: string | undefined;
-    if (userId) {
-      stripeCustomerId = await this.getOrCreateStripeCustomer(userId);
-      const key = await stripe.ephemeralKeys.create(
-        { customer: stripeCustomerId },
-        { apiVersion: '2024-06-20' },
-      );
-      ephemeralKey = key.secret ?? undefined;
-    }
+    const stripeCustomerId = await this.getOrCreateStripeCustomer(userId);
+    const key = await stripe.ephemeralKeys.create(
+      { customer: stripeCustomerId },
+      { apiVersion: '2024-06-20' },
+    );
+    const ephemeralKey = key.secret ?? undefined;
 
     const currency = (await this.settings.getPlatformCurrency()).code.toLowerCase();
     const intent = await stripe.paymentIntents.create({
       amount: Math.round(amount * 100),
       currency,
-      metadata: { jobId, jobNumber: job.jobNumber },
+      metadata: {
+        kind: 'job_payment',
+        jobId,
+        jobNumber: job.jobNumber,
+        userId,
+        amount: String(amount),
+      },
       payment_method_types: ['card'],
       capture_method: 'manual',
-      ...(stripeCustomerId
-        ? { customer: stripeCustomerId, setup_future_usage: 'off_session' }
-        : {}),
+      customer: stripeCustomerId,
+      setup_future_usage: 'off_session',
     });
 
     const payment = await this.prisma.payment.upsert({
@@ -361,38 +366,99 @@ export class PaymentsService implements OnModuleInit {
       clientSecret,
       customerId: stripeCustomerId,
       ephemeralKey,
+      amount,
     };
   }
 
-  async confirmPayment(jobId: string, paymentIntentId?: string) {
-    const payment = await this.findByJob(jobId);
+  async confirmPayment(jobId: string, userId: string, paymentIntentId?: string) {
+    const job = await this.loadJobForPayment(jobId, userId);
+    const payment = await this.findByJob(jobId, userId);
+    const expectedAmount = this.jobAmount(job);
 
-    if (this.stripe) {
-      const intentId = paymentIntentId ?? payment.stripePaymentIntentId;
-      if (!intentId) {
-        throw new BadRequestException('No Stripe payment intent for this job');
-      }
-      const intent = await this.stripe.paymentIntents.retrieve(intentId);
-
-      // Manual capture → requires_capture; automatic capture → succeeded.
-      // Either way funds are secured — advance the job out of payment_pending.
-      if (intent.status === 'requires_capture' || intent.status === 'succeeded') {
-        const updated = await this.prisma.payment.update({
-          where: { jobId },
-          data:
-            intent.status === 'succeeded'
-              ? { status: 'paid', paidAt: new Date() }
-              : { status: 'held' },
-        });
-        await this.advanceJobAfterHold(jobId);
-        return updated;
-      }
-
-      throw new BadRequestException(`Payment not authorized: ${intent.status}`);
+    const stripe = await this.stripeForCardSheet();
+    const intentId = paymentIntentId ?? payment.stripePaymentIntentId;
+    if (!intentId) {
+      throw new BadRequestException('No Stripe payment intent for this job');
+    }
+    if (payment.stripePaymentIntentId && paymentIntentId && payment.stripePaymentIntentId !== paymentIntentId) {
+      throw new BadRequestException('Payment intent does not match this job');
     }
 
-    this.requireStripe();
-    return payment;
+    const intent = await stripe.paymentIntents.retrieve(intentId);
+    if (intent.metadata?.jobId && intent.metadata.jobId !== jobId) {
+      throw new BadRequestException('Payment intent does not match this job');
+    }
+    const intentAmount = (intent.amount ?? 0) / 100;
+    if (Math.abs(intentAmount - expectedAmount) > 0.01) {
+      throw new BadRequestException('Payment amount does not match the job fare');
+    }
+
+    // Manual capture → requires_capture; automatic capture → succeeded.
+    if (intent.status === 'requires_capture' || intent.status === 'succeeded') {
+      const updated = await this.prisma.payment.update({
+        where: { jobId },
+        data:
+          intent.status === 'succeeded'
+            ? { status: 'paid', paidAt: new Date(), amount: expectedAmount }
+            : { status: 'held', amount: expectedAmount },
+      });
+      await this.advanceJobAfterHold(jobId);
+      return updated;
+    }
+
+    throw new BadRequestException(`Payment not authorized: ${intent.status}`);
+  }
+
+  /** Create a Stripe PaymentIntent for a wallet top-up. Credit happens on webhook. */
+  async createWalletTopUpIntent(userId: string, amount: number) {
+    if (amount <= 0) throw new BadRequestException('Amount must be positive');
+    if (!(await this.settings.isCustomerWalletEnabled())) {
+      throw new BadRequestException('Customer wallet is currently disabled');
+    }
+    const stripe = await this.stripeForCardSheet();
+    const stripeCustomerId = await this.getOrCreateStripeCustomer(userId);
+    const currency = (await this.settings.getPlatformCurrency()).code.toLowerCase();
+    const intent = await stripe.paymentIntents.create({
+      amount: Math.round(amount * 100),
+      currency,
+      metadata: {
+        kind: 'wallet_topup',
+        userId,
+        amount: String(amount),
+      },
+      payment_method_types: ['card'],
+      customer: stripeCustomerId,
+    });
+    const clientSecret = intent.client_secret;
+    if (!clientSecret) {
+      throw new BadRequestException('Stripe did not return a client secret');
+    }
+    return {
+      clientSecret,
+      customerId: stripeCustomerId,
+      paymentIntentId: intent.id,
+      amount,
+    };
+  }
+
+  async creditWalletFromStripeIntent(intent: Stripe.PaymentIntent) {
+    if (intent.metadata?.kind !== 'wallet_topup') return;
+    const userId = intent.metadata.userId;
+    const amount = Number(intent.metadata.amount ?? intent.amount / 100);
+    if (!userId || !Number.isFinite(amount) || amount <= 0) return;
+    const existing = await this.prisma.walletTransaction.findFirst({
+      where: {
+        referenceType: 'stripe_payment_intent',
+        referenceId: intent.id,
+        type: 'top_up',
+      },
+    });
+    if (existing) return;
+    await this.wallet.topUp(userId, amount, `Card top-up ${intent.id}`, {
+      referenceType: 'stripe_payment_intent',
+      referenceId: intent.id,
+      bypassFeatureFlag: true,
+    });
   }
 
   /** Place wallet funds on hold when provider is matched (pay in advance). */
@@ -855,11 +921,24 @@ export class PaymentsService implements OnModuleInit {
           await this.subscriptions.handlePaymentIntentSucceeded(intent);
           break;
         }
+        if (intent.metadata?.kind === 'wallet_topup') {
+          await this.creditWalletFromStripeIntent(intent);
+          break;
+        }
         const jobId = intent.metadata?.jobId;
         if (jobId) {
+          const job = await this.prisma.job.findUnique({ where: { id: jobId } });
+          const expected = job ? this.jobAmount(job) : 0;
+          const paid = (intent.amount ?? 0) / 100;
+          if (expected > 0 && Math.abs(paid - expected) > 0.01) {
+            this.logger.warn(
+              `Stripe PI ${intent.id} amount ${paid} does not match job ${jobId} fare ${expected}`,
+            );
+            break;
+          }
           await this.prisma.payment.updateMany({
             where: { jobId, stripePaymentIntentId: intent.id },
-            data: { status: 'paid', paidAt: new Date() },
+            data: { status: 'paid', paidAt: new Date(), ...(expected > 0 ? { amount: expected } : {}) },
           });
           await this.advanceJobAfterHold(jobId);
         }

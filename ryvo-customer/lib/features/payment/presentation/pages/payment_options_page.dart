@@ -8,6 +8,7 @@ import 'package:intl/intl.dart';
 import 'package:ryvo_customer/l10n/app_localizations.dart';
 
 import '../../../../core/constants/app_constants.dart';
+import '../../../../core/network/api_exception.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../data/models/app_config.dart';
@@ -71,12 +72,58 @@ class _PaymentOptionsPageState extends ConsumerState<PaymentOptionsPage> {
   bool _closing = false;
   bool _googlePayReady = false;
   bool _applePayReady = false;
+  final _promoController = TextEditingController();
+  bool _promoLoading = false;
+  String? _promoError;
 
   @override
   void initState() {
     super.initState();
     _selected = widget.selected;
     Future.microtask(_prepare);
+  }
+
+  @override
+  void dispose() {
+    _promoController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _applyPromo() async {
+    final code = _promoController.text.trim();
+    if (code.isEmpty || _promoLoading) return;
+    final config =
+        ref.read(appConfigProvider).valueOrNull ?? AppConfig.fallback;
+    final base = checkoutBaseFare(ref.read(jobDraftProvider), config);
+    if (base <= 0) {
+      setState(() => _promoError = 'Choose a ride first to apply a promo code.');
+      return;
+    }
+    FocusScope.of(context).unfocus();
+    setState(() {
+      _promoLoading = true;
+      _promoError = null;
+    });
+    try {
+      final promo =
+          await ref.read(paymentRepositoryProvider).validatePromo(code, base);
+      if (!mounted) return;
+      HapticFeedback.selectionClick();
+      ref.read(jobDraftProvider.notifier).state =
+          ref.read(jobDraftProvider).copyWith(promo: promo);
+      _promoController.clear();
+    } catch (e) {
+      if (mounted) setState(() => _promoError = (e is ApiException ? e.message : e.toString().replaceFirst('ApiException: ', '')));
+    } finally {
+      if (mounted) setState(() => _promoLoading = false);
+    }
+  }
+
+  void _removePromo() {
+    HapticFeedback.selectionClick();
+    ref.read(jobDraftProvider.notifier).state =
+        ref.read(jobDraftProvider).copyWith(clearPromo: true);
+    setState(() => _promoError = null);
   }
 
   Future<void> _prepare() async {
@@ -432,7 +479,18 @@ class _PaymentOptionsPageState extends ConsumerState<PaymentOptionsPage> {
                     ),
                   ),
                   const SizedBox(height: 12),
-                  const _PromoRow(),
+                  _PromoSection(
+                    controller: _promoController,
+                    applied: draft.activeJob == null ? draft.promo : null,
+                    discount: draft.activeJob == null && draft.promo != null
+                        ? draft.promo!.discountFor(checkoutBaseFare(draft, config))
+                        : 0,
+                    locked: draft.activeJob != null,
+                    loading: _promoLoading || _loading,
+                    error: _promoError,
+                    onApply: _applyPromo,
+                    onRemove: _removePromo,
+                  ),
                 ],
               ),
             ),
@@ -855,50 +913,153 @@ class _LinkRow extends StatelessWidget {
   }
 }
 
-/// Promo entry point. The backend has no voucher API yet, so the row is shown
-/// as unavailable instead of accepting a code that would not be applied.
-class _PromoRow extends StatelessWidget {
-  const _PromoRow();
+/// Promo entry: a code field with Apply, or the applied code with its saving.
+class _PromoSection extends StatelessWidget {
+  const _PromoSection({
+    required this.controller,
+    required this.applied,
+    required this.discount,
+    required this.locked,
+    required this.loading,
+    required this.error,
+    required this.onApply,
+    required this.onRemove,
+  });
+
+  final TextEditingController controller;
+  final PromoValidation? applied;
+  final double discount;
+  final bool locked;
+  final bool loading;
+  final String? error;
+  final VoidCallback onApply;
+  final VoidCallback onRemove;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: Row(
-        children: [
-          Icon(CupertinoIcons.tag, size: 20, color: AppColors.textHint),
-          const SizedBox(width: 12),
-          Expanded(
+    final promo = applied;
+    if (promo != null) {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        decoration: BoxDecoration(
+          color: AppColors.surface,
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: Row(
+          children: [
+            Icon(CupertinoIcons.tag_fill, size: 20, color: AppColors.primaryDark),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    promo.code,
+                    style: RyvoTypography.style(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.textPrimary,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    'You save ${formatMoney(discount)}',
+                    style: RyvoTypography.style(
+                      fontSize: 13,
+                      color: AppColors.primaryDark,
+                      tabular: true,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            TextButton(
+              onPressed: loading ? null : onRemove,
+              child: const Text('Remove'),
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (locked) {
+      return Text(
+        'Promo codes can be added before the ride is requested.',
+        style: RyvoTypography.style(
+          fontSize: 13,
+          color: AppColors.textSecondary,
+        ),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          padding: const EdgeInsets.only(left: 16, right: 6),
+          decoration: BoxDecoration(
+            color: AppColors.surface,
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: Row(
+            children: [
+              Icon(CupertinoIcons.tag, size: 20, color: AppColors.textHint),
+              const SizedBox(width: 12),
+              Expanded(
+                child: TextField(
+                  controller: controller,
+                  enabled: !loading,
+                  textCapitalization: TextCapitalization.characters,
+                  textInputAction: TextInputAction.done,
+                  onSubmitted: (_) => onApply(),
+                  style: RyvoTypography.style(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.textPrimary,
+                  ),
+                  decoration: InputDecoration(
+                    hintText: 'Add promo code',
+                    hintStyle: RyvoTypography.style(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.textHint,
+                    ),
+                    border: InputBorder.none,
+                    enabledBorder: InputBorder.none,
+                    focusedBorder: InputBorder.none,
+                    disabledBorder: InputBorder.none,
+                  ),
+                ),
+              ),
+              ValueListenableBuilder<TextEditingValue>(
+                valueListenable: controller,
+                builder: (_, value, __) => TextButton(
+                  onPressed:
+                      loading || value.text.trim().isEmpty ? null : onApply,
+                  child: loading
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Text('Apply'),
+                ),
+              ),
+            ],
+          ),
+        ),
+        if (error != null)
+          Padding(
+            padding: const EdgeInsets.only(top: 8, left: 4),
             child: Text(
-              'Add promo code',
+              error!,
               style: RyvoTypography.style(
-                fontSize: 15,
-                fontWeight: FontWeight.w600,
-                color: AppColors.textHint,
+                fontSize: 13,
+                color: AppColors.error,
               ),
             ),
           ),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-            decoration: BoxDecoration(
-              color: AppColors.primaryLight,
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Text(
-              'Coming soon',
-              style: RyvoTypography.style(
-                fontSize: 11,
-                fontWeight: FontWeight.w700,
-                color: AppColors.primaryDark,
-              ),
-            ),
-          ),
-        ],
-      ),
+      ],
     );
   }
 }

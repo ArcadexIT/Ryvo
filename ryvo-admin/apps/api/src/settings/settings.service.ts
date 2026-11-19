@@ -34,11 +34,17 @@ export class SettingsService {
     );
   }
 
-  /** Last four characters only. The settings page can show that a key is saved. */
+  /**
+   * Mask secrets for the admin panel. Stripe secret keys are never returned
+   * (not even the last four characters). Other secrets show a short saved hint.
+   */
   redact(key: string, value: unknown): unknown {
     if (!this.isSecret(key) || typeof value !== 'string') return value;
     const raw = value.trim();
     if (!raw || raw.includes('•')) return raw;
+    if (key === PLATFORM_SETTINGS_KEYS.STRIPE_SECRET_KEY) {
+      return '••••';
+    }
     const prefix = raw.match(/^(?:pk|sk)_(?:test|live)_/)?.[0] ?? '';
     return `${prefix}••••${raw.slice(-4)}`;
   }

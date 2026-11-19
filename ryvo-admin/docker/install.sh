@@ -51,6 +51,13 @@ fi
 
 DOMAIN="$(prompt 'Public domain (example.com)' 'localhost')"
 ADMIN_PHONE="$(prompt 'Admin phone (include + and country code)' '+10000000000')"
+while true; do
+  ADMIN_PASSWORD="$(prompt 'Admin password (min 8 characters)' '' 1)"
+  if [[ ${#ADMIN_PASSWORD} -ge 8 ]]; then
+    break
+  fi
+  echo "Password must be at least 8 characters."
+done
 MAP_KEY="$(prompt 'Google Maps API key')"
 STRIPE_SECRET="$(prompt 'Stripe secret key (sk_...)' '' 1)"
 STRIPE_PK="$(prompt 'Stripe publishable key (pk_...)')"
@@ -125,7 +132,7 @@ if [[ "${admin_count:-0}" == "0" ]]; then
   echo "==> Creating the admin account and demo rider/driver accounts"
   docker exec \
     -e ADMIN_PHONE="$ADMIN_PHONE" \
-    -e ADMIN_PASSWORD="123456" \
+    -e ADMIN_PASSWORD="$ADMIN_PASSWORD" \
     -w /app \
     ryvo-api \
     npx tsx packages/database/prisma/seed.ts
@@ -142,8 +149,8 @@ echo "  After HTTPS is on:"
 echo "  Admin:  ${SCHEME}://${DOMAIN}"
 echo "  API:    ${API_URL}"
 echo "  Health: ${API_URL}/health"
-echo "  Admin login: ${ADMIN_PHONE} / 123456"
-echo "  Change that password before anyone else uses the panel."
+echo "  Admin login phone: ${ADMIN_PHONE}"
+echo "  Use the password you typed during install. Change it any time in Admin → Settings."
 echo
 echo "Set Google Maps and the Stripe publishable key in Admin → Settings if you skipped them here."
 echo "Point the Flutter apps with scripts/configure-apps.sh after this server is reachable."

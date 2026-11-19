@@ -1,17 +1,32 @@
-# ryvo_customer
+# Ryvo Customer App
 
-A new Flutter project.
+Flutter app for riders on the Ryvo ride, bid, and parcel platform. A rider can request a ride, send a bid to nearby drivers, or send a parcel. The app includes live tracking, chat, wallet, card and cash payment, invoices, and support.
 
-## Getting Started
+Part of the Ryvo package. The other parts are `ryvo-driver` (Flutter), and `ryvo-admin` (NestJS API and Next.js admin panel).
 
-This project is a starting point for a Flutter application.
+## Documentation
 
-A few resources to get you started if this is your first Flutter project:
+Open `documentation/index.html` at the root of the package. It covers server install, Google Maps, Firebase, Stripe, signing, and store builds.
 
-- [Learn Flutter](https://docs.flutter.dev/get-started/learn-flutter)
-- [Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Flutter learning resources](https://docs.flutter.dev/reference/learning-resources)
+## Run
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+```bash
+flutter pub get
+flutter run \
+  --dart-define=API_BASE_URL=https://your-domain.com/api/v1 \
+  --dart-define=WS_BASE_URL=https://your-domain.com \
+  --dart-define=GOOGLE_MAPS_API_KEY=your-maps-key
+```
+
+From the package root, `bash scripts/configure-apps.sh` prints the full build commands from `scripts/whitelabel.env`.
+
+## Before you ship
+
+- Replace every `xxxxxxxx` placeholder (Maps key in `AndroidManifest.xml` and `ios/Runner/Info.plist`).
+- Run `flutterfire configure` to create your own Firebase files.
+- Change the Android application id and iOS bundle id.
+- In Xcode, choose your own Apple Team under Signing & Capabilities.
+
+## Stack
+
+Flutter, Riverpod, GoRouter, Dio, Google Maps, Firebase Cloud Messaging, Stripe.

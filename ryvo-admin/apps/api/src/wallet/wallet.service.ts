@@ -63,10 +63,32 @@ export class WalletService {
     return { items, meta: paginateMeta(page, limit, total) };
   }
 
-  async topUp(userId: string, amount: number, description?: string) {
-    await this.assertCustomerWalletEnabled();
+  /**
+   * Credit the wallet after a confirmed payment (Stripe webhook / admin adjust).
+   * Never call this from a customer request with a client-supplied amount alone.
+   */
+  async topUp(
+    userId: string,
+    amount: number,
+    description?: string,
+    options?: {
+      referenceType?: string;
+      referenceId?: string;
+      bypassFeatureFlag?: boolean;
+    },
+  ) {
+    if (!options?.bypassFeatureFlag) {
+      await this.assertCustomerWalletEnabled();
+    }
     if (amount <= 0) throw new BadRequestException('Amount must be positive');
-    return this.applyTransaction(userId, amount, 'top_up', description);
+    return this.applyTransaction(
+      userId,
+      amount,
+      'top_up',
+      description,
+      options?.referenceType,
+      options?.referenceId,
+    );
   }
 
   async adminAdjust(

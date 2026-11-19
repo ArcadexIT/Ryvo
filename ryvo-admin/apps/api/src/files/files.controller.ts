@@ -13,8 +13,8 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiTags, ApiBearerAuth, ApiConsumes, ApiBody } from '@nestjs/swagger';
 import { IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
 import { FilesService } from './files.service';
-import { JwtAuthGuard, RolesGuard } from '../auth/guards';
-import { Roles } from '../auth/roles.decorator';
+import { AdminPermissionGuard, JwtAuthGuard, RolesGuard } from '../auth/guards';
+import { RequireAdminModule, Roles } from '../auth/roles.decorator';
 import { UserRole } from '@ryvo/shared';
 import { successResponse } from '../common/utils';
 
@@ -48,16 +48,18 @@ export class FilesController {
 
   @Post('admin/files/presign')
   @ApiBearerAuth()
-  @UseGuards(JwtAuthGuard, RolesGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard, AdminPermissionGuard)
   @Roles(UserRole.ADMIN)
+  @RequireAdminModule('cms')
   presignAdmin(@Body() dto: PresignDto) {
     return this.files.getUploadUrl(dto.folder, dto.filename, dto.contentType).then(successResponse);
   }
 
   @Post('admin/files/upload')
   @ApiBearerAuth()
-  @UseGuards(JwtAuthGuard, RolesGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard, AdminPermissionGuard)
   @Roles(UserRole.ADMIN)
+  @RequireAdminModule('cms')
   @UseInterceptors(FileInterceptor('file'))
   @ApiConsumes('multipart/form-data')
   @ApiBody({
@@ -95,8 +97,9 @@ export class FilesController {
 
   @Post('admin/files/access-url')
   @ApiBearerAuth()
-  @UseGuards(JwtAuthGuard, RolesGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard, AdminPermissionGuard)
   @Roles(UserRole.ADMIN)
+  @RequireAdminModule('cms')
   async accessUrlAdmin(@Body() dto: AccessUrlDto) {
     const url = await this.files.resolveAccessUrl(dto.fileUrl, dto.expiresIn ?? 3600);
     return successResponse({ url });
@@ -104,8 +107,9 @@ export class FilesController {
 
   @Post('admin/files/s3-test')
   @ApiBearerAuth()
-  @UseGuards(JwtAuthGuard, RolesGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard, AdminPermissionGuard)
   @Roles(UserRole.ADMIN)
+  @RequireAdminModule('settings')
   async s3TestAdmin() {
     return successResponse(await this.files.testConnection());
   }

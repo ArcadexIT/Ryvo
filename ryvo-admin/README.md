@@ -92,7 +92,7 @@ npm run dev --workspace=@ryvo/admin
 
 | Role | Phone | Password |
 |------|-------|----------|
-| Super Admin | +10000000000 | 123456 |
+| Super Admin | +10000000000 | 123456 (local seed default; installer asks for your own password) |
 | Customer (US) | +12345678900 | Customer@123 |
 | Customer (UK) | +447700900001 | Customer@123 |
 | Provider (US) | +19876543210 | Provider@123 |

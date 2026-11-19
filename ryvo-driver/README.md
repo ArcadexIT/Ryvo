@@ -1,31 +1,32 @@
 # Ryvo Driver App
 
-Emergency car jump-start provider mobile application built with Flutter, Riverpod, and Clean Architecture.
+Flutter app for drivers on the Ryvo ride, bid, and parcel platform. A driver goes online, accepts ride, bid, and parcel jobs, navigates to the rider, and tracks earnings and payouts. The app includes identity and vehicle verification, subscriptions, and chat.
 
-## Project Location
+Part of the Ryvo package. The other parts are `ryvo-customer` (Flutter), and `ryvo-admin` (NestJS API and Next.js admin panel).
 
-`/Users/rztutul/Documents/flutterproject/ryvo_driver`
+## Documentation
+
+Open `documentation/index.html` at the root of the package. It covers server install, Google Maps, Firebase, Stripe, signing, and store builds.
 
 ## Run
 
 ```bash
-cd /Users/rztutul/Documents/flutterproject/ryvo_driver
 flutter pub get
-flutter run
+flutter run \
+  --dart-define=API_BASE_URL=https://your-domain.com/api/v1 \
+  --dart-define=WS_BASE_URL=https://your-domain.com \
+  --dart-define=GOOGLE_MAPS_API_KEY=your-maps-key
 ```
 
-## Features
+From the package root, `bash scripts/configure-apps.sh` prints the full build commands from `scripts/whitelabel.env`.
 
-- **Phase 1 (UI)**: All provider screens with mock data and navigation
-- **Phase 2 (Logic)**: Clean Architecture layers, Dio network client, Firebase integration stubs
+## Before you ship
 
-## Bottom Nav
+- Replace every `xxxxxxxx` placeholder (Maps key in `AndroidManifest.xml` and `GMSApiKey` in `ios/Runner/Info.plist`).
+- Run `flutterfire configure` to create your own Firebase files.
+- Use an Android application id and iOS bundle id different from the customer app.
+- In Xcode, choose your own Apple Team under Signing & Capabilities.
 
-Home (Map) | Earnings | History | Profile
+## Stack
 
-## Tech Stack
-
-- Flutter + Riverpod + GoRouter
-- Google Maps, fl_chart, shimmer
-- Firebase Auth, Firestore, RTDB, Storage, FCM (Phase 2)
-- Dio with JWT/refresh/error interceptors (Phase 2)
+Flutter, Riverpod, GoRouter, Dio, Google Maps, fl_chart, Firebase Cloud Messaging, Stripe.

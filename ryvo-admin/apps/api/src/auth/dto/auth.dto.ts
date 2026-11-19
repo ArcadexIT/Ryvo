@@ -10,6 +10,23 @@ export class LoginDto {
   @IsString()
   @MinLength(6)
   password!: string;
+
+  @ApiPropertyOptional({ description: 'Required when admin 2FA is enabled' })
+  @IsOptional()
+  @IsString()
+  totpCode?: string;
+}
+
+export class ChangePasswordDto {
+  @ApiProperty()
+  @IsString()
+  @MinLength(6)
+  currentPassword!: string;
+
+  @ApiProperty()
+  @IsString()
+  @MinLength(8)
+  newPassword!: string;
 }
 
 export class RegisterDto {

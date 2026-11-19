@@ -66,7 +66,16 @@ void updateBidOffer(WidgetRef ref, double value) {
   ref.read(jobDraftProvider.notifier).state = ref.read(jobDraftProvider).copyWith(offeredPrice: value);
 }
 
+/// Fare after the applied promo (if any) is taken off.
 double checkoutFare(JobRequestDraft draft, AppConfig config) {
+  final base = checkoutBaseFare(draft, config);
+  final promo = draft.activeJob == null ? draft.promo : null;
+  if (promo == null) return base;
+  return (base - promo.discountFor(base)).clamp(0, double.infinity).toDouble();
+}
+
+/// Fare before any promo discount.
+double checkoutBaseFare(JobRequestDraft draft, AppConfig config) {
   final offer = bidOfferFor(draft, config);
   if (isBiddingDraft(draft)) {
     return offer?.value ?? draft.offeredPrice ?? draft.activeJob?.offeredPrice ?? draft.estimate?.estimatedFare ?? 0;
@@ -171,11 +180,12 @@ class CustomerCheckout {
             recipientName: draft.recipientName,
             recipientPhone: draft.recipientPhone,
             parcelSize: draft.jobType == 'parcel' ? draft.parcelSize : null,
+            promoCodeId: draft.promo?.id,
           );
     }
 
     Future<Map<String, dynamic>> createPaymentIntent(JobModel current) async {
-      final intentData = await _ref.read(paymentRepositoryProvider).createIntent(current.id, current.displayFare);
+      final intentData = await _ref.read(paymentRepositoryProvider).createIntent(current.id);
       final clientSecret = intentData['clientSecret'] as String?;
       if (clientSecret == null || clientSecret.isEmpty) {
         throw RyvoStripeConfigException(
@@ -438,6 +448,70 @@ class CustomerCheckout {
       throw RyvoStripeConfigException('No card was saved.');
     }
     return setup.paymentMethodId;
+  }
+
+  /// Starts a wallet top-up and presents the Stripe PaymentSheet.
+  /// Returns true once the sheet completes. The wallet itself is credited by
+  /// the Stripe webhook, so callers must refetch the balance afterwards.
+  /// Returns false when the rider dismisses the sheet or the setup fails.
+  Future<bool> topUpWallet({
+    required BuildContext context,
+    required double amount,
+  }) async {
+    try {
+      final config = await _loadConfig();
+      await configureStripeFromAppConfig(config);
+      final intentData = await _ref.read(walletRepositoryProvider).topUp(amount);
+      final clientSecret = intentData['clientSecret'] as String?;
+      if (clientSecret == null || clientSecret.isEmpty) {
+        throw RyvoStripeConfigException(
+          'Card payments are unavailable on the server. Ensure STRIPE_SECRET_KEY is '
+          'set in apps/api/.env and restart the API.',
+        );
+      }
+      final customerId = intentData['customerId'] as String?;
+      final ephemeralKey = intentData['ephemeralKey'] as String?;
+      final canReuseCards = customerId != null &&
+          customerId.isNotEmpty &&
+          ephemeralKey != null &&
+          ephemeralKey.isNotEmpty;
+      if (!context.mounted) return false;
+      final l10n = AppLocalizations.of(context);
+      await Stripe.instance.initPaymentSheet(
+        paymentSheetParameters: SetupPaymentSheetParameters(
+          paymentIntentClientSecret: clientSecret,
+          customerId: canReuseCards ? customerId : null,
+          customerEphemeralKeySecret: canReuseCards ? ephemeralKey : null,
+          merchantDisplayName: l10n.ryvo,
+          primaryButtonLabel: 'Top up',
+          applePay: checkoutShowsApplePay(config)
+              ? const PaymentSheetApplePay(merchantCountryCode: 'GB')
+              : null,
+          googlePay: PaymentSheetGooglePay(
+            merchantCountryCode: 'GB',
+            currencyCode: config.currency.code,
+            testEnv: checkoutGooglePayTestEnv(config),
+            label: 'Ryvo',
+          ),
+          linkDisplayParams: const LinkDisplayParams(linkDisplay: LinkDisplay.never),
+          style: AppColors.isDark ? ThemeMode.dark : ThemeMode.light,
+          appearance: _sheetAppearance(),
+        ),
+      );
+      await Stripe.instance.presentPaymentSheet();
+      return true;
+    } on StripeException catch (e) {
+      if (e.error.code != FailureCode.Canceled && context.mounted) {
+        showApiError(
+          context,
+          stripeSheetErrorText(e, e.error.localizedMessage ?? 'Could not top up the wallet.'),
+        );
+      }
+      return false;
+    } catch (e) {
+      if (context.mounted) showApiError(context, e);
+      return false;
+    }
   }
 
   /// Charges [amount] as a second payment for a completed trip.

@@ -8,7 +8,7 @@ import { NotificationsService } from '../notifications/notifications.service';
 import { CoverageService } from '../ops/coverage.service';
 import { parsePagination, paginateMeta, generateJobNumber } from '../common/utils';
 import { PaginationDto } from '../common/dto/pagination.dto';
-import { Prisma, JobStatus } from '@ryvo/database';
+import { Prisma, JobStatus, DiscountType } from '@ryvo/database';
 import { CancelledBy } from '@ryvo/shared';
 
 function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): number {
@@ -567,6 +567,48 @@ export class JobsService {
     return updated;
   }
 
+  private async resolvePromo(ref: { id?: string; code?: string }) {
+    const code = ref.code?.trim();
+    const promo = ref.id
+      ? await this.prisma.promoCode.findUnique({ where: { id: ref.id } })
+      : await this.prisma.promoCode.findFirst({
+          where: { code: { equals: code, mode: 'insensitive' } },
+        });
+    if (!promo) throw new BadRequestException('Promo code not found');
+    const now = new Date();
+    if (!promo.isActive) throw new BadRequestException('Promo code is not active');
+    if (now < promo.validFrom) throw new BadRequestException('Promo code is not valid yet');
+    if (now > promo.validTo) throw new BadRequestException('Promo code has expired');
+    if (promo.maxUses != null && promo.usedCount >= promo.maxUses) {
+      throw new BadRequestException('Promo code usage limit reached');
+    }
+    return promo;
+  }
+
+  private computePromoDiscount(
+    promo: { discountType: DiscountType; discountValue: Prisma.Decimal | number },
+    amount: number,
+  ) {
+    const value = Number(promo.discountValue);
+    const raw = promo.discountType === 'percentage' ? (amount * value) / 100 : value;
+    const discountAmount = Math.min(amount, Math.max(0, Math.round(raw * 100) / 100));
+    const finalAmount = Math.max(0, Math.round((amount - discountAmount) * 100) / 100);
+    return { discountAmount, finalAmount };
+  }
+
+  async validatePromo(code: string, amount: number) {
+    const promo = await this.resolvePromo({ code });
+    const { discountAmount, finalAmount } = this.computePromoDiscount(promo, amount);
+    return {
+      id: promo.id,
+      code: promo.code,
+      discountType: promo.discountType,
+      discountValue: Number(promo.discountValue),
+      discountAmount,
+      finalAmount,
+    };
+  }
+
   async createJob(
     customerId: string,
     data: {
@@ -582,6 +624,7 @@ export class JobsService {
       bookingType?: 'instant' | 'scheduled';
       scheduledAt?: string;
       promoCodeId?: string;
+      promoCode?: string;
       paymentMethod: 'stripe' | 'wallet' | 'cash';
       stripePaymentMethodId?: string;
       jobType?: 'taxi' | 'bidding' | 'parcel';
@@ -658,6 +701,15 @@ export class JobsService {
       estimatedFare = offeredPrice;
     }
 
+    // Promo: validate and reduce the fare before the job is persisted.
+    let appliedPromo: { id: string; maxUses: number | null } | null = null;
+    if (data.promoCodeId || data.promoCode?.trim()) {
+      const promo = await this.resolvePromo({ id: data.promoCodeId, code: data.promoCode });
+      const discount = this.computePromoDiscount(promo, estimatedFare);
+      estimatedFare = discount.finalAmount;
+      appliedPromo = { id: promo.id, maxUses: promo.maxUses };
+    }
+
     const recipientOtp =
       jobType === 'parcel' && (await this.settings.isParcelOtpEnabled())
         ? String(Math.floor(1000 + Math.random() * 9000))
@@ -691,10 +743,27 @@ export class JobsService {
           channel: data.channel ?? 'app',
           distanceKm: fare.distanceKm,
           durationMin: fare.durationMin,
-          promoCodeId: data.promoCodeId,
+          promoCodeId: appliedPromo?.id ?? null,
         },
         include: { serviceCategory: true, vehicle: true, payment: true },
       });
+      if (appliedPromo) {
+        const now = new Date();
+        // Guarded increment so concurrent redemptions cannot exceed maxUses.
+        const claimed = await tx.promoCode.updateMany({
+          where: {
+            id: appliedPromo.id,
+            isActive: true,
+            validFrom: { lte: now },
+            validTo: { gte: now },
+            ...(appliedPromo.maxUses != null && { usedCount: { lt: appliedPromo.maxUses } }),
+          },
+          data: { usedCount: { increment: 1 } },
+        });
+        if (claimed.count === 0) {
+          throw new BadRequestException('Promo code is no longer available');
+        }
+      }
       await tx.jobStatusHistory.create({
         data: {
           jobId: created.id,
@@ -716,6 +785,14 @@ export class JobsService {
       });
     } catch (err) {
       await this.prisma.job.delete({ where: { id: job.id } }).catch(() => undefined);
+      if (appliedPromo) {
+        await this.prisma.promoCode
+          .updateMany({
+            where: { id: appliedPromo.id, usedCount: { gt: 0 } },
+            data: { usedCount: { decrement: 1 } },
+          })
+          .catch(() => undefined);
+      }
       throw err;
     }
 
