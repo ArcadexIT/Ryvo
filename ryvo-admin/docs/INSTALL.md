@@ -17,7 +17,7 @@ The script installs Docker if needed, asks for domain, Stripe, Maps, and Twilio,
 When it finishes:
 
 - Open `https://your-domain`
-- Sign in with the printed admin phone / `123456`
+- Sign in with the admin phone and the password you typed during install. Change it in Admin → Settings → Security.
 - Change the admin password
 - Admin → Settings: confirm Maps, Stripe publishable key, currency, commission vs subscription
 
@@ -48,10 +48,6 @@ Full step-by-step (sandbox, webhook, Admin toggle, test chat, going live): [WHAT
 - Secret key on the API env file
 - Publishable key in Admin → Settings → Billing
 - Webhook: `https://your-domain/api/v1/webhooks/stripe` with `payment_intent.succeeded` (jobs and driver subscriptions)
-
-## Free installation runbook
-
-See [FREE_INSTALL_RUNBOOK.md](FREE_INSTALL_RUNBOOK.md) if you are installing this for a buyer.
 
 ## Video scripts (record these)
 

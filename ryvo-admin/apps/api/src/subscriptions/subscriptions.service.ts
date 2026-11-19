@@ -35,9 +35,35 @@ export class SubscriptionsService implements OnModuleInit, OnModuleDestroy {
     private realtime: RealtimeService,
     private notifications: NotificationsService,
     private config: ConfigService,
-  ) {
-    const key = this.config.get<string>('STRIPE_SECRET_KEY')?.trim();
-    if (key) this.stripe = new Stripe(key);
+  ) {}
+
+  /** Same secret resolution as PaymentsService: dashboard settings, then env. */
+  private async resolveStripe(): Promise<Stripe> {
+    const stored = await this.settings.get('stripe_secret_key');
+    const fromSettings =
+      typeof stored === 'string' && stored.trim().startsWith('sk_') ? stored.trim() : '';
+    const key = fromSettings || this.config.get<string>('STRIPE_SECRET_KEY')?.trim() || '';
+    if (!key) {
+      throw new BadRequestException(
+        'Stripe is not configured. Save the secret key in Admin → Settings, or set STRIPE_SECRET_KEY.',
+      );
+    }
+    this.stripe = new Stripe(key);
+    return this.stripe;
+  }
+
+  private publicWebBase(): string {
+    const base = (
+      this.config.get<string>('PUBLIC_WEB_URL') ||
+      this.config.get<string>('PUBLIC_WS_URL') ||
+      ''
+    ).replace(/\/$/, '');
+    if (!base || base.includes('xxxxxxxx')) {
+      throw new BadRequestException(
+        'Set PUBLIC_WEB_URL to your public domain before purchasing a subscription.',
+      );
+    }
+    return base;
   }
 
   onModuleInit() {
@@ -147,19 +173,10 @@ export class SubscriptionsService implements OnModuleInit, OnModuleDestroy {
       },
     });
 
-    if (!this.stripe) {
-      await this.activate(subscription.id);
-      return {
-        subscription: await this.prisma.driverSubscription.findUnique({
-          where: { id: subscription.id },
-          include: { plan: true },
-        }),
-        clientSecret: null,
-        checkoutUrl: null,
-      };
-    }
+    const stripe = await this.resolveStripe();
+    const webBase = this.publicWebBase();
 
-    const session = await this.stripe.checkout.sessions.create({
+    const session = await stripe.checkout.sessions.create({
       mode: 'payment',
       line_items: [
         {
@@ -171,8 +188,8 @@ export class SubscriptionsService implements OnModuleInit, OnModuleDestroy {
           quantity: 1,
         },
       ],
-      success_url: 'https://xxxxxxxx/stripe/return?session_id={CHECKOUT_SESSION_ID}',
-      cancel_url: 'https://xxxxxxxx/stripe/refresh',
+      success_url: `${webBase}/stripe/return?session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${webBase}/stripe/refresh`,
       client_reference_id: subscription.id,
       metadata: {
         kind: 'driver_subscription',

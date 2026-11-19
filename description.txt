@@ -5,3 +5,5 @@ Stripe, Google Maps, Firebase, Twilio, Amazon Web Services (S3 and SES), Cloudin
 Ryvo is a ride, bid, and parcel marketplace: a Flutter customer app, a Flutter driver app, a NestJS API, and a Next.js admin panel. Riders request a ride, send a bid, or send a parcel. Drivers go online, accept work, and get paid. Staff dispatch trips, set fares, and review payouts from the admin panel.
 
 The offline manual is documentation/index.html. It includes screenshots of the customer app, the driver app, and the admin panel, plus the server install, HTTPS, and the steps for each third-party account.
+
+AI disclosure: AI coding assistants were used during development of this item. The author reviewed, tested, and edited the output.

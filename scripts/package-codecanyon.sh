@@ -53,6 +53,12 @@ rsync -a \
   --exclude '*.pem' \
   --exclude 'caseimage/' \
   --exclude '.DS_Store' \
+  --exclude '__MACOSX/' \
+  --exclude '.cursor/' \
+  --exclude '**/.cursor/' \
+  --exclude 'startfile' \
+  --exclude 'FREE_INSTALL_RUNBOOK.md' \
+  --exclude '*.plan.md' \
   "$ROOT/" "$STAGE/$NAME/"
 
 # .env.example files are named .env.example, which the '.env.*' exclude drops.
@@ -80,6 +86,8 @@ find "$STAGE/$NAME" -type f \( \
   '
 
 find "$STAGE" -name '.DS_Store' -delete
+find "$STAGE" -name '.cursor' -type d -prune -exec rm -rf {} +
+find "$STAGE" \( -name 'startfile' -o -name 'FREE_INSTALL_RUNBOOK.md' -o -name '*.plan.md' \) -type f -delete
 find "$STAGE" -name '__MACOSX' -type d -prune -exec rm -rf {} +
 
 rm -f "$ZIP"

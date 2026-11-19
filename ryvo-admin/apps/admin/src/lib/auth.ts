@@ -17,6 +17,8 @@ export interface AuthTokens {
   refreshToken: string;
 }
 
+export type LoginResult = AuthTokens | { requires2fa: true };
+
 export interface AdminProfile {
   id: string;
   fullName: string;
@@ -58,12 +60,16 @@ export function ensureSessionCookie(): void {
   if (isAuthenticated()) writeSessionCookie(true);
 }
 
-export async function login(phone: string, password: string): Promise<AuthTokens> {
+export async function login(
+  phone: string,
+  password: string,
+  totpCode?: string,
+): Promise<LoginResult> {
   const baseUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000/api/v1';
   const res = await fetch(`${baseUrl}/admin/auth/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ phone, password }),
+    body: JSON.stringify({ phone, password, ...(totpCode ? { totpCode } : {}) }),
   });
 
   const json = await res.json();
@@ -71,7 +77,12 @@ export async function login(phone: string, password: string): Promise<AuthTokens
     throw new Error(json.message ?? 'Login failed');
   }
 
-  const tokens = json.data as AuthTokens;
+  const data = json.data as LoginResult;
+  if (data && 'requires2fa' in data && data.requires2fa) {
+    return data;
+  }
+
+  const tokens = data as AuthTokens;
   setTokens(tokens);
   return tokens;
 }
@@ -79,6 +90,16 @@ export async function login(phone: string, password: string): Promise<AuthTokens
 export async function fetchAdminProfile(): Promise<AdminProfile> {
   const res = await apiFetch<AdminProfile>('/admin/auth/me');
   return res.data!;
+}
+
+export async function changePassword(
+  currentPassword: string,
+  newPassword: string,
+): Promise<void> {
+  await apiMutate('/admin/auth/password/change', 'POST', {
+    currentPassword,
+    newPassword,
+  });
 }
 
 export async function logout(): Promise<void> {

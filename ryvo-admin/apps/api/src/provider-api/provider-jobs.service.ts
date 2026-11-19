@@ -66,6 +66,11 @@ export class ProviderJobsService {
     private matching: MatchingService,
   ) {}
 
+  /** Strip the parcel recipient OTP so drivers cannot read the delivery code. */
+  private withoutRecipientOtp<T extends { recipientOtp?: string | null }>(job: T): T {
+    return { ...job, recipientOtp: null };
+  }
+
   async getActive(providerId: string) {
     const jobs = await this.prisma.job.findMany({
       where: { providerId, status: { in: ACTIVE_STATUSES } },
@@ -86,7 +91,7 @@ export class ProviderJobsService {
       return (a.matchedAt?.getTime() ?? 0) - (b.matchedAt?.getTime() ?? 0);
     });
 
-    const current = jobs[0];
+    const current = this.withoutRecipientOtp(jobs[0]);
     const next = jobs.find(
       (job) => job.id !== current.id && (job.status === 'matched' || job.status === 'payment_pending'),
     );
@@ -117,7 +122,10 @@ export class ProviderJobsService {
       }),
       this.prisma.job.count({ where }),
     ]);
-    return { items, meta: paginateMeta(page, limit, total) };
+    return {
+      items: items.map((job) => this.withoutRecipientOtp(job)),
+      meta: paginateMeta(page, limit, total),
+    };
   }
 
   async getOne(providerId: string, jobId: string) {
@@ -136,7 +144,7 @@ export class ProviderJobsService {
     if (job.providerId !== providerId) {
       throw new ForbiddenException('Job does not belong to this driver');
     }
-    return job;
+    return this.withoutRecipientOtp(job);
   }
 
   async confirmStart(providerId: string, jobId: string) {

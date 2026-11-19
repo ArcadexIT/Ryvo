@@ -2,8 +2,8 @@ import { Body, Controller, Get, Param, Patch, Post, Req, UseGuards } from '@nest
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { IsArray, IsBoolean, IsIn, IsNumber, IsOptional, IsString, ValidateNested } from 'class-validator';
 import { Type } from 'class-transformer';
-import { JwtAuthGuard, RolesGuard } from '../auth/guards';
-import { Roles } from '../auth/roles.decorator';
+import { AdminPermissionGuard, JwtAuthGuard, RolesGuard } from '../auth/guards';
+import { RequireAdminModule, Roles } from '../auth/roles.decorator';
 import { UserRole } from '@ryvo/shared';
 import { successResponse } from '../common/utils';
 import { CoverageService } from './coverage.service';
@@ -266,24 +266,32 @@ export class OpsController {
 
   @Get('admin/zones')
   @Roles(UserRole.ADMIN)
+  @UseGuards(AdminPermissionGuard)
+  @RequireAdminModule('dispatch')
   async zones() {
     return successResponse(await this.coverage.listZones());
   }
 
   @Post('admin/zones')
   @Roles(UserRole.ADMIN)
+  @UseGuards(AdminPermissionGuard)
+  @RequireAdminModule('dispatch')
   async saveZone(@Body() dto: ZoneDto) {
     return successResponse(await this.coverage.upsertZone(dto));
   }
 
   @Get('admin/coverage-interests')
   @Roles(UserRole.ADMIN)
+  @UseGuards(AdminPermissionGuard)
+  @RequireAdminModule('dispatch')
   async interests() {
     return successResponse(await this.coverage.listInterests());
   }
 
   @Get('admin/training')
   @Roles(UserRole.ADMIN)
+  @UseGuards(AdminPermissionGuard)
+  @RequireAdminModule('providers')
   async adminTraining() {
     const [programs, categories, equipment] = await Promise.all([
       this.prisma.trainingProgram.findMany({
@@ -309,42 +317,56 @@ export class OpsController {
 
   @Post('admin/training')
   @Roles(UserRole.ADMIN)
+  @UseGuards(AdminPermissionGuard)
+  @RequireAdminModule('providers')
   async saveTraining(@Body() dto: SaveTrainingDto) {
     return successResponse(await this.training.saveProgram(dto));
   }
 
   @Post('admin/equipment')
   @Roles(UserRole.ADMIN)
+  @UseGuards(AdminPermissionGuard)
+  @RequireAdminModule('providers')
   async saveEquipment(@Body() dto: SaveEquipmentDto) {
     return successResponse(await this.training.saveEquipment(dto));
   }
 
   @Get('admin/invoices')
   @Roles(UserRole.ADMIN)
+  @UseGuards(AdminPermissionGuard)
+  @RequireAdminModule('finance')
   async invoices() {
     return successResponse(await this.billing.listAll());
   }
 
   @Get('admin/providers/:id/agreements')
   @Roles(UserRole.ADMIN)
+  @UseGuards(AdminPermissionGuard)
+  @RequireAdminModule('providers')
   async providerAgreements(@Param('id') id: string) {
     return successResponse(await this.agreements.adminView(id));
   }
 
   @Get('admin/agreements')
   @Roles(UserRole.ADMIN)
+  @UseGuards(AdminPermissionGuard)
+  @RequireAdminModule('cms')
   async listAgreements() {
     return successResponse(await this.agreements.currentDocuments());
   }
 
   @Post('admin/agreements')
   @Roles(UserRole.ADMIN)
+  @UseGuards(AdminPermissionGuard)
+  @RequireAdminModule('cms')
   async publish(@Body() dto: PublishAgreementDto) {
     return successResponse(await this.agreements.publish(dto));
   }
 
   @Patch('admin/providers/:id/insurance-proof')
   @Roles(UserRole.ADMIN)
+  @UseGuards(AdminPermissionGuard)
+  @RequireAdminModule('kyc')
   async requestProof(@Param('id') id: string) {
     const provider = await this.prisma.provider.update({
       where: { id },

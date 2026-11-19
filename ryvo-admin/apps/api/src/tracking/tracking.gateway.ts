@@ -20,6 +20,7 @@ interface SocketData {
   userId?: string;
   role?: string;
   providerId?: string;
+  customerId?: string;
 }
 
 @WebSocketGateway({ cors: true, namespace: '/tracking' })
@@ -43,10 +44,9 @@ export class TrackingGateway implements OnGatewayConnection, OnGatewayInit {
   }
 
   /**
-   * Best-effort JWT auth on the handshake. A valid token joins the client to
-   * its personal `user:{id}` room (and `provider:{id}` for providers) so the
-   * server can push targeted events. Anonymous clients are still accepted for
-   * backward compatibility (e.g. the admin live-map bootstrap).
+   * Require a valid access token on connect. Share-token viewers authenticate
+   * later with `share:subscribe` on a short-lived anonymous socket that is
+   * limited to that one event.
    */
   async handleConnection(client: Socket) {
     const token =
@@ -54,14 +54,14 @@ export class TrackingGateway implements OnGatewayConnection, OnGatewayInit {
       (client.handshake.query?.token as string | undefined);
 
     if (!token) {
-      this.logger.debug(`Anonymous client connected: ${client.id}`);
+      // Allow unauthenticated sockets only for public trip-share subscribe.
+      (client.data as SocketData).role = 'anonymous';
+      this.logger.debug(`Share-only anonymous client connected: ${client.id}`);
       return;
     }
 
     try {
-      const secret =
-        this.config.get<string>('JWT_ACCESS_SECRET') ??
-        'xxxxxxxx';
+      const secret = this.config.get<string>('JWT_ACCESS_SECRET') ?? 'xxxxxxxx';
       const payload = this.jwt.verify(token, { secret }) as {
         sub: string;
         role: string;
@@ -84,9 +84,19 @@ export class TrackingGateway implements OnGatewayConnection, OnGatewayInit {
           void client.join(`provider:${provider.id}`);
         }
       }
+
+      if (payload.role === 'customer') {
+        const customer = await this.prisma.customer.findUnique({
+          where: { userId: payload.sub },
+          select: { id: true },
+        });
+        if (customer) data.customerId = customer.id;
+      }
+
       this.logger.debug(`Authenticated ${payload.role} ${payload.sub}`);
     } catch {
       this.logger.debug(`Invalid socket token from ${client.id}`);
+      client.disconnect(true);
     }
   }
 
@@ -95,7 +105,6 @@ export class TrackingGateway implements OnGatewayConnection, OnGatewayInit {
     @ConnectedSocket() client: Socket,
     @MessageBody()
     payload: {
-      providerId?: string;
       lat: number;
       lng: number;
       jobId?: string;
@@ -103,10 +112,21 @@ export class TrackingGateway implements OnGatewayConnection, OnGatewayInit {
       speed?: number;
     },
   ) {
-    const providerId =
-      payload.providerId ?? (client.data as SocketData).providerId;
-    if (!providerId) {
-      return { success: false, message: 'providerId required' };
+    const data = client.data as SocketData;
+    if (data.role !== 'provider' || !data.providerId) {
+      return { success: false, message: 'Provider authentication required' };
+    }
+
+    const providerId = data.providerId;
+
+    if (payload.jobId) {
+      const job = await this.prisma.job.findUnique({
+        where: { id: payload.jobId },
+        select: { providerId: true },
+      });
+      if (!job || job.providerId !== providerId) {
+        return { success: false, message: 'Job does not belong to this driver' };
+      }
     }
 
     const result = await this.tracking.updateProviderLocation(
@@ -131,14 +151,38 @@ export class TrackingGateway implements OnGatewayConnection, OnGatewayInit {
     @ConnectedSocket() client: Socket,
     @MessageBody() payload: { jobId: string },
   ) {
-    void client.join(`job:${payload.jobId}`);
+    const data = client.data as SocketData;
+    if (!data.userId || !payload?.jobId) {
+      return { success: false, message: 'Authentication required' };
+    }
+
     const job = await this.prisma.job.findUnique({
       where: { id: payload.jobId },
       select: {
-        provider: { select: { id: true, currentLat: true, currentLng: true } },
+        customerId: true,
+        providerId: true,
+        customer: { select: { userId: true } },
+        provider: {
+          select: {
+            id: true,
+            userId: true,
+            currentLat: true,
+            currentLng: true,
+          },
+        },
       },
     });
-    if (job?.provider?.currentLat != null && job.provider.currentLng != null) {
+    if (!job) return { success: false, message: 'Job not found' };
+
+    const isCustomer = job.customer.userId === data.userId;
+    const isProvider = job.provider?.userId === data.userId;
+    const isAdmin = data.role === 'admin';
+    if (!isCustomer && !isProvider && !isAdmin) {
+      return { success: false, message: 'Not allowed to join this trip' };
+    }
+
+    void client.join(`job:${payload.jobId}`);
+    if (job.provider?.currentLat != null && job.provider.currentLng != null) {
       client.emit('job:location', {
         providerId: job.provider.id,
         lat: Number(job.provider.currentLat),
@@ -179,12 +223,20 @@ export class TrackingGateway implements OnGatewayConnection, OnGatewayInit {
 
   @SubscribeMessage('admin:live-map:subscribe')
   handleAdminLiveMap(@ConnectedSocket() client: Socket) {
+    const data = client.data as SocketData;
+    if (data.role !== 'admin' || !data.userId) {
+      return { success: false, message: 'Admin authentication required' };
+    }
     void client.join('admin:live-map');
     return { success: true, room: 'admin:live-map' };
   }
 
   @SubscribeMessage('admin:live-map:snapshot')
-  async handleLiveSnapshot() {
+  async handleLiveSnapshot(@ConnectedSocket() client: Socket) {
+    const data = client.data as SocketData;
+    if (data.role !== 'admin' || !data.userId) {
+      return { success: false, message: 'Admin authentication required' };
+    }
     const providers = await this.tracking.getLiveProviders();
     return { success: true, data: providers };
   }

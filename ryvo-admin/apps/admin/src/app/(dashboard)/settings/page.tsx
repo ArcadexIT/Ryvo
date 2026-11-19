@@ -3,7 +3,7 @@
 import { useState, type Dispatch, type ReactNode, type SetStateAction } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import Image from 'next/image';
-import { Bell, CreditCard, Eye, EyeOff, MapPin, Plug, Shield, SlidersHorizontal, type LucideIcon } from 'lucide-react';
+import { Bell, CreditCard, MapPin, Plug, Shield, SlidersHorizontal, type LucideIcon } from 'lucide-react';
 import { Header } from '@/components/layout/header';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -220,41 +220,9 @@ function Row({
   );
 }
 
-function SecretField({
-  value,
-  shown,
-  onToggle,
-  onChange,
-  placeholder,
-  label,
-}: {
-  value: string;
-  shown: boolean;
-  onToggle: () => void;
-  onChange: (value: string) => void;
-  placeholder: string;
-  label: string;
-}) {
-  return (
-    <div className="relative min-w-0 flex-1">
-      <Input
-        type={shown ? 'text' : 'password'}
-        placeholder={placeholder}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className="pr-10 font-mono text-sm"
-        autoComplete="off"
-      />
-      <button
-        type="button"
-        onClick={onToggle}
-        className="absolute right-3 top-1/2 -translate-y-1/2 text-muted hover:text-primary"
-        aria-label={shown ? `Hide ${label}` : `Show ${label}`}
-      >
-        {shown ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-      </button>
-    </div>
-  );
+function savedHint(stored: string, noun: string) {
+  if (!stored.trim()) return `No ${noun} is saved yet.`;
+  return `A ${noun} is saved, ending ${stored.slice(-4)}. This page does not load the full key. Paste a new one only to replace it.`;
 }
 
 function SecurityTab() {
@@ -282,8 +250,78 @@ function SecurityTab() {
     onError: (err: Error) => sonnerToast.error(err.message),
   });
 
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+
+  const passwordMutation = useMutation({
+    mutationFn: () =>
+      apiMutate('/admin/auth/password/change', 'POST', {
+        currentPassword,
+        newPassword,
+      }),
+    onSuccess: () => {
+      setCurrentPassword('');
+      setNewPassword('');
+      setConfirmPassword('');
+      sonnerToast.success('Password updated. Sign in again with the new password.');
+      setTimeout(() => {
+        window.location.href = '/login';
+      }, 1200);
+    },
+    onError: (err: Error) => sonnerToast.error(err.message),
+  });
+
   return (
     <div className="space-y-5">
+      <Panel
+        icon={Shield}
+        title="Change password"
+        description="Update the password for this admin account. You will need to sign in again."
+      >
+        <div className="grid gap-3 px-5 py-4 sm:max-w-md">
+          <Input
+            type="password"
+            placeholder="Current password"
+            value={currentPassword}
+            onChange={(e) => setCurrentPassword(e.target.value)}
+            autoComplete="current-password"
+          />
+          <Input
+            type="password"
+            placeholder="New password (min 8 characters)"
+            value={newPassword}
+            onChange={(e) => setNewPassword(e.target.value)}
+            autoComplete="new-password"
+          />
+          <Input
+            type="password"
+            placeholder="Confirm new password"
+            value={confirmPassword}
+            onChange={(e) => setConfirmPassword(e.target.value)}
+            autoComplete="new-password"
+          />
+          <Button
+            disabled={
+              currentPassword.length < 6 ||
+              newPassword.length < 8 ||
+              newPassword !== confirmPassword ||
+              passwordMutation.isPending
+            }
+            loading={passwordMutation.isPending}
+            onClick={() => {
+              if (newPassword !== confirmPassword) {
+                sonnerToast.error('New passwords do not match');
+                return;
+              }
+              passwordMutation.mutate();
+            }}
+          >
+            Update password
+          </Button>
+        </div>
+      </Panel>
+
       <Panel
         icon={Shield}
         title="Two-factor authentication"
@@ -360,12 +398,9 @@ export default function SettingsPage() {
   const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState<TabId>('general');
   const [drafts, setDrafts] = useState<Record<string, string>>({});
-  const [mapKeyDraft, setMapKeyDraft] = useState<string | null>(null);
-  const [showMapKey, setShowMapKey] = useState(false);
-  const [stripeKeyDraft, setStripeKeyDraft] = useState<string | null>(null);
-  const [showStripeKey, setShowStripeKey] = useState(false);
-  const [stripeSecretDraft, setStripeSecretDraft] = useState<string | null>(null);
-  const [showStripeSecret, setShowStripeSecret] = useState(false);
+  const [mapKeyDraft, setMapKeyDraft] = useState('');
+  const [stripeKeyDraft, setStripeKeyDraft] = useState('');
+  const [stripeSecretDraft, setStripeSecretDraft] = useState('');
 
   const { data, isLoading, error } = useQuery({
     queryKey: ['settings'],
@@ -388,10 +423,10 @@ export default function SettingsPage() {
       });
       if (variables.key === MAP_API_KEY_SETTING) {
         queryClient.invalidateQueries({ queryKey: ['map-api-key'] });
-        setMapKeyDraft(null);
+        setMapKeyDraft('');
       }
-      if (variables.key === STRIPE_PK_SETTING) setStripeKeyDraft(null);
-      if (variables.key === STRIPE_SK_SETTING) setStripeSecretDraft(null);
+      if (variables.key === STRIPE_PK_SETTING) setStripeKeyDraft('');
+      if (variables.key === STRIPE_SK_SETTING) setStripeSecretDraft('');
       sonnerToast.success('Setting saved');
     },
     onError: (err: Error) => sonnerToast.error(err.message),
@@ -430,20 +465,20 @@ export default function SettingsPage() {
     });
   };
 
-  const mapKey = mapKeyDraft ?? (typeof findSetting(MAP_API_KEY_SETTING)?.value === 'string'
-    ? (findSetting(MAP_API_KEY_SETTING)?.value as string)
-    : '');
-
-  const stripeSetting = findSetting(STRIPE_PK_SETTING);
-  const stripeKey =
-    stripeKeyDraft ?? (typeof stripeSetting?.value === 'string' ? stripeSetting.value : '');
-  const stripeSecretSetting = findSetting(STRIPE_SK_SETTING);
-  const stripeSecret =
-    stripeSecretDraft ??
-    (typeof stripeSecretSetting?.value === 'string' ? stripeSecretSetting.value : '');
+  const storedText = (key: string) => {
+    const value = findSetting(key)?.value;
+    return typeof value === 'string' ? value : '';
+  };
+  const mapStored = storedText(MAP_API_KEY_SETTING);
+  const stripeStored = storedText(STRIPE_PK_SETTING);
+  const stripeSecretStored = storedText(STRIPE_SK_SETTING);
+  const mapKey = mapKeyDraft;
+  const stripeKey = stripeKeyDraft;
+  const stripeSecret = stripeSecretDraft;
   const stripeAccountsMatch =
     !stripeKey.trim() ||
     !stripeSecret.trim() ||
+    stripeStored.includes('•') ||
     sameStripeAccount(stripeKey, stripeSecret);
 
   const groupedKeys = new Set<string>([
@@ -703,25 +738,22 @@ export default function SettingsPage() {
               >
                 <div className="space-y-3 px-5 py-4">
                   <div className="flex flex-wrap items-center gap-2">
-                    <Badge variant={mapKey.trim() ? 'success' : 'warning'}>
-                      {mapKey.trim() ? 'Configured' : 'Missing'}
+                    <Badge variant={mapStored.trim() ? 'success' : 'warning'}>
+                      {mapStored.trim() ? 'Configured' : 'Missing'}
                     </Badge>
-                    <p className="text-sm text-secondary">
-                      {mapKey.trim()
-                        ? 'Live Ops will load the map with this key.'
-                        : 'Live Ops shows a placeholder until a key is saved.'}
-                    </p>
+                    <p className="text-sm text-secondary">{savedHint(mapStored, 'Maps key')}</p>
                   </div>
                   <div className="flex flex-col gap-2 sm:flex-row">
-                    <SecretField
-                      label="map API key"
+                    <Input
+                      type="password"
                       value={mapKey}
-                      shown={showMapKey}
-                      onToggle={() => setShowMapKey((value) => !value)}
-                      onChange={setMapKeyDraft}
-                      placeholder="AIzaSy..."
+                      onChange={(e) => setMapKeyDraft(e.target.value)}
+                      placeholder="Paste a new Maps key"
+                      autoComplete="off"
+                      className="font-mono text-sm"
                     />
                     <Button
+                      disabled={!mapKey.trim()}
                       loading={savingKey === MAP_API_KEY_SETTING}
                       onClick={() => saveMutation.mutate({ key: MAP_API_KEY_SETTING, value: mapKey.trim() })}
                     >
@@ -769,31 +801,26 @@ export default function SettingsPage() {
                 >
                   <div className="space-y-3 px-5 py-4">
                     <Badge
-                      variant={!stripeKey ? 'warning' : stripeKey.startsWith('pk_live_') ? 'success' : 'warning'}
+                      variant={!stripeStored ? 'warning' : stripeStored.startsWith('pk_live_') ? 'success' : 'warning'}
                     >
-                      {!stripeKey
+                      {!stripeStored
                         ? 'Not configured'
-                        : stripeKey.startsWith('pk_live_')
+                        : stripeStored.startsWith('pk_live_')
                           ? 'Live key'
                           : 'Test key'}
                     </Badge>
-                    <p className="text-sm text-secondary">
-                      {!stripeKey
-                        ? 'Card payments stay off until a publishable key is saved.'
-                        : stripeKey.startsWith('pk_live_')
-                          ? 'Real card payments are active.'
-                          : 'This is a test key. Use a pk_live_ key in production.'}
-                    </p>
+                    <p className="text-sm text-secondary">{savedHint(stripeStored, 'publishable key')}</p>
                     <div className="flex flex-col gap-2 sm:flex-row">
-                      <SecretField
-                        label="Stripe key"
+                      <Input
+                        type="password"
                         value={stripeKey}
-                        shown={showStripeKey}
-                        onToggle={() => setShowStripeKey((value) => !value)}
-                        onChange={setStripeKeyDraft}
+                        onChange={(e) => setStripeKeyDraft(e.target.value)}
                         placeholder="pk_live_... or pk_test_..."
+                        autoComplete="off"
+                        className="font-mono text-sm"
                       />
                       <Button
+                        disabled={!stripeKey.trim()}
                         loading={savingKey === STRIPE_PK_SETTING}
                         onClick={() =>
                           saveMutation.mutate({ key: STRIPE_PK_SETTING, value: stripeKey.trim() })
@@ -802,20 +829,27 @@ export default function SettingsPage() {
                         Save key
                       </Button>
                     </div>
+                    <p className="text-sm text-secondary">{savedHint(stripeSecretStored, 'secret key')}</p>
                     <div className="flex flex-col gap-2 sm:flex-row">
-                      <SecretField
-                        label="Stripe secret key"
+                      <Input
+                        type="password"
                         value={stripeSecret}
-                        shown={showStripeSecret}
-                        onToggle={() => setShowStripeSecret((value) => !value)}
-                        onChange={setStripeSecretDraft}
+                        onChange={(e) => setStripeSecretDraft(e.target.value)}
                         placeholder="sk_test_... or sk_live_..."
+                        autoComplete="off"
+                        className="font-mono text-sm"
                       />
                       <Button
+                        disabled={!stripeSecret.trim()}
                         loading={savingKey === STRIPE_SK_SETTING}
                         onClick={() => {
                           const secret = stripeSecret.trim();
-                          if (secret && stripeKey.trim() && !sameStripeAccount(stripeKey, secret)) {
+                          if (
+                            secret &&
+                            stripeKey.trim() &&
+                            !stripeStored.includes('•') &&
+                            !sameStripeAccount(stripeKey, secret)
+                          ) {
                             sonnerToast.error(
                               'That secret key is from a different Stripe account or mode than the publishable key.',
                             );
@@ -830,9 +864,9 @@ export default function SettingsPage() {
                     <p className="text-sm text-secondary">
                       {stripeSecret.trim()
                         ? stripeAccountsMatch
-                          ? 'Secret key matches this publishable key.'
+                          ? 'The server checks this secret against the saved publishable key.'
                           : 'These keys are from different Stripe accounts. Card setup will fail until they match.'
-                        : 'Paste the secret key shown next to this publishable key in the Stripe Dashboard. The publishable key alone cannot create a card setup.'}
+                        : 'The secret key stays on the server. The publishable key alone cannot create a card setup.'}
                     </p>
                   </div>
                 </Panel>

@@ -1,3 +1,16 @@
+Version 1.0.2 — 19 November 2026
+- Security: Socket.IO requires a JWT; location and job rooms are ownership-checked; admin live-map is admin-only.
+- Security: wallet top-up credits only after a confirmed Stripe PaymentIntent webhook.
+- Security: card PaymentIntents use the server job fare and check customer ownership.
+- Security: admin module permissions on every admin endpoint; Stripe secret keys are never returned to the panel.
+- Security: installer asks for the admin password; change-password and login 2FA are implemented; rate limits on auth/OTP.
+- Security: Twilio signature on WhatsApp webhooks; parcel recipient OTP hidden from drivers; subscriptions require Stripe payment.
+- Feature: promo codes validate and discount the fare at checkout.
+- Maps: GOOGLE_MAPS_API_KEY everywhere (MAPS_API_KEY alias); driver iOS reads GMSApiKey from Info.plist.
+- Packaging: removed Apple Team IDs, plan files, startfile, FREE_INSTALL_RUNBOOK; fixed customer/driver READMEs; API 36 for driver Android.
+- Preview: 590x300 main image and 1920x1080 landscape screenshots in documentation/preview.
+- AI disclosure added to the item description and documentation.
+
 Version 1.0.1 — 18 November 2026
 - Documented that Stripe, Google Maps, Firebase, Twilio, AWS, Cloudinary, and OpenAI are external and billed to the buyer.
 - Added customer, driver, and admin screenshots to the documentation.

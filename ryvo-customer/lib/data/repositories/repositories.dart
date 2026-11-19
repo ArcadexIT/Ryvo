@@ -356,6 +356,7 @@ class JobRepository {
     String? recipientPhone,
     String? parcelSize,
     String? parcelNotes,
+    String? promoCodeId,
   }) =>
       _api.post(
         '/customer/jobs',
@@ -380,6 +381,7 @@ class JobRepository {
           if (recipientPhone != null) 'recipientPhone': recipientPhone,
           if (parcelSize != null) 'parcelSize': parcelSize,
           if (parcelNotes != null) 'parcelNotes': parcelNotes,
+          if (promoCodeId != null) 'promoCodeId': promoCodeId,
         },
         parser: (json) => JobModel.fromJson(json as Map<String, dynamic>),
       );
@@ -548,16 +550,14 @@ class WalletRepository {
         .toList();
   }
 
-  Future<WalletBalance> topUp(double amount, {String? description}) async {
-    await _api.post(
-      '/customer/wallet/top-up',
-      data: {
-        'amount': amount,
-        if (description != null) 'description': description,
-      },
-    );
-    return getBalance();
-  }
+  /// Starts a card top-up. Returns the PaymentIntent map (clientSecret,
+  /// customerId, ...). The wallet is credited by the Stripe webhook once the
+  /// payment is confirmed, never locally.
+  Future<Map<String, dynamic>> topUp(double amount) => _api.post(
+        '/customer/payments/wallet-top-up',
+        data: {'amount': amount},
+        parser: (json) => json as Map<String, dynamic>,
+      );
 }
 
 class PaymentRepository {
@@ -586,11 +586,17 @@ class PaymentRepository {
         parser: (json) => json as Map<String, dynamic>,
       );
 
-  Future<Map<String, dynamic>> createIntent(String jobId, double amount) =>
-      _api.post(
+  /// The server calculates the amount from the job.
+  Future<Map<String, dynamic>> createIntent(String jobId) => _api.post(
         '/customer/payments/intent',
-        data: {'jobId': jobId, 'amount': amount},
+        data: {'jobId': jobId},
         parser: (json) => json as Map<String, dynamic>,
+      );
+
+  Future<PromoValidation> validatePromo(String code, double amount) => _api.post(
+        '/customer/promos/validate',
+        data: {'code': code, 'amount': amount},
+        parser: (json) => PromoValidation.fromJson(json as Map<String, dynamic>),
       );
 
   Future<Map<String, dynamic>> createTipIntent(String jobId, double amount) =>

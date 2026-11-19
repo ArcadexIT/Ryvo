@@ -19,7 +19,8 @@ if (keystorePropertiesFile.exists()) {
 
 android {
     namespace = "com.ryvo.driver"
-    compileSdk = maxOf(flutter.compileSdkVersion, 36)
+    // Play requires API 36 for new apps and updates (31 Aug 2026).
+    compileSdk = 36
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
@@ -36,8 +37,8 @@ android {
         // Must match the package name of the Play Console app. Permanent after the first upload.
         applicationId = "com.arcadexit.ryvo.driver"
         // Play requires API 36 for new apps and updates as of 31 Aug 2026.
-        minSdk = maxOf(flutter.minSdkVersion, 24)
-        targetSdk = maxOf(flutter.targetSdkVersion, 36)
+        minSdk = 24
+        targetSdk = 36
         versionCode = flutter.versionCode
         versionName = flutter.versionName
         ndk {

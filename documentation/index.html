@@ -385,7 +385,7 @@ npm run dev --workspace=@ryvo/admin</code></pre>
 
       <h2 id="login">First login</h2>
       <h3>Server</h3>
-      <p>Phone: the number you typed into the installer. Password: <code>123456</code>. Sign in at <code>https://your-domain.com</code>, then change the password from the admin profile before you share the URL.</p>
+      <p>Phone: the number you typed into the installer. Password: the password you typed during install (minimum 8 characters). Sign in at <code>https://your-domain.com</code>. Change the password any time in Admin → Settings → Security.</p>
       <h3>Local seed</h3>
       <p><code>npm run db:seed</code> creates these accounts. Re-running the seed resets the super admin password to <code>123456</code> and resets platform settings to the defaults in <code>seed.ts</code>. Do that on a development database, not on a live one.</p>
       <table>
@@ -419,7 +419,7 @@ npm run dev --workspace=@ryvo/admin</code></pre>
           <tr><td>Payments, Wallets, Earnings, Payouts, Invoices</td><td>Money in and money out. Approve a payout when a driver has withdrawn.</td></tr>
           <tr><td>Ride types</td><td>Classes such as the standard car and the parcel bike. Set a price and turn a class on or off.</td></tr>
           <tr><td>Fare rules</td><td>Base fare, distance, and time.</td></tr>
-          <tr><td>Promo codes</td><td>Discounts riders enter at checkout.</td></tr>
+          <tr><td>Promo codes</td><td>Discounts riders enter at checkout. Riders enter a promo at checkout and the fare updates before they confirm. Use Percentage or Fixed as the discount type.</td></tr>
           <tr><td>Driver plans</td><td>Daily, weekly, and monthly access. Use these when monetization is subscription.</td></tr>
           <tr><td>Tickets</td><td>Reply to rider and driver support.</td></tr>
           <tr><td>Broadcasts</td><td>Push a message to riders or drivers.</td></tr>
@@ -452,7 +452,7 @@ npm run dev --workspace=@ryvo/admin</code></pre>
           </ul>
         </li>
         <li>iOS key. Put it in <code>GMSApiKey</code> inside each app’s <code>ios/Runner/Info.plist</code>.</li>
-        <li>The apps also read <code>MAPS_API_KEY</code> from <code>scripts/whitelabel.env</code> at build time. Use that for the Dart fallback so you do not have to edit source for every build. The manifest and Info.plist values are still required for the native map.</li>
+        <li>The apps read <code>GOOGLE_MAPS_API_KEY</code> at build time through <code>--dart-define=GOOGLE_MAPS_API_KEY=...</code>. Set it in <code>scripts/whitelabel.env</code> and <code>scripts/configure-apps.sh</code> passes it on. <code>MAPS_API_KEY</code> is accepted in that file as an alias and is converted to <code>GOOGLE_MAPS_API_KEY</code>. The manifest and Info.plist values are still required for the native map. The driver iOS app reads <code>GMSApiKey</code> from <code>Info.plist</code> at launch.</li>
       </ol>
       <p>Billing must be enabled on the Google Cloud project or the map tiles stay blank.</p>
 
@@ -544,7 +544,7 @@ CLOUDINARY_API_SECRET=</code></pre>
         <li>Edit <code>scripts/whitelabel.env</code>:
           <pre><code>API_BASE_URL=https://your-domain.com/api/v1
 WS_BASE_URL=https://your-domain.com
-MAPS_API_KEY=your-maps-key
+GOOGLE_MAPS_API_KEY=your-maps-key
 APP_NAME=Ryvo
 ANDROID_APPLICATION_ID=com.yourcompany.ryvo.customer
 IOS_BUNDLE_ID=com.yourcompany.ryvo.customer</code></pre>
@@ -558,21 +558,22 @@ flutter pub get
 flutter build apk --release \
   --dart-define=API_BASE_URL=https://your-domain.com/api/v1 \
   --dart-define=WS_BASE_URL=https://your-domain.com \
-  --dart-define=MAPS_API_KEY=your-maps-key</code></pre>
+  --dart-define=GOOGLE_MAPS_API_KEY=your-maps-key</code></pre>
         </li>
         <li>iOS, on a Mac, from <code>ryvo-customer</code>:
           <pre><code>flutter build ipa --release \
   --dart-define=API_BASE_URL=https://your-domain.com/api/v1 \
   --dart-define=WS_BASE_URL=https://your-domain.com \
-  --dart-define=MAPS_API_KEY=your-maps-key</code></pre>
+  --dart-define=GOOGLE_MAPS_API_KEY=your-maps-key</code></pre>
         </li>
       </ol>
       <p>A debug run on the Android emulator:</p>
       <pre><code>cd ryvo-customer
 flutter run --dart-define=API_BASE_URL=http://10.0.2.2:4000/api/v1 \
   --dart-define=WS_BASE_URL=http://10.0.2.2:4000 \
-  --dart-define=MAPS_API_KEY=your-maps-key</code></pre>
+  --dart-define=GOOGLE_MAPS_API_KEY=your-maps-key</code></pre>
       <p>The Maps key in <code>AndroidManifest.xml</code> and <code>Info.plist</code>, and the API fallback in <code>lib/core/constants/app_constants.dart</code>, are <code>xxxxxxxx</code>. Replace them, or pass <code>--dart-define</code>, before you ship. A build that omits <code>--dart-define</code> uses that fallback.</p>
+      <p><strong>iOS signing.</strong> This download contains no Apple Team ID. Before you archive, open <code>ios/Runner.xcworkspace</code> in Xcode, select the Runner target, open Signing &amp; Capabilities, and choose your own Team. Xcode then writes your <code>DEVELOPMENT_TEAM</code>. For command-line export, put your Team ID in <code>ryvo-customer/ios/ExportOptions.plist</code> under <code>teamID</code>. Do this in both apps.</p>
       <p>Release Android builds need a keystore. Create <code>ryvo-customer/android/key.properties</code> (this file stays out of git):</p>
       <pre><code>storePassword=your-store-password
 keyPassword=your-key-password
@@ -647,7 +648,7 @@ storeFile=/absolute/path/to/upload-keystore.jks</code></pre>
       <h3>The installer finished, but the domain does not load.</h3>
       <p>The stack is on port 4180 of the server, not on the public internet. Finish <a href="#https">Public HTTPS</a>. From the server, <code>curl -fsS http://127.0.0.1:4180/api/v1/health</code> should succeed before Nginx will.</p>
       <h3>Admin login says invalid credentials.</h3>
-      <p>Use the phone you typed into the installer, with the country code, and password <code>123456</code>. Local installs use <code>+10000000000</code> / <code>123456</code> after <code>npm run db:seed</code>. Check the API log for the line that starts with <code>Super admin:</code>.</p>
+      <p>Use the phone and password you typed into the installer. Local installs after <code>npm run db:seed</code> use <code>+10000000000</code> / <code>123456</code> unless you set <code>ADMIN_PHONE</code> and <code>ADMIN_PASSWORD</code>. Change the password in Admin → Settings → Security.</p>
       <h3>The map is grey or blank.</h3>
       <p>The Maps key is missing, the required API is not enabled, or billing is not on in Google Cloud. The native map uses the manifest and Info.plist keys. The admin live map uses the key saved under Settings → Integrations.</p>
       <h3>The app opens and shows another company’s data.</h3>
@@ -671,6 +672,13 @@ storeFile=/absolute/path/to/upload-keystore.jks</code></pre>
 
       <h2 id="changelog">Changelog</h2>
       <p>The same notes are in <code>changelog.txt</code> at the root of the package.</p>
+      <h3>1.0.2 — 19 November 2026</h3>
+      <ul>
+        <li>Security and packaging fixes: no Apple Team IDs, placeholder keys only, internal files removed.</li>
+        <li>Maps key is now <code>GOOGLE_MAPS_API_KEY</code> everywhere. <code>MAPS_API_KEY</code> is an alias.</li>
+        <li>Driver Android app targets API 36. Driver iOS app reads its Maps key from <code>Info.plist</code>.</li>
+        <li>Added iOS signing notes, an AI disclosure, and landscape preview images.</li>
+      </ul>
       <h3>1.0.0 — 17 November 2026</h3>
       <ul>
         <li>Initial release.</li>
@@ -690,6 +698,9 @@ storeFile=/absolute/path/to/upload-keystore.jks</code></pre>
         <li>Lucide icons in the admin panel</li>
       </ul>
       <p>Google Maps, Firebase, Stripe, Twilio, Amazon Web Services, Cloudinary, and OpenAI are separate services. You need your own account for each one you turn on, and that company charges you for usage. No paid stock photos or premium icon packs are included.</p>
+
+      <h2 id="ai-disclosure">AI disclosure</h2>
+      <p>AI coding assistants were used during development of this item. The author reviewed, tested, and edited the output. Third-party services named in this guide are not AI-generated and are not included.</p>
 
       <h2 id="license">License</h2>
       <p>Use of this item is covered by the Envato Market license you purchased with the download. That license file is delivered by CodeCanyon. This folder does not replace it.</p>

@@ -244,7 +244,7 @@ class PushMessaging {
         if (apns == null && kDebugMode) {
           debugPrint(
             'APNs token still null — in Xcode enable Push Notifications for '
-            'com.ryvo.customer (Team PKL9VLU62B) and upload the .p8 key '
+            'your bundle id (with your Apple Team) and upload the .p8 key '
             'to Firebase with the same Team ID.',
           );
         }

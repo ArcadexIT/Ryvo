@@ -1,7 +1,17 @@
 import { Controller, Post, Body, Get, UseGuards, Req } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
+import { Throttle } from '@nestjs/throttler';
 import { AuthService } from './auth.service';
-import { LoginDto, RegisterDto, OtpSendDto, OtpVerifyDto, RefreshTokenDto, TotpVerifyDto, PasswordResetDto } from './dto/auth.dto';
+import {
+  LoginDto,
+  RegisterDto,
+  OtpSendDto,
+  OtpVerifyDto,
+  RefreshTokenDto,
+  TotpVerifyDto,
+  PasswordResetDto,
+  ChangePasswordDto,
+} from './dto/auth.dto';
 import { successResponse } from '../common/utils';
 import { JwtAuthGuard, RolesGuard } from './guards';
 import { Roles } from './roles.decorator';
@@ -13,9 +23,10 @@ export class AdminAuthController {
   constructor(private auth: AuthService) {}
 
   @Post('login')
+  @Throttle({ default: { limit: 10, ttl: 60000 } })
   async login(@Body() dto: LoginDto) {
-    const tokens = await this.auth.login(dto.phone, dto.password);
-    return successResponse(tokens);
+    const result = await this.auth.login(dto.phone, dto.password, undefined, dto.totpCode);
+    return successResponse(result);
   }
 
   @Post('refresh')
@@ -38,9 +49,23 @@ export class AdminAuthController {
     return successResponse(await this.auth.getAdminProfile(req.user.id));
   }
 
+  @Post('password/change')
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
+  async changePassword(
+    @Req() req: { user: { id: string } },
+    @Body() dto: ChangePasswordDto,
+  ) {
+    return successResponse(
+      await this.auth.changePassword(req.user.id, dto.currentPassword, dto.newPassword),
+    );
+  }
+
   @Post('2fa/setup')
   @ApiBearerAuth()
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN)
   async setup2FA(@Req() req: { user: { id: string } }) {
     return successResponse(await this.auth.setup2FA(req.user.id));
@@ -48,7 +73,7 @@ export class AdminAuthController {
 
   @Post('2fa/verify')
   @ApiBearerAuth()
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN)
   async verify2FA(@Req() req: { user: { id: string } }, @Body() dto: TotpVerifyDto) {
     return successResponse(await this.auth.verify2FA(req.user.id, dto.code));
@@ -61,6 +86,7 @@ export class CustomerAuthController {
   constructor(private auth: AuthService) {}
 
   @Post('register')
+  @Throttle({ default: { limit: 10, ttl: 60000 } })
   async register(@Body() dto: RegisterDto) {
     return successResponse(
       await this.auth.register({ ...dto, role: UserRole.CUSTOMER }),
@@ -68,16 +94,19 @@ export class CustomerAuthController {
   }
 
   @Post('login')
+  @Throttle({ default: { limit: 10, ttl: 60000 } })
   async login(@Body() dto: LoginDto) {
     return successResponse(await this.auth.login(dto.phone, dto.password, UserRole.CUSTOMER));
   }
 
   @Post('otp/send')
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
   async sendOtp(@Body() dto: OtpSendDto) {
     return successResponse(await this.auth.sendOtp(dto.phone, dto.purpose));
   }
 
   @Post('otp/verify')
+  @Throttle({ default: { limit: 10, ttl: 60000 } })
   async verifyOtp(@Body() dto: OtpVerifyDto) {
     return successResponse(
       await this.auth.verifyOtp(dto.phone, dto.code, dto.purpose, UserRole.CUSTOMER),
@@ -85,6 +114,7 @@ export class CustomerAuthController {
   }
 
   @Post('password/reset')
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
   async resetPassword(@Body() dto: PasswordResetDto) {
     return successResponse(
       await this.auth.resetPassword(dto.phone, dto.code, dto.newPassword, { allowDemoCode: true }),
@@ -110,6 +140,7 @@ export class ProviderAuthController {
   constructor(private auth: AuthService) {}
 
   @Post('register')
+  @Throttle({ default: { limit: 10, ttl: 60000 } })
   async register(@Body() dto: RegisterDto) {
     return successResponse(
       await this.auth.register({ ...dto, role: UserRole.PROVIDER }),
@@ -117,16 +148,19 @@ export class ProviderAuthController {
   }
 
   @Post('login')
+  @Throttle({ default: { limit: 10, ttl: 60000 } })
   async login(@Body() dto: LoginDto) {
     return successResponse(await this.auth.login(dto.phone, dto.password, UserRole.PROVIDER));
   }
 
   @Post('otp/send')
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
   async sendOtp(@Body() dto: OtpSendDto) {
     return successResponse(await this.auth.sendOtp(dto.phone, dto.purpose));
   }
 
   @Post('otp/verify')
+  @Throttle({ default: { limit: 10, ttl: 60000 } })
   async verifyOtp(@Body() dto: OtpVerifyDto) {
     return successResponse(
       await this.auth.verifyOtp(dto.phone, dto.code, dto.purpose, UserRole.PROVIDER),
@@ -134,6 +168,7 @@ export class ProviderAuthController {
   }
 
   @Post('password/reset')
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
   async resetPassword(@Body() dto: PasswordResetDto) {
     return successResponse(
       await this.auth.resetPassword(dto.phone, dto.code, dto.newPassword, { allowDemoCode: true }),

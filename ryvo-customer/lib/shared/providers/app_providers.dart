@@ -205,6 +205,7 @@ class JobRequestDraft {
     this.recipientName,
     this.recipientPhone,
     this.parcelSize = 'small',
+    this.promo,
   });
 
   final ServiceCategory? serviceCategory;
@@ -237,6 +238,9 @@ class JobRequestDraft {
   final String? recipientPhone;
   final String parcelSize;
 
+  /// Validated promo code applied to this draft's fare.
+  final PromoValidation? promo;
+
   JobRequestDraft copyWith({
     ServiceCategory? serviceCategory,
     Vehicle? vehicle,
@@ -262,6 +266,8 @@ class JobRequestDraft {
     String? recipientName,
     String? recipientPhone,
     String? parcelSize,
+    PromoValidation? promo,
+    bool clearPromo = false,
   }) {
     return JobRequestDraft(
       serviceCategory: serviceCategory ?? this.serviceCategory,
@@ -285,6 +291,7 @@ class JobRequestDraft {
       recipientName: recipientName ?? this.recipientName,
       recipientPhone: recipientPhone ?? this.recipientPhone,
       parcelSize: parcelSize ?? this.parcelSize,
+      promo: clearPromo ? null : (promo ?? this.promo),
     );
   }
 }

@@ -1,16 +1,17 @@
 import { Controller, Get, Patch, Body, Param, UseGuards, Req } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import { SettingsService } from './settings.service';
-import { JwtAuthGuard, RolesGuard } from '../auth/guards';
-import { Roles } from '../auth/roles.decorator';
+import { AdminPermissionGuard, JwtAuthGuard, RolesGuard } from '../auth/guards';
+import { RequireAdminModule, Roles } from '../auth/roles.decorator';
 import { UserRole } from '@ryvo/shared';
 import { successResponse } from '../common/utils';
 import { AuditService } from '../audit/audit.service';
 
 @ApiTags('Admin Settings')
 @Controller('admin/settings')
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, AdminPermissionGuard)
 @Roles(UserRole.ADMIN)
+@RequireAdminModule('settings')
 @ApiBearerAuth()
 export class SettingsController {
   constructor(
@@ -21,6 +22,13 @@ export class SettingsController {
   @Get()
   async getAll() {
     return successResponse(await this.settings.getAll());
+  }
+
+  /** Full browser key for the admin live map only. The settings list never includes it. */
+  @Get('map-key')
+  async mapKey() {
+    const value = await this.settings.get('map_api_key');
+    return successResponse(typeof value === 'string' ? value.trim() : '');
   }
 
   @Patch(':key')
@@ -37,10 +45,10 @@ export class SettingsController {
         action: 'update_setting',
         entityType: 'platform_setting',
         entityId: key,
-        oldValues: { value: old },
-        newValues: { value },
+        oldValues: { value: this.settings.redact(key, old) },
+        newValues: { value: this.settings.redact(key, value) },
       });
     }
-    return successResponse(result);
+    return successResponse({ ...result, value: this.settings.redact(key, result.value) });
   }
 }

@@ -75,6 +75,13 @@ class CreateJobDto {
   @IsOptional() @IsString() scheduledAt?: string;
   @IsIn(['stripe', 'wallet', 'cash']) paymentMethod!: 'stripe' | 'wallet' | 'cash';
   @IsOptional() @IsString() stripePaymentMethodId?: string;
+  @IsOptional() @IsUUID() promoCodeId?: string;
+  @IsOptional() @IsString() @MaxLength(64) promoCode?: string;
+}
+
+class ValidatePromoDto {
+  @IsString() @IsNotEmpty() @MaxLength(64) code!: string;
+  @IsNumber() @Min(0) amount!: number;
 }
 
 class EstimateFareDto {
@@ -184,6 +191,11 @@ export class CustomerApiController {
       where: { id, customerId: req.user.customer!.id },
     });
     return successResponse({ deleted: true });
+  }
+
+  @Post('promos/validate')
+  async validatePromo(@Body() dto: ValidatePromoDto) {
+    return successResponse(await this.jobs.validatePromo(dto.code, dto.amount));
   }
 
   @Get('jobs')

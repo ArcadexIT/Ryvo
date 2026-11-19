@@ -24,6 +24,7 @@ import {
   Zap,
 } from 'lucide-react';
 import { apiFetch, getSocketBaseUrl } from '@/lib/api';
+import { getAccessToken } from '@/lib/auth';
 import { useMapApiKey } from '@/hooks/use-map-api-key';
 import { LiveMap, type LiveMapHandle } from '@/components/live-map';
 import { StatWave } from '@/components/ui/sparkline';
@@ -250,7 +251,10 @@ export default function LiveOpsPage() {
   });
 
   useEffect(() => {
-    const socket = io(socketUrl, { transports: ['websocket'] });
+    const socket = io(socketUrl, {
+      transports: ['websocket'],
+      auth: { token: getAccessToken() },
+    });
     socketRef.current = socket;
     socket.on('connect', () => {
       setConnected(true);

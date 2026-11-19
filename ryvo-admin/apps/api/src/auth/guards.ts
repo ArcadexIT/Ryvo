@@ -2,7 +2,12 @@ import { Injectable, CanActivate, ExecutionContext, ForbiddenException } from '@
 import { Reflector } from '@nestjs/core';
 import { AuthGuard } from '@nestjs/passport';
 import { UserRole } from '@ryvo/shared';
-import { ROLES_KEY, ADMIN_ROLES_KEY } from './roles.decorator';
+import { ROLES_KEY, ADMIN_ROLES_KEY, ADMIN_MODULE_KEY } from './roles.decorator';
+import {
+  AdminModule,
+  hasAdminPermission,
+  resolveAdminPermissions,
+} from '../admin/admin-permissions';
 
 @Injectable()
 export class JwtAuthGuard extends AuthGuard('jwt') {}
@@ -53,6 +58,36 @@ export class AdminRoleGuard implements CanActivate {
     if (adminRole === 'super_admin') return true;
     if (!requiredAdminRoles.includes(adminRole)) {
       throw new ForbiddenException('Insufficient admin permissions');
+    }
+    return true;
+  }
+}
+
+/**
+ * Enforces module permissions from the staff role (or custom overrides).
+ * Apply with `@RequireAdminModule('settings')` on admin controllers/handlers.
+ */
+@Injectable()
+export class AdminPermissionGuard implements CanActivate {
+  constructor(private reflector: Reflector) {}
+
+  canActivate(context: ExecutionContext): boolean {
+    const module = this.reflector.getAllAndOverride<string>(ADMIN_MODULE_KEY, [
+      context.getHandler(),
+      context.getClass(),
+    ]);
+    if (!module) return true;
+
+    const { user } = context.switchToHttp().getRequest();
+    const admin = user?.adminUser;
+    if (!admin) throw new ForbiddenException('Admin access required');
+
+    const permissions = resolveAdminPermissions(
+      admin.adminRole,
+      admin.permissions,
+    ) as string[];
+    if (!hasAdminPermission(permissions, module as AdminModule)) {
+      throw new ForbiddenException(`Missing permission for ${module}`);
     }
     return true;
   }
