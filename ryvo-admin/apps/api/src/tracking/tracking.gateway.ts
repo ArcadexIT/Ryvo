@@ -21,6 +21,7 @@ interface SocketData {
   role?: string;
   providerId?: string;
   customerId?: string;
+  shareId?: string;
 }
 
 @WebSocketGateway({ cors: true, namespace: '/tracking' })
@@ -44,60 +45,76 @@ export class TrackingGateway implements OnGatewayConnection, OnGatewayInit {
   }
 
   /**
-   * Require a valid access token on connect. Share-token viewers authenticate
-   * later with `share:subscribe` on a short-lived anonymous socket that is
-   * limited to that one event.
+   * Require a token on connect: a JWT access token for app/admin clients, or a
+   * public trip-share token (auth.shareToken / query.shareToken).
    */
   async handleConnection(client: Socket) {
-    const token =
+    const accessToken =
       (client.handshake.auth?.token as string | undefined) ??
       (client.handshake.query?.token as string | undefined);
+    const shareToken =
+      (client.handshake.auth?.shareToken as string | undefined) ??
+      (client.handshake.query?.shareToken as string | undefined);
 
-    if (!token) {
-      // Allow unauthenticated sockets only for public trip-share subscribe.
-      (client.data as SocketData).role = 'anonymous';
-      this.logger.debug(`Share-only anonymous client connected: ${client.id}`);
+    if (accessToken) {
+      try {
+        const secret = this.config.get<string>('JWT_ACCESS_SECRET') ?? 'xxxxxxxx';
+        const payload = this.jwt.verify(accessToken, { secret }) as {
+          sub: string;
+          role: string;
+          type: string;
+        };
+        if (payload.type !== 'access') throw new Error('wrong token type');
+
+        const data = client.data as SocketData;
+        data.userId = payload.sub;
+        data.role = payload.role;
+        void client.join(`user:${payload.sub}`);
+
+        if (payload.role === 'provider') {
+          const provider = await this.prisma.provider.findUnique({
+            where: { userId: payload.sub },
+            select: { id: true },
+          });
+          if (provider) {
+            data.providerId = provider.id;
+            void client.join(`provider:${provider.id}`);
+          }
+        }
+
+        if (payload.role === 'customer') {
+          const customer = await this.prisma.customer.findUnique({
+            where: { userId: payload.sub },
+            select: { id: true },
+          });
+          if (customer) data.customerId = customer.id;
+        }
+
+        this.logger.debug(`Authenticated ${payload.role} ${payload.sub}`);
+        return;
+      } catch {
+        this.logger.debug(`Invalid socket JWT from ${client.id}`);
+        client.disconnect(true);
+        return;
+      }
+    }
+
+    if (shareToken) {
+      const result = await this.shares.resolveSubscribe(shareToken);
+      if (!result.ok) {
+        client.disconnect(true);
+        return;
+      }
+      const data = client.data as SocketData;
+      data.role = 'share';
+      data.shareId = result.shareId;
+      void client.join(`share:${result.shareId}`);
+      this.logger.debug(`Share viewer connected for ${result.shareId}`);
       return;
     }
 
-    try {
-      const secret = this.config.get<string>('JWT_ACCESS_SECRET') ?? 'xxxxxxxx';
-      const payload = this.jwt.verify(token, { secret }) as {
-        sub: string;
-        role: string;
-        type: string;
-      };
-      if (payload.type !== 'access') throw new Error('wrong token type');
-
-      const data = client.data as SocketData;
-      data.userId = payload.sub;
-      data.role = payload.role;
-      void client.join(`user:${payload.sub}`);
-
-      if (payload.role === 'provider') {
-        const provider = await this.prisma.provider.findUnique({
-          where: { userId: payload.sub },
-          select: { id: true },
-        });
-        if (provider) {
-          data.providerId = provider.id;
-          void client.join(`provider:${provider.id}`);
-        }
-      }
-
-      if (payload.role === 'customer') {
-        const customer = await this.prisma.customer.findUnique({
-          where: { userId: payload.sub },
-          select: { id: true },
-        });
-        if (customer) data.customerId = customer.id;
-      }
-
-      this.logger.debug(`Authenticated ${payload.role} ${payload.sub}`);
-    } catch {
-      this.logger.debug(`Invalid socket token from ${client.id}`);
-      client.disconnect(true);
-    }
+    this.logger.debug(`Rejected socket without token: ${client.id}`);
+    client.disconnect(true);
   }
 
   @SubscribeMessage('provider:location')
@@ -198,6 +215,25 @@ export class TrackingGateway implements OnGatewayConnection, OnGatewayInit {
     @ConnectedSocket() client: Socket,
     @MessageBody() payload: { token?: string },
   ) {
+    const data = client.data as SocketData;
+    // Already authorized at connect with shareToken.
+    if (data.role === 'share' && data.shareId) {
+      const token = typeof payload?.token === 'string' ? payload.token : '';
+      const result = token
+        ? await this.shares.resolveSubscribe(token)
+        : { ok: true as const, shareId: data.shareId, status: 'matched', lat: null, lng: null };
+      if (!result.ok || result.shareId !== data.shareId) {
+        client.emit('job:status', { status: 'ended', ended: true });
+        return { success: false };
+      }
+      client.emit('job:status', { status: result.status, ended: false });
+      if (result.lat != null && result.lng != null) {
+        client.emit('job:location', { lat: result.lat, lng: result.lng });
+      }
+      return { success: true };
+    }
+
+    // JWT clients may also subscribe with a share token body.
     const token = typeof payload?.token === 'string' ? payload.token : '';
     const result = token ? await this.shares.resolveSubscribe(token) : { ok: false as const };
     if (!result.ok) {

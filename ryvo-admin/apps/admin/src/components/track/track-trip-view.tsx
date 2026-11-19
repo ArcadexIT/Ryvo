@@ -279,7 +279,10 @@ export function TrackTripView({ token }: { token: string }) {
   }, [token]);
 
   useEffect(() => {
-    const socket: Socket = io(`${getSocketBaseUrl()}/tracking`, { transports: ['websocket'] });
+    const socket: Socket = io(`${getSocketBaseUrl()}/tracking`, {
+      transports: ['websocket'],
+      auth: { shareToken: token },
+    });
     socket.on('connect', () => {
       socket.emit('share:subscribe', { token });
     });

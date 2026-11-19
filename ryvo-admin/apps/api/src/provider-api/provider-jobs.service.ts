@@ -71,6 +71,35 @@ export class ProviderJobsService {
     return { ...job, recipientOtp: null };
   }
 
+  /**
+   * Load a job owned by this driver.
+   * `redactOtp` defaults to true for API responses. Internal status transitions
+   * pass false so parcel delivery checks can see whether an OTP exists.
+   */
+  async getOne(
+    providerId: string,
+    jobId: string,
+    options: { redactOtp?: boolean } = {},
+  ) {
+    const redactOtp = options.redactOtp !== false;
+    const job = await this.prisma.job.findUnique({
+      where: { id: jobId },
+      include: {
+        ...jobInclude,
+        payment: true,
+        ratings: true,
+        providerEarning: {
+          select: { netAmount: true, grossAmount: true, platformFee: true },
+        },
+      },
+    });
+    if (!job) throw new NotFoundException('Job not found');
+    if (job.providerId !== providerId) {
+      throw new ForbiddenException('Job does not belong to this driver');
+    }
+    return redactOtp ? this.withoutRecipientOtp(job) : job;
+  }
+
   async getActive(providerId: string) {
     const jobs = await this.prisma.job.findMany({
       where: { providerId, status: { in: ACTIVE_STATUSES } },
@@ -128,32 +157,13 @@ export class ProviderJobsService {
     };
   }
 
-  async getOne(providerId: string, jobId: string) {
-    const job = await this.prisma.job.findUnique({
-      where: { id: jobId },
-      include: {
-        ...jobInclude,
-        payment: true,
-        ratings: true,
-        providerEarning: {
-          select: { netAmount: true, grossAmount: true, platformFee: true },
-        },
-      },
-    });
-    if (!job) throw new NotFoundException('Job not found');
-    if (job.providerId !== providerId) {
-      throw new ForbiddenException('Job does not belong to this driver');
-    }
-    return this.withoutRecipientOtp(job);
-  }
-
   async confirmStart(providerId: string, jobId: string) {
-    await this.getOne(providerId, jobId);
+    await this.getOne(providerId, jobId, { redactOtp: false });
     return this.jobs.confirmJobStart(jobId, 'provider', providerId);
   }
 
   async cancelJob(providerId: string, jobId: string, reason?: string) {
-    const job = await this.getOne(providerId, jobId);
+    const job = await this.getOne(providerId, jobId, { redactOtp: false });
     if (job.status === 'completed' || job.status.startsWith('cancelled')) {
       throw new BadRequestException('Job is already closed');
     }
@@ -170,7 +180,7 @@ export class ProviderJobsService {
       throw new BadRequestException(`Drivers cannot set status ${toStatus}`);
     }
 
-    const job = await this.getOne(providerId, jobId);
+    const job = await this.getOne(providerId, jobId, { redactOtp: false });
     if (job.status === 'completed' || job.status.startsWith('cancelled')) {
       throw new BadRequestException('Job is already closed');
     }
@@ -196,7 +206,7 @@ export class ProviderJobsService {
       }
       await this.jobs.finalizeFare(jobId);
       await this.payments.chargeForCompletedJob(jobId);
-      fareJob = await this.getOne(providerId, jobId);
+      fareJob = await this.getOne(providerId, jobId, { redactOtp: false });
     }
 
     const updated = await this.prisma.$transaction(async (tx) => {
@@ -258,7 +268,7 @@ export class ProviderJobsService {
         .catch(() => undefined);
     }
 
-    return updated;
+    return this.withoutRecipientOtp(updated);
   }
 
   /** Email receipt to customer and provider after a completed job. */
